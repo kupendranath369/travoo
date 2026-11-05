@@ -13,8 +13,10 @@ from typing import List, Literal, Optional
 import bcrypt
 import httpx
 import jwt
+import requests
 from dotenv import load_dotenv
-from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, FastAPI, File, HTTPException, Query, Request, Response, UploadFile
+from fastapi.concurrency import run_in_threadpool
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, EmailStr, Field
 from pymongo import ASCENDING, DESCENDING, GEOSPHERE, IndexModel, ReturnDocument
@@ -65,6 +67,7 @@ INDEXES: dict[str, list[IndexModel]] = {
     "messages": [IndexModel([("booking_id", ASCENDING), ("created_at", ASCENDING)], name="booking_time")],
     "notifications": [IndexModel([("user_id", ASCENDING), ("created_at", DESCENDING)], name="user_time")],
     "tickets": [IndexModel([("ticket_id", ASCENDING)], name="tkid", unique=True), IndexModel([("user_id", ASCENDING)], name="user")],
+    "files": [IndexModel([("file_id", ASCENDING)], name="fid", unique=True), IndexModel([("owner_id", ASCENDING)], name="owner")],
     "popular_routes": [IndexModel([("route_id", ASCENDING)], name="rid", unique=True)],
     "audit_logs": [IndexModel([("created_at", DESCENDING)], name="time")],
 }
@@ -167,7 +170,10 @@ async def get_user(request: Request) -> dict:
     auth = request.headers.get("Authorization", "")
     if not auth.startswith("Bearer "):
         raise HTTPException(401, "Not authenticated")
-    token = auth[7:]
+    return await user_from_token(auth[7:])
+
+
+async def user_from_token(token: str) -> dict:
     uid = None
     try:
         uid = jwt.decode(token, JWT_SECRET, algorithms=["HS256"]).get("sub")
@@ -417,6 +423,7 @@ async def public_settings():
 # ---------------------------------------------------------------- driver verification & vehicles
 class VerificationIn(BaseModel):
     legal_name: str = Field(min_length=3, max_length=100)
+    vehicle_name: str = Field(min_length=2, max_length=80)
     phone: str = Field(pattern=r"^[6-9]\d{9}$")
     licence_no: str = Field(min_length=8, max_length=20)
     licence_expiry: str = Field(pattern=r"^\d{2}-\d{2}-\d{4}$")
@@ -425,6 +432,102 @@ class VerificationIn(BaseModel):
 
 def mask(v: str) -> str:
     return v[:2] + "•" * max(0, len(v) - 6) + v[-4:] if v else v
+
+
+# ---------------------------------------------------------------- secure document storage (Emergent Object Storage)
+STORAGE_BASE = (os.environ.get("INTEGRATION_PROXY_URL") or "").strip() or "https://integrations.emergentagent.com"
+STORAGE_URL = STORAGE_BASE.rstrip("/") + "/objstore/api/v1/storage"
+STORAGE_APP = "travoo"
+DOC_KINDS = ["profile", "licence", "rc", "vehicle"]
+MAX_UPLOAD = 8 * 1024 * 1024
+_storage_key: Optional[str] = None
+
+
+def init_storage() -> str:
+    global _storage_key
+    if not _storage_key:
+        r = requests.post(f"{STORAGE_URL}/init", json={"emergent_key": os.environ["EMERGENT_LLM_KEY"]}, timeout=30)
+        r.raise_for_status()
+        _storage_key = r.json()["storage_key"]
+    return _storage_key
+
+
+def _storage_call(method: str, path: str, **kw) -> requests.Response:
+    global _storage_key
+    for attempt in range(2):
+        r = requests.request(method, f"{STORAGE_URL}/objects/{path}", headers={"X-Storage-Key": init_storage(), **kw.pop("headers", {})}, timeout=120, **kw)
+        if r.status_code == 503 and attempt == 0:
+            _storage_key = None
+            continue
+        return r
+    return r
+
+
+def put_object(path: str, data: bytes, content_type: str) -> dict:
+    r = _storage_call("PUT", path, data=data, headers={"Content-Type": content_type})
+    if r.status_code == 402:
+        raise HTTPException(402, "Storage credits exhausted. Please try again later.")
+    r.raise_for_status()
+    return r.json()
+
+
+def get_object(path: str) -> tuple[bytes, str]:
+    r = _storage_call("GET", path)
+    r.raise_for_status()
+    return r.content, r.headers.get("Content-Type", "application/octet-stream")
+
+
+def sniff_image(data: bytes) -> Optional[tuple[str, str]]:
+    """Validate real image bytes (magic numbers); never trust the client-declared type."""
+    if data[:3] == b"\xff\xd8\xff":
+        return "image/jpeg", "jpg"
+    if data[:8] == b"\x89PNG\r\n\x1a\n":
+        return "image/png", "png"
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "image/webp", "webp"
+    if data[4:8] == b"ftyp" and data[8:12] in (b"heic", b"heix", b"mif1", b"msf1", b"heif"):
+        return "image/heic", "heic"
+    return None
+
+
+@api.post("/driver/documents/{kind}")
+async def upload_document(kind: str, file: UploadFile = File(...), user: dict = Depends(get_user)):
+    if kind not in DOC_KINDS:
+        raise HTTPException(400, "Unknown document type")
+    if user.get("driver_status") in ("under_review", "approved"):
+        raise HTTPException(400, "Documents are locked while under review or approved")
+    ctype = (file.content_type or "").lower()
+    data = await file.read()
+    if len(data) > MAX_UPLOAD:
+        raise HTTPException(413, "Image is too large (max 8 MB)")
+    sniffed = sniff_image(data)
+    if not sniffed:
+        raise HTTPException(400, "Please upload a JPEG, PNG, WEBP or HEIC photo")
+    ctype, ext = sniffed
+    path = f"{STORAGE_APP}/driver-docs/{user['user_id']}/{kind}-{uuid.uuid4().hex}.{ext}"
+    res = await run_in_threadpool(put_object, path, data, ctype)
+    fid = nid("file")
+    await db.files.insert_one({"file_id": fid, "owner_id": user["user_id"], "path": res["path"], "kind": kind,
+                               "content_type": ctype, "size": len(data), "original_name": file.filename, "created_at": now()})
+    await db.driver_documents.update_one({"user_id": user["user_id"]}, {"$set": {f"photos.{kind}": fid, "user_id": user["user_id"]}}, upsert=True)
+    await db.files.update_many({"owner_id": user["user_id"], "kind": kind, "file_id": {"$ne": fid}}, {"$set": {"deleted": True}})
+    return {"file_id": fid, "kind": kind}
+
+
+@api.get("/files/{fid}")
+async def get_file(fid: str, request: Request, token: Optional[str] = None):
+    auth = request.headers.get("Authorization", "")
+    tok = auth[7:] if auth.startswith("Bearer ") else token
+    if not tok:
+        raise HTTPException(401, "Not authenticated")
+    user = await user_from_token(tok)
+    f = await db.files.find_one({"file_id": fid, "deleted": {"$ne": True}}, {"_id": 0})
+    if not f or (f["owner_id"] != user["user_id"] and user.get("role") != "admin"):
+        raise HTTPException(404, "File not found")
+    data, ctype = await run_in_threadpool(get_object, f["path"])
+    return Response(content=data, media_type=f.get("content_type") or ctype,
+                    headers={"Cache-Control": "private, max-age=3600", "X-Content-Type-Options": "nosniff",
+                             "Content-Security-Policy": "default-src 'none'; sandbox"})
 
 
 @api.get("/driver/profile")
@@ -441,6 +544,10 @@ async def driver_profile(user: dict = Depends(get_user)):
 async def submit_verification(body: VerificationIn, user: dict = Depends(get_user)):
     if user.get("driver_status") in ("under_review", "approved"):
         raise HTTPException(400, "Verification already submitted")
+    existing = await db.driver_documents.find_one({"user_id": user["user_id"]}, {"_id": 0, "photos": 1}) or {}
+    missing = [k for k in DOC_KINDS if not (existing.get("photos") or {}).get(k)]
+    if missing:
+        raise HTTPException(400, f"Please upload: {', '.join(missing)} photo")
     settings = await get_settings()
     status = "approved" if settings.get("instant_driver_approval") else "under_review"
     doc = {**body.model_dump(), "licence_no": body.licence_no.upper(), "rc_no": body.rc_no.upper(),
@@ -1058,8 +1165,12 @@ class DriverReviewIn(BaseModel):
 
 @api.post("/admin/drivers/{uid}/review")
 async def admin_review_driver(uid: str, body: DriverReviewIn, admin: dict = Depends(get_admin)):
-    if not await db.driver_documents.find_one({"user_id": uid}):
+    doc = await db.driver_documents.find_one({"user_id": uid}, {"_id": 0, "submitted_at": 1})
+    target = await db.users.find_one({"user_id": uid}, {"_id": 0, "driver_status": 1})
+    if not doc or not doc.get("submitted_at") or not target:
         raise HTTPException(400, "This user has not submitted verification details")
+    if target["driver_status"] not in ("under_review", "approved"):
+        raise HTTPException(400, "Only submitted verifications can be reviewed")
     r = await db.users.update_one({"user_id": uid}, {"$set": {"driver_status": body.decision}})
     if not r.matched_count:
         raise HTTPException(404, "User not found")
@@ -1220,6 +1331,10 @@ app.add_middleware(CORSMiddleware, allow_credentials=True, allow_origins=["*"], 
 async def startup():
     await ensure_indexes()
     await seed()
+    try:
+        await run_in_threadpool(init_storage)
+    except Exception as exc:
+        logger.error("object storage init failed: %s", exc)
 
 
 @app.on_event("shutdown")

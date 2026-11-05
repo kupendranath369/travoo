@@ -9,7 +9,7 @@ import { KeyboardProvider } from "react-native-keyboard-controller";
 
 import { AuthProvider, useAuth } from "@/src/auth";
 import { ErrorBoundary } from "@/src/components/error-boundary";
-import { Logo } from "@/src/components/Logo";
+import { LogoFull } from "@/src/components/Logo";
 import { ToastProvider } from "@/src/components/toast";
 import { api } from "@/src/api";
 import { I18nProvider, useI18n } from "@/src/i18n";
@@ -43,7 +43,7 @@ function Gate() {
   if (loading || !ready)
     return (
       <View testID="splash-screen" style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.surface }}>
-        <Logo size={64} />
+        <LogoFull width={200} />
       </View>
     );
   return (

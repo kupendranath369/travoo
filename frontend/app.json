@@ -11,7 +11,9 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.emergent.travoojourneys.vae0fl",
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "Find rides starting near your current location"
+        "NSLocationWhenInUseUsageDescription": "Find rides starting near your current location",
+        "NSCameraUsageDescription": "Photograph your licence and vehicle for verification",
+        "NSPhotoLibraryUsageDescription": "Choose photos of your driving documents"
       }
     },
     "android": {
@@ -22,7 +24,8 @@
       "package": "com.emergent.travoojourneys.vae0fl",
       "permissions": [
         "ACCESS_COARSE_LOCATION",
-        "ACCESS_FINE_LOCATION"
+        "ACCESS_FINE_LOCATION",
+        "CAMERA"
       ]
     },
     "web": {
@@ -51,6 +54,13 @@
         "expo-location",
         {
           "locationWhenInUsePermission": "Find rides starting near your current location"
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Choose photos of your driving documents",
+          "cameraPermission": "Photograph your licence and vehicle for verification"
         }
       ]
     ],

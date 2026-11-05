@@ -1,10 +1,11 @@
 import Ionicons from "@react-native-vector-icons/ionicons";
+import { Image } from "expo-image";
 import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
-import { ScrollView, Switch, View } from "react-native";
+import { Modal, Pressable, ScrollView, Switch, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { api, Loc, locPayload } from "@/src/api";
+import { api, fileUrl, Loc, locPayload } from "@/src/api";
 import { useAuth } from "@/src/auth";
 import { LocationField } from "@/src/components/LocationField";
 import { useToast } from "@/src/components/toast";
@@ -33,6 +34,7 @@ export default function AdminScreen() {
   const [rTo, setRTo] = useState<Loc | null>(null);
   const [rPrice, setRPrice] = useState("");
   const [note, setNote] = useState("");
+  const [preview, setPreview] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setErr("");
@@ -130,6 +132,17 @@ export default function AdminScreen() {
             {data.map((u: any) => (
               <Card key={u.user_id} testID={`admin-driver-${u.user_id}`} style={{ gap: space.sm }}>
                 <T weight="800">{u.name} · {u.email}</T>
+                <View style={{ flexDirection: "row", gap: space.sm }}>
+                  {["profile", "licence", "rc", "vehicle"].map((k) => (
+                    <Pressable key={k} testID={`admin-doc-${k}-${u.user_id}`} onPress={() => u.documents?.photos?.[k] && setPreview(fileUrl(u.documents.photos[k]))} style={{ flex: 1, aspectRatio: 1, borderRadius: 8, overflow: "hidden", backgroundColor: colors.surfaceTertiary, alignItems: "center", justifyContent: "center" }}>
+                      {u.documents?.photos?.[k] ? <Image source={{ uri: fileUrl(u.documents.photos[k]) }} style={{ width: "100%", height: "100%" }} contentFit="cover" /> : <Ionicons name="image-outline" size={18} color={colors.muted} />}
+                      <View style={{ position: "absolute", bottom: 0, left: 0, right: 0, backgroundColor: colors.brand, paddingVertical: 2 }}>
+                        <T size={10} weight="700" color={colors.onBrand} center numberOfLines={1} adjustsFontSizeToFit>{t(`verify.photo.${k}`)}</T>
+                      </View>
+                    </Pressable>
+                  ))}
+                </View>
+                {u.documents?.vehicle_name ? <T size={12}>{t("verify.vehicle_name")}: {u.documents.vehicle_name}</T> : null}
                 <T size={12}>{t("verify.legal_name")}: {u.documents?.legal_name} · {u.documents?.phone}</T>
                 <T size={12}>{t("verify.licence")}: {u.documents?.licence_no} (till {u.documents?.licence_expiry})</T>
                 <T size={12}>{t("verify.rc")}: {u.documents?.rc_no}</T>
@@ -253,6 +266,12 @@ export default function AdminScreen() {
         </ScrollView>
       </View>
       <ScrollView testID="admin-content" contentContainerStyle={{ padding: space.lg, gap: space.md, paddingBottom: insets.bottom + space.xl }}>{body()}</ScrollView>
+      <Modal visible={!!preview} transparent animationType="fade" onRequestClose={() => setPreview(null)}>
+        <Pressable testID="admin-doc-preview" onPress={() => setPreview(null)} style={{ flex: 1, backgroundColor: colors.surfaceInverse, alignItems: "center", justifyContent: "center", padding: space.lg }}>
+          {preview ? <Image source={{ uri: preview }} style={{ width: "100%", height: "80%" }} contentFit="contain" /> : null}
+          <T color={colors.onSurfaceInverse} weight="700">{t("common.close")}</T>
+        </Pressable>
+      </Modal>
     </View>
   );
 }

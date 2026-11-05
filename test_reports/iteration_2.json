@@ -1,0 +1,45 @@
+{
+  "summary": "Tested driver document photos and the official logo on the backend and frontend. Backend: 41/42 pytest pass (19 new doc tests and 23 regression tests). The regression fixtures were updated for the new vehicle_name and 4-photo requirement. Frontend (375x667 web preview), all passing: /driver shows the 4-tile grid; the camera/gallery sheet opens; 4 gallery uploads via file chooser each show their image in the tile; the photos-required hint disappears; submit -> Under review with tiles read-only. Admin Drivers tab shows 4 thumbnails per pending driver; tapping opens a full-screen preview; Approve removes the card and the user becomes approved. Logos: full logo on the language screen; travoo-logo on auth and home (header and footer); travoo-logo-mark on booking confirmation; icon/splash assets are the official logo. Regression smoke passes: login -> home search Bengaluru->Chennai -> 3 results -> trip detail -> instant booking -> confirmation. Bugs found: (1) admin can approve a user who uploaded only 1 photo and never submitted; (2) SVG and non-image bytes accepted (stored XSS risk); plus minor UX issues. No deprecated Expo packages detected.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "POST /api/admin/drivers/{uid}/review", "issue": "The guard only checks that a driver_documents record exists. But upload_document upserts that record on the first photo upload. Result: a user who uploaded 1 photo and never called /driver/verification can be APPROVED (reproduced: returns 200). The check should require submitted_at, or driver_status == 'under_review'. Reference: server.py:1151 and server.py:498", "priority": "HIGH"},
+      {"endpoint": "POST /api/driver/documents/{kind} + GET /api/files/{id}", "issue": "Image validation trusts the client Content-Type only. image/svg+xml with a <script> is accepted and served back from the API origin as image/svg+xml (verified 200). Plain text sent as image/jpeg is also accepted. On web, tokens sit in localStorage on the same origin, and the file URL carries ?token=. If an admin opens the link directly, this is a stored-XSS / token-theft vector. Fix: allow only jpeg/png/webp/heic, check magic bytes (or Pillow verify), and send Content-Disposition/X-Content-Type-Options: nosniff. Reference: server.py:486-492, 513", "priority": "HIGH"}
+    ],
+    "minor": [
+      {"endpoint": "GET /api/files/{id}?token=", "issue": "The JWT in the query string can leak into proxy/access logs, and expo-image caches it as part of the URL key. Consider short-lived signed file tokens."},
+      {"endpoint": "POST /api/driver/documents/{kind}", "issue": "The whole body is read before the 8MB size check, and re-uploads leave orphaned files in db.files and storage."},
+      {"endpoint": "POST /api/admin/drivers/{uid}/review", "issue": "Any status can be re-reviewed, e.g. approving an already-rejected or not_submitted user. There is no status-transition check."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "driver.tsx verification error", "issue": "Submitting without a vehicle name shows the raw Pydantic text 'vehicle_name: String should have at least 2 characters'. There is no client-side validation or friendly message.", "testID": "verify-error", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Admin > Drivers", "issues": ["Thumbnail labels are 9px dark text placed directly over the photo with no scrim. They are unreadable on dark photos (admin.tsx:139). Use at least 11-12px on a scrim, like DocPhotos does.", "Thumbnails are about 71x71: fine as touch targets."]},
+      {"screen": "Driver verification sheet", "issues": ["The sheet uses animationType='slide'. Buttons are briefly off-screen while it animates (only matters for automated tests)."]}
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/test_driver_documents.py", "/app/backend/tests/test_travoo_api.py", "/app/backend/tests/ui_setup_booking.py", "/app/test_reports/pytest/pytest_results.xml"],
+  "action_items": [
+    "HIGH: admin_review_driver must require a submitted verification (driver_documents.submitted_at present, or user.driver_status == 'under_review'), not just an existing driver_documents record (server.py:1151).",
+    "HIGH: upload_document: whitelist image/jpeg, png, webp and heic (reject svg), validate magic bytes, and add X-Content-Type-Options: nosniff on /api/files responses.",
+    "LOW: Add client-side validation and friendly messages for the verification form (vehicle_name, etc.) instead of raw Pydantic errors.",
+    "LOW: Make the admin document thumbnail labels readable (bigger font plus scrim)."
+  ],
+  "critical_code_review_comments": [
+    "upload.ts correctly branches expo/fetch vs browser fetch: good for native multipart.",
+    "DocPhotos permission pre-prompt flow is good. On web, permissions auto-grant and the gallery opens a file chooser (verified working).",
+    "Logo `light`/`tagline` props are accepted but ignored (Logo.tsx:18). Harmless, because headers wrap the logo in a white pill.",
+    "Removed old/orphan file docs are never cleaned (db.files grows on every re-upload)."
+  ],
+  "updated_files": ["/app/backend/tests/test_travoo_api.py (fixtures now upload 4 photos and send vehicle_name)", "/app/backend/tests/test_driver_documents.py (new)", "/app/backend/tests/ui_setup_booking.py (new helper)"],
+  "success_rate": {"backend": "97.6% (41/42)", "frontend": "100% of requested flows pass"},
+  "seed_data_creation": "Created TEST users only: test_ui_1793891372@example.com / Passw0rd!x (now approved driver with vehicle KA05MN4321; its TEST trip trip_eff17b6c7b38 was cancelled), test_pax_bebacc@example.com, plus test_docs_/test_other_/test_empty_/test_partial_/test_svg_ users from pytest. No seeded data was modified, except that the pytest instant-approval test toggles admin settings and restores them.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "pytest.ini uses xdist (-n --dist loadscope). Run `pytest tests/` from /app/backend. test_partial_upload_then_admin_review_should_fail is the known failing bug test. On web, the doc sheet needs ~1s after tapping a tile before the gallery button is clickable. Use page.expect_file_chooser + set_files.",
+  "rca_of_issue": "Partial-upload approval: upload_document does an upsert into driver_documents ({photos.kind, user_id}). admin_review_driver's 'has submitted' guard is `find_one({'user_id': uid})`, which is therefore true after any single upload. Repro: register -> upload profile photo -> admin POST review approved -> 200, and the user becomes an approved driver without legal name, licence or RC."
+}

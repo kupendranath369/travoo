@@ -5,7 +5,7 @@ import { FlatList, Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useAuth } from "@/src/auth";
-import { Logo } from "@/src/components/Logo";
+import { LogoFull } from "@/src/components/Logo";
 import { Badge, Btn, T, radius, space } from "@/src/components/ui";
 import { LANGUAGES, useI18n } from "@/src/i18n";
 import { useTheme } from "@/src/theme";
@@ -36,7 +36,7 @@ export default function LanguageScreen() {
         contentContainerStyle={{ padding: space.lg, paddingTop: insets.top + space.lg, gap: space.md, paddingBottom: 120 + insets.bottom }}
         ListHeaderComponent={
           <View style={{ gap: space.md, marginBottom: space.md }}>
-            <Logo size={44} />
+            <LogoFull width={150} />
             <T size={24} weight="800">{t("lang.title")}</T>
             <T color={colors.muted}>{t("lang.sub")}</T>
           </View>

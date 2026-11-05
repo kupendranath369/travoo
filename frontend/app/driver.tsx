@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { api } from "@/src/api";
 import { useAuth } from "@/src/auth";
+import { DOC_KINDS, DocPhotos } from "@/src/components/DocPhotos";
 import { useToast } from "@/src/components/toast";
 import { Badge, Btn, Card, Chip, Field, Header, Loading, Section, Stepper, T, space, statusTone } from "@/src/components/ui";
 import { useI18n } from "@/src/i18n";
@@ -21,7 +22,7 @@ export default function DriverScreen() {
   const { user, refresh } = useAuth();
   const toast = useToast();
   const [p, setP] = useState<any>(null);
-  const [f, setF] = useState({ legal_name: "", phone: "", licence_no: "", licence_expiry: "", rc_no: "" });
+  const [f, setF] = useState({ legal_name: "", vehicle_name: "", phone: "", licence_no: "", licence_expiry: "", rc_no: "" });
   const [v, setV] = useState({ make: "", model: "", vtype: "sedan", color: "", reg_no: "", seats: 3, ac: true, luggage: "medium" });
   const [vOpen, setVOpen] = useState(false);
   const [err, setErr] = useState("");
@@ -39,6 +40,12 @@ export default function DriverScreen() {
   const canSubmit = ["not_submitted", "rejected", "resubmit"].includes(p.status);
 
   const submit = async () => {
+    if (f.legal_name.trim().length < 3) return setErr(`${t("verify.legal_name")} *`);
+    if (f.vehicle_name.trim().length < 2) return setErr(`${t("verify.vehicle_name")} *`);
+    if (!/^[6-9]\d{9}$/.test(f.phone)) return setErr(`${t("verify.phone")} *`);
+    if (f.licence_no.replace(/\s/g, "").length < 8) return setErr(`${t("verify.licence")} *`);
+    if (!/^\d{2}-\d{2}-\d{4}$/.test(f.licence_expiry)) return setErr(`${t("verify.licence_exp")} *`);
+    if (f.rc_no.replace(/\s/g, "").length < 6) return setErr(`${t("verify.rc")} *`);
     setBusy("v");
     setErr("");
     try {
@@ -79,7 +86,11 @@ export default function DriverScreen() {
 
         {canSubmit ? (
           <Card style={{ gap: space.md }}>
+            <T weight="800">{t("verify.photos")}</T>
+            <DocPhotos photos={p.documents?.photos ?? {}} editable onUploaded={() => load().catch(() => {})} />
+            {DOC_KINDS.some((k) => !p.documents?.photos?.[k]) ? <T testID="verify-photos-required" size={12} color={colors.brandTertiary}>{t("verify.photos_required")}</T> : null}
             <Field testID="verify-legal-name" label={t("verify.legal_name")} value={f.legal_name} onChangeText={(x) => setF({ ...f, legal_name: x })} />
+            <Field testID="verify-vehicle-name" label={t("verify.vehicle_name")} value={f.vehicle_name} onChangeText={(x) => setF({ ...f, vehicle_name: x })} placeholder="Maruti Suzuki Dzire" />
             <Field testID="verify-phone" label={t("verify.phone")} value={f.phone} onChangeText={(x) => setF({ ...f, phone: x.replace(/\D/g, "") })} keyboardType="phone-pad" maxLength={10} />
             <Field testID="verify-licence" label={t("verify.licence")} value={f.licence_no} onChangeText={(x) => setF({ ...f, licence_no: x.toUpperCase() })} autoCapitalize="characters" placeholder="KA0120200001234" />
             <Field testID="verify-licence-expiry" label={t("verify.licence_exp")} value={f.licence_expiry} onChangeText={(x) => setF({ ...f, licence_expiry: x })} placeholder="31-12-2035" maxLength={10} />
@@ -90,7 +101,9 @@ export default function DriverScreen() {
           </Card>
         ) : p.documents?.licence_no ? (
           <Card style={{ gap: 4 }}>
+            <DocPhotos photos={p.documents?.photos ?? {}} editable={false} onUploaded={() => {}} />
             <T size={13}>{t("verify.legal_name")}: <T weight="700" size={13}>{p.documents.legal_name}</T></T>
+            {p.documents.vehicle_name ? <T size={13}>{t("verify.vehicle_name")}: {p.documents.vehicle_name}</T> : null}
             <T size={13}>{t("verify.licence")}: {p.documents.licence_no}</T>
             <T size={13}>{t("verify.rc")}: {p.documents.rc_no}</T>
           </Card>

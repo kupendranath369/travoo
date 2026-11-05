@@ -26,6 +26,12 @@ Pan-India intercity paid carpooling app (BlaBlaCar model) called TRAVOO, tagline
 - Legal drafts + compliance checklist (English, pending legal review)
 - Tested: iteration_1 — 23/23 backend tests, frontend flows pass; admin crash fixed; settle/duplicate-booking made atomic
 
+## Iteration 2–3 (Driver documents + official logo)
+- Official uploaded logo: mark + wordmark lockup (headers), full logo (splash, language), generated app icon / adaptive icon / splash / favicon
+- Driver document photos (profile, licence, RC, vehicle) in Emergent Object Storage, private (owner/admin), sniffed image types, nosniff + sandbox CSP; vehicle name required; all 4 photos required to submit
+- Admin Drivers tab shows thumbnails + full-screen preview; review only for submitted (under_review/approved) users
+- New labels translated into all 23 languages
+
 ## Backlog
 - P0: Upload official logo image (currently a vector recreation); document/vehicle photo uploads (object storage)
 - P1: In-app map (route preview, map pin pick); Noto fonts for Urdu/Indic scripts; plural forms; LGD/Census bulk location import

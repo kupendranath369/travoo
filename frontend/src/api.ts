@@ -6,6 +6,10 @@ let onUnauthorized: (() => void) | null = null;
 export const setApiToken = (t: string | null) => {
   token = t;
 };
+export const getApiToken = () => token;
+export const API_BASE = BASE;
+/** Private file URL (owner/admin only). Token in query so it works for <img> on web too. */
+export const fileUrl = (fid: string) => `${BASE}/files/${fid}?token=${encodeURIComponent(token ?? "")}`;
 export const setUnauthorizedHandler = (fn: () => void) => {
   onUnauthorized = fn;
 };

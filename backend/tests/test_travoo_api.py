@@ -37,6 +37,17 @@ def register(prefix="u"):
     return d["token"], d["user"], email
 
 
+PNG = bytes.fromhex("89504e470d0a1a0a0000000d4948445200000001000000010806000000"
+                    "1f15c4890000000d49444154789c6360000002000154a24f5d0000000049454e44ae426082")
+
+
+def upload_docs(tok):
+    """Driver verification now needs all 4 document photos."""
+    for k in ("profile", "licence", "rc", "vehicle"):
+        r = requests.post(f"{API}/driver/documents/{k}", headers=h(tok), files={"file": ("a.png", PNG, "image/png")}, timeout=120)
+        assert r.status_code == 200, r.text
+
+
 def loc(q):
     r = requests.get(f"{API}/locations/search", params={"q": q}, timeout=20)
     row = r.json()[0]
@@ -56,8 +67,9 @@ def admin():
 def driver(admin):
     """Fresh TEST driver: register -> verify -> admin approve -> vehicle."""
     tok, user, _ = register("drv")
+    upload_docs(tok)
     r = requests.post(f"{API}/driver/verification", headers=h(tok), json={
-        "legal_name": "TEST Driver", "phone": "9876543210", "licence_no": "KA0120201234567",
+        "legal_name": "TEST Driver", "vehicle_name": "Maruti Ertiga", "phone": "9876543210", "licence_no": "KA0120201234567",
         "licence_expiry": "01-01-2030", "rc_no": "KA01AB9999"})
     assert r.status_code == 200
     STATE["drv_submit_status"] = r.json()["status"]
@@ -251,8 +263,9 @@ class TestAdmin:
         try:
             assert requests.put(f"{API}/admin/settings", headers=h(admin), json={"instant_driver_approval": True}).json()["instant_driver_approval"] is True
             tok = register("ia")[0]
+            upload_docs(tok)
             r = requests.post(f"{API}/driver/verification", headers=h(tok), json={
-                "legal_name": "TEST Instant", "phone": "9876500000", "licence_no": "KA0120201111111",
+                "legal_name": "TEST Instant", "vehicle_name": "Honda City", "phone": "9876500000", "licence_no": "KA0120201111111",
                 "licence_expiry": "01-01-2031", "rc_no": "KA01ZZ0001"})
             assert r.json()["status"] == "approved"
         finally:

@@ -17,6 +17,7 @@ LANGS = {
 en = json.loads((OUT / "en.json").read_text())
 items = list(en.items())
 CHUNK = 110
+FORCE = {"verify.docs_note"}  # keys whose English text changed
 
 
 async def translate_chunk(code, lang, chunk):
@@ -40,10 +41,12 @@ async def translate_chunk(code, lang, chunk):
 async def translate(code, lang, sem):
     async with sem:
         target = OUT / f"{code}.json"
-        if target.exists():
+        existing = json.loads(target.read_text()) if target.exists() else {}
+        todo = [(k, v) for k, v in items if k not in existing or k in FORCE]
+        if not todo:
             return
-        parts = await asyncio.gather(*[translate_chunk(code, lang, items[i:i + CHUNK]) for i in range(0, len(items), CHUNK)])
-        merged = {}
+        parts = await asyncio.gather(*[translate_chunk(code, lang, todo[i:i + CHUNK]) for i in range(0, len(todo), CHUNK)])
+        merged = dict(existing)
         for p in parts:
             merged.update(p)
         target.write_text(json.dumps(merged, ensure_ascii=False, indent=1))

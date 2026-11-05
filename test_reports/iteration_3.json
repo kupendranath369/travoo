@@ -1,0 +1,38 @@
+{
+  "summary": "Iteration 3 retest. Both iteration-2 HIGH bugs are fixed. Bug 1: admin review now returns 400 for photos-only users, users with no documents, and users in rejected/resubmit status, and still works for under_review and approved (tested the full lifecycle under_review->rejected->resubmitted->resubmit->resubmitted->approved). Bug 2: SVG (labelled image/jpeg or svg), plain text labelled jpeg, HTML labelled png and empty files all return 400. Real JPEG/PNG/WEBP are accepted, a PNG labelled image/jpeg is stored as image/png, and /api/files responses include nosniff and the CSP default-src 'none'; sandbox. Re-uploading a kind makes the old file_id return 404. Regression: 56/56 backend tests pass (one old assertion updated for the new error wording). UI: the empty or whitespace vehicle-name error is inline and friendly. Hindi labels on /driver are translated (tiles, sheet, error), and all 23 locales have all 345 keys. Admin thumbnails show white 10px labels on the scrim, preview opens and closes, and Approve moves the user to the Approved filter. Minor issues remain (see below). No deprecated Expo packages and no SafeAreaView from react-native.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/driver/documents/{kind}", "issue": "HEIC is accepted and served as image/heic, but most browsers (and the admin web dashboard) can't display HEIC, so the admin may see a blank thumbnail. Not tested with a real HEIC file."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Driver verification form", "issue": "Client-side validation covers vehicle_name, legal_name, phone and licence_expiry but not licence_no (min 8) or rc_no (min 6). A short licence number still shows the raw Pydantic message 'licence_no: String should have at least 8 characters'.", "testID": "verify-error", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/driver form", "issues": ["The vehicle-name error only shows the field label plus '*' ('Vehicle name (manufacturer & model) *') at the bottom above Submit, far from the field. Consider a sentence like 'Enter your vehicle name' and/or highlighting the field.", "Validation runs vehicle_name before legal_name, even though Full legal name is the first field on screen."]},
+      {"screen": "Doc photo tiles (/driver and admin Drivers)", "issues": ["The scrim is rgba(7,59,130,0.55). Over a white or light photo the white label contrast is only about 3:1. A darker scrim (0.75+) would help.", "Admin thumbnail labels are 10px and 'Driving licence' is truncated to 'Driving licen…' at 375px width."]}
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/test_iter3_retests.py", "/app/backend/tests/test_driver_documents.py", "/app/backend/tests/test_travoo_api.py", "/app/backend/tests/ui_setup_iter3.py", "/app/test_reports/pytest/iteration_3.xml"],
+  "action_items": [
+    "LOW: Add client-side checks for licence_no (>=8 chars) and rc_no (>=6 chars) in driver.tsx submit(), or map 422 field errors to translated messages in src/api.ts, so raw Pydantic text is never shown.",
+    "LOW: Make the verify error messages proper sentences and validate in the on-screen field order.",
+    "LOW: Darken the scrim behind photo labels (or use a solid dark strip) and raise the admin label size above 10px."
+  ],
+  "critical_code_review_comments": [
+    "server.py:1170 review gating now checks both submitted_at and driver_status in (under_review, approved). This is correct.",
+    "server.py:480 sniff_image uses magic bytes and ignores the client content type. A JPEG-prefixed polyglot would pass, but the nosniff + sandbox CSP make it inert.",
+    "server.py:513 superseded files are soft-deleted (deleted=True), but the objects stay in storage. That's acceptable, but there is no cleanup job."
+  ],
+  "updated_files": ["/app/backend/tests/test_driver_documents.py (line 65 assertion now accepts the new 'photo' wording)", "/app/backend/tests/test_iter3_retests.py (new)", "/app/backend/tests/ui_setup_iter3.py (new)"],
+  "success_rate": {"backend": "100% (56/56 after test-wording fix)", "frontend": "100% of requested flows; 1 low-priority raw validation message"},
+  "seed_data_creation": "TEST users created via /api/auth/register (test_*@example.com, names TEST_*): test_uia_7ee184ad@example.com (4 photos, not submitted, language set to hi) and test_uib_cb4277b5@example.com (approved via admin UI), plus users from the pytest runs. There is no user-delete endpoint, so they remain. No seeded or real data was modified.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run `pytest tests/` from /app/backend (xdist -n 2). The web flow starts on a language picker: click language-option-en, then language-continue-button, then on /auth click auth-toggle-mode if auth-name-input is visible. ui_setup_iter3.py creates the UI test users. Locator.screenshot doesn't support quality (png).",
+  "rca_of_issue": ""
+}
