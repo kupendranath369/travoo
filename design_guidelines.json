@@ -1,0 +1,160 @@
+{
+  "app_name": "TRAVOO",
+  "personality": "1 iOS-Native Clean",
+  "personality_one_liner": "Premium travel-tech layout framing the core carpooling experience with highly readable typography, spacious padding, and distinct brand colors.",
+  "color": {
+    "surface": "#F5F8FC",
+    "onSurface": "#172B4D",
+    "surfaceSecondary": "#FFFFFF",
+    "onSurfaceSecondary": "#172B4D",
+    "surfaceTertiary": "#EAEFF5",
+    "onSurfaceTertiary": "#172B4D",
+    "surfaceInverse": "#073B82",
+    "onSurfaceInverse": "#FFFFFF",
+    "brand": "#073B82",
+    "onBrand": "#FFFFFF",
+    "brandPrimary": "#0875D1",
+    "onBrandPrimary": "#FFFFFF",
+    "brandSecondary": "#073B82",
+    "onBrandSecondary": "#FFFFFF",
+    "brandTertiary": "#FF7900",
+    "onBrandTertiary": "#FFFFFF",
+    "success": "#22A06B",
+    "onSuccess": "#FFFFFF",
+    "warning": "#F5CD47",
+    "onWarning": "#172B4D",
+    "error": "#CA3521",
+    "onError": "#FFFFFF",
+    "info": "#0875D1",
+    "onInfo": "#FFFFFF",
+    "border": "#DFE1E6",
+    "borderStrong": "#B3BAC5",
+    "divider": "#DFE1E6",
+    "muted": "#6B778C"
+  },
+  "typography": {
+    "displayFontFamily": "Plus Jakarta Sans",
+    "textFontFamily": "Plus Jakarta Sans",
+    "scale": {
+      "sm": 12,
+      "base": 14,
+      "lg": 16,
+      "xl": 20,
+      "2xl": 24
+    }
+  },
+  "spacing": {
+    "rule": "Generous iOS-native margins (lg/xl) around top level content. Group input components tightly, wrap cards with md gap.",
+    "xs": 4,
+    "sm": 8,
+    "md": 12,
+    "lg": 16,
+    "xl": 24,
+    "2xl": 32,
+    "3xl": 48
+  },
+  "radius_tokens": {
+    "sm": 6,
+    "md": 12,
+    "lg": 20,
+    "pill": 999
+  },
+  "shadow_tier": 1,
+  "navigation": "bottom_tabs",
+  "icon_set": "Ionicons",
+  "glassmorphism": {
+    "enabled": true,
+    "do's": [
+      "Use blur behind the bottom tab bar.",
+      "Apply glass overlay on featured hero image cards (brand tinted gradient layer + blur).",
+      "Apply on sticky headers during scroll."
+    ],
+    "dont's": [
+      "Do not apply blur to standard form fields or basic list items."
+    ]
+  },
+  "platform_libraries": {
+    "glass": {
+      "ios": "expo-glass-effect",
+      "android": "expo-blur",
+      "low_end_android_fallback": "solid surfaceSecondary"
+    },
+    "image": "expo-image",
+    "blur": "expo-blur",
+    "bottom_sheet": "@gorhom/bottom-sheet",
+    "animation": "react-native-reanimated",
+    "gesture": "react-native-gesture-handler"
+  },
+  "haptics": {
+    "Search button pressed": "selection",
+    "Ride successfully booked": "success",
+    "Bottom tab switch": "light",
+    "Switching language": "selection",
+    "Post ride step completion": "success"
+  },
+  "screens": [
+    {
+      "name": "Home",
+      "purpose": "Central hub featuring the primary 'Find a Ride' widget over a premium hero image and a section highlighting current trends or recently searched routes.",
+      "states": {
+        "loading": "Centered spinner over the search widget skeleton.",
+        "empty": "No recent searches; display 'Where will you go next?' prompt.",
+        "error": "Failed to load recent locations, retry button."
+      },
+      "layout": "Hero layout: Image background filling top 40% with top-to-bottom gradient scrim. Overlapped by a stark white (surfaceSecondary) large card with rounded corners (lg) serving as the Search Widget (From, To, Date, Passengers). A prominent primary CTA (brandPrimary) to Search. Below the hero widget, horizontally scrolling cards (using 2-col wrap logic or scrollview) for 'Recent Searches' or 'Popular Routes'."
+    },
+    {
+      "name": "Search Results",
+      "purpose": "Displays available rides matching the user criteria with clear hierarchy of price, time, driver rating, and vehicle.",
+      "states": {
+        "loading": "Skeleton list of cards.",
+        "empty": "Empty state illustration of an empty highway, 'No rides found on this date. Try another date!'",
+        "error": "Readable message + Retry button."
+      },
+      "layout": "Sticky header showing the searched route (e.g., 'Delhi -> Jaipur') and date, with glassmorphism on scroll. Vertical list of cards (surfaceSecondary) with 1px border. Inside cards: Time/Location timeline on left, Driver Avatar (with initials/image) and rating on right. Price (brandPrimary) bottom right. Generous vertical spacing (md)."
+    },
+    {
+      "name": "Offer Ride",
+      "purpose": "Driver flow to publish a trip with origin, destination, waypoints, date/time, seat count, and price.",
+      "states": {
+        "loading": "Step indicator loading state.",
+        "empty": "Not applicable (Form).",
+        "error": "Validation errors on inputs (e.g., 'Please enter a valid price')."
+      },
+      "layout": "Single column form, labels above inputs. Sticky 'Next / Publish' primary CTA at the bottom with safe area padding. Use step-by-step layout using Bottom Sheet or segmented screens to reduce cognitive load."
+    },
+    {
+      "name": "Driver Dashboard",
+      "purpose": "Displays driver earnings, upcoming trips, verification status, and recent reviews.",
+      "states": {
+        "loading": "Spinner centered on dashboard layout.",
+        "empty": "No earnings yet; prompt 'Publish your first ride to earn'.",
+        "error": "Cannot fetch dashboard data, Retry button."
+      },
+      "layout": "Grid-based modular dashboard layout. Top hero card using brand (Navy) for Earnings. Secondary list rows for 'Upcoming Rides' and 'Verification Status'. Badges (brandTertiary) for 'Unverified' or 'Verified' status."
+    }
+  ],
+  "images": {
+    "home_hero_bg": {
+      "url": "https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDQ2NDN8MHwxfHNlYXJjaHwxfHxpbnRlcmNpdHklMjByb2FkJTIwdHJpcCUyMGNhcnxlbnwwfHx8fDE3OTM4ODg2MTl8MA&ixlib=rb-4.1.0&q=85",
+      "alt": "yellow Volkswagen van on road trip"
+    },
+    "empty_search_state": {
+      "url": "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjY2NzF8MHwxfHNlYXJjaHwxfHxlbXB0eSUyMGhpZ2h3YXklMjByb2FkJTIwdHJpcHxlbnwwfHx8fDE3OTM4ODg2MTl8MA&ixlib=rb-4.1.0&q=85",
+      "alt": "empty highway road landscape"
+    },
+    "onboarding_friends": {
+      "url": "https://images.unsplash.com/photo-1614846623957-165ceffbf8d0?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDQ2NDN8MHwxfHNlYXJjaHwxfHxmcmllbmRzJTIwcm9hZCUyMHRyaXAlMjBzbWlsaW5nJTIwY2FyfGVufDB8fHx8MTc5Mzg4ODYxOXww&ixlib=rb-4.1.0&q=85",
+      "alt": "group of friends in a white car on a road trip"
+    }
+  },
+  "instructions_to_main_agent": [
+    "Strictly follow the explicitly given brand colors: Navy #073B82, Primary blue #0875D1, Orange #FF7900. While blues are normally banned, they are explicitly given in the problem statement here.",
+    "Utilize Plus Jakarta Sans across the application, prioritizing highly readable, premium styling.",
+    "Implement the home screen with a strong visual hierarchy: a prominent search widget layered over a cinematic hero background image, accompanied by a top-to-bottom gradient scrim to ensure readability of any text.",
+    "For the bottom navigation tab, 'Offer Ride' should be given prominence, potentially centered and highlighted with the Primary blue or Orange.",
+    "Integrate seamless Loading, Empty, and Error states for all dynamic screens. When displaying empty states (e.g., Search Results), use the empty highway image.",
+    "Ensure 'Cash/UPI' payment method indicators are distinctly tagged using brandTertiary (Orange) or success (Green) color tags to differentiate them from online gateway indicators.",
+    "Keep borders soft (1px maximum) and limit heavy shadows. Employ iOS-Native Clean layout principles with generous padding to avoid a dense, dashboard-heavy look."
+  ]
+}

@@ -1,0 +1,54 @@
+{
+  "summary": "First full pass of TRAVOO. Backend: 23 pytest cases covering auth, locations (incl. native-script aliases, PIN, OSM), driver verification + admin approval + instant-approval mode, vehicles, trip publish/search/alt-dates, instant + request booking, overbooking, concurrent accepts, duplicate/own-ride guards, cancellations with seat restore + ledger reversal, trip cancel, start/complete, earnings (700x3=2100), settle idempotency, reviews, chat gating, notifications, tickets, admin. Sequential run: 23/23 passed. Under parallel load, the concurrent-settle test failed once in 2 runs (race condition). Frontend (390x844): onboarding -> register (consent error shown) -> home -> location modal (Bangalore alias) -> Find a Ride -> results/sort -> trip detail -> UPI booking -> confirmation shows 'Pay your driver directly by Cash or UPI.' + driver UPI -> cancel all work. Hindi/Tamil/Urdu switching changes UI text, and Urdu turns on RTL. Offer publish flow (origin/dest/pickup/drop/date/time/price/instant switch/preview/publish), driver My rides -> accept/reject/settle UPI/start/complete, and earnings (Rs900) work. Admin dashboard CRASHED with 'data.map is not a function' when switching from Overview to Drivers (or any list tab). I fixed this in admin.tsx and retested: all 9 tabs, driver approve and the instant-approval switch now work. No deprecated Expo packages detected (no expo-av, expo-barcode-scanner or expo-background-fetch).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/bookings/{bid}/settle", "issue": "Settling is check-then-set, not atomic. 4 concurrent settle calls returned [200,409,200,409] and inserted 2 rows into db.settlements for one booking (1 of 2 runs). Summary totals are still correct because they come from booking.settlement and the ledger has a unique index, but the settlements history gets duplicate rows. Fix: update_one({booking_id, 'settlement.status': {$ne:'received'}}) and check modified_count before inserting."},
+      {"endpoint": "POST /api/bookings", "issue": "The duplicate-booking check (find_one, then insert) is not atomic and there is no unique partial index on (trip_id, passenger_id, active status). Two concurrent requests from the same passenger can create 2 bookings."},
+      {"endpoint": "POST /api/bookings/{bid}/cancel", "issue": "If a driver has already marked a confirmed booking as 'received' and it is then cancelled, the settlement stays 'received' and still counts in the cash/upi totals in /api/earnings. No reversal or flag is recorded."},
+      {"endpoint": "POST /api/admin/drivers/{uid}/review", "issue": "Approves any user_id, even one with no driver_documents or driver_status not 'under_review'. It should require a submitted verification."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Admin dashboard tab switch", "issue": "CRASH (FIXED BY TESTER): switching from Overview to Drivers/Users/etc. rendered the new tab with the old tab's stats object, so data.map threw and the ErrorBoundary showed 'Something went wrong'. Root cause: setData(null) runs in useEffect after the render that uses the new tab. Fix: added dataTab state and only render when dataTab === tab. A remaining edge case is that a slow response from an earlier tab can overwrite newer data; consider an abort/requestId guard.", "testID": "admin-tab-drivers", "priority": "CRITICAL"},
+      {"component": "Trip detail (driver)", "issue": "The trip edit button label uses t('profile.edit') and shows 'Edit profile' on the trip page. It should say 'Edit ride'. Reference: app/trip/[id].tsx:186", "testID": "trip-edit-button", "priority": "MEDIUM"},
+      {"component": "Urdu (RTL) text rendering", "issue": "In the web preview, Urdu glyphs render as disconnected letters (e.g. tab labels, hero, auth). The likely cause is that the custom PJS (Plus Jakarta Sans) fontFamily has no Arabic-script glyphs, so fallback shaping breaks. Verify on a device and bundle Noto Nastaliq Urdu / Noto Naskh Arabic for ur/ks/sd (and possibly Noto fonts for Indic scripts). Urdu CTA labels are also truncated ('رائیڈ تلاش ...').", "testID": "home-find-ride-button", "priority": "MEDIUM"},
+      {"component": "Offer validation", "issue": "When a field is missing, the error text is only the field label (e.g. 'Date' or 'Pickup point / Drop-off point'), not a proper message. Reference: app/(tabs)/offer.tsx:96-99", "testID": "offer-error", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Search results / Trip detail / Booking", "issues": ["Plural grammar: '1 rides found', '1 seats left', '1 Seats · ₹450', '2/3 Seats'", "Passenger name placeholder reads 'Passengers 1' (should be 'Passenger 1')", "'How will you pay?: UPI' has double punctuation"]},
+      {"screen": "Home hero", "issues": ["The hero image is a US-southwest desert with a VW van, which doesn't fit an Indian intercity carpooling app. Use an Indian highway/city image."]}
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/test_travoo_api.py", "/app/backend/tests/ui_setup_driver.py", "/app/test_reports/pytest/pytest_results.xml"],
+  "action_items": [
+    "Make /bookings/{bid}/settle atomic (conditional update on settlement.status, then insert settlement only if modified)",
+    "Add a unique partial index or atomic guard against concurrent duplicate bookings by the same passenger on the same trip",
+    "Decide how to handle a settled booking that is later cancelled (reverse it, or flag it in earnings)",
+    "Fix trip-edit-button label (app/trip/[id].tsx:186): use a trip edit i18n key, not profile.edit",
+    "Bundle Arabic-script fonts (Noto Nastaliq Urdu / Naskh) for ur/ks/sd and skip the PJS fontFamily for those languages; check CTA truncation in RTL",
+    "Add pluralization (i18n count forms) for rides/seats and fix the 'Passengers 1' placeholder and 'How will you pay?:' punctuation",
+    "Give proper validation messages in the Offer form",
+    "Replace the home hero image with one relevant to India",
+    "Admin review endpoint: require a submitted verification before approving",
+    "Split server.py (1215 lines) into routers/modules"
+  ],
+  "critical_code_review_comments": [
+    "server.py is 1215 lines; split into auth/locations/trips/bookings/earnings/admin routers",
+    "admin.tsx: single shared `data` state across tabs caused the crash; consider react-query with per-tab keys (QueryClientProvider is already mounted)",
+    "Seat reservation via find_one_and_update with $gte guard is correct; the concurrent accept test passed (one 200, one 409, seats=1)",
+    "A suspended user's existing JWT is correctly rejected (401/403) and their login returns 403",
+    "Mixed-case email register/login works"
+  ],
+  "updated_files": ["/app/frontend/app/admin.tsx", "/app/backend/tests/test_travoo_api.py", "/app/backend/tests/ui_setup_driver.py"],
+  "success_rate": {"backend": "100% sequential (23/23); concurrent settle race flaky (1/2 runs)", "frontend": "~92% (admin crash fixed by tester; all other requested flows passed)"},
+  "seed_data_creation": "Created TEST_ users (test_*@example.com), TEST drivers (test_drv_*, test_uidrv_d7bc82@example.com / Passw0rd!x, test_pend_*), TEST trips (pickup 'TEST ...'; all remaining scheduled ones cancelled), TEST bookings, a TEST review (hidden), and a TEST SOS ticket (resolved). One UI booking on the demo Bengaluru->Chennai trip (TRV-154FD5ED) was made and cancelled, so the seat was restored. Passenger demo language reset to en. instant_driver_approval was restored to false.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "flaky_tests": [{"test": "TestDriverFlow::test_concurrent_settle_no_double_count", "failure_rate": "1/2 runs", "reason": "real race in settle endpoint"}],
+  "context_for_next_testing_agent": "Run: cd /app/backend && python -m pytest tests/test_travoo_api.py -n 0 (it uses module STATE, so run sequentially). The frontend env var is EXPO_PUBLIC_BACKEND_URL (not EXPO_BACKEND_URL). Onboarding: language-continue-button -> auth. Tabs are reachable via URL (/bookings, /offer, /profile, /admin, /earnings). Date chips: home-date-YYYY-MM-DD and offer-date-*. Tab bar items have no testIDs.",
+  "rca_of_issue": "Admin crash: in admin.tsx the tab change re-renders before the useEffect that clears data, so body() runs case 'drivers' with the stats object and calls data.map, which throws a TypeError caught by the ErrorBoundary. Reproduced via admin login -> /admin -> tap Drivers. Mitigation: track which tab the data belongs to (dataTab) and show Loading until it matches."
+}
