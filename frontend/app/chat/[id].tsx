@@ -7,7 +7,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { api } from "@/src/api";
 import { useAuth } from "@/src/auth";
-import { Empty, Header, T, space } from "@/src/components/ui";
+import { Avatar, Empty, Header, T, space } from "@/src/components/ui";
 import { useI18n } from "@/src/i18n";
 import { useTheme } from "@/src/theme";
 
@@ -31,7 +31,7 @@ export default function ChatScreen() {
   }, [id]);
   useEffect(() => {
     load();
-    const h = setInterval(load, 5000);
+    const h = setInterval(load, 3000);
     return () => clearInterval(h);
   }, [load]);
 
@@ -61,14 +61,24 @@ export default function ChatScreen() {
         contentContainerStyle={{ padding: space.lg, gap: space.sm, flexGrow: 1 }}
         ListEmptyComponent={<Empty icon="chatbubbles-outline" title={t("chat.empty")} />}
         renderItem={({ item }) => {
+          if (item.sender_id === "system")
+            return (
+              <View testID={`system-message-${item.message_id}`} style={{ alignSelf: "center", backgroundColor: colors.brandSoft, borderRadius: 12, paddingHorizontal: space.md, paddingVertical: 6, maxWidth: "90%" }}>
+                <T size={12} weight="600" color={colors.brandPrimary} center>{t(`notif.${item.sys_type}`, item.params)}</T>
+              </View>
+            );
           const mine = item.sender_id === user?.user_id;
           return (
-            <View style={{ alignSelf: mine ? "flex-end" : "flex-start", maxWidth: "80%", backgroundColor: mine ? colors.brandPrimary : colors.surfaceSecondary, borderRadius: 16, padding: space.md, borderWidth: mine ? 0 : 1, borderColor: colors.border }}>
+            <View style={{ flexDirection: "row", gap: space.sm, alignSelf: mine ? "flex-end" : "flex-start", maxWidth: "85%", alignItems: "flex-end" }}>
+              {!mine ? <Avatar name={item.sender_name} uri={item.sender_picture} size={28} /> : null}
+            <View style={{ flexShrink: 1, backgroundColor: mine ? colors.brandPrimary : colors.surfaceSecondary, borderRadius: 16, padding: space.md, borderWidth: mine ? 0 : 1, borderColor: colors.border }}>
               {!mine ? <T size={11} weight="700" color={colors.muted}>{item.sender_name}</T> : null}
               <T color={mine ? colors.onBrandPrimary : colors.onSurface}>{item.text}</T>
-              <T size={10} color={mine ? colors.onBrandPrimary : colors.muted} style={{ opacity: 0.7, alignSelf: "flex-end" }}>
+              <T size={10} color={mine ? colors.onBrandPrimary : colors.muted} style={{ opacity: 0.8, alignSelf: "flex-end" }}>
                 {new Date(item.created_at.endsWith("Z") ? item.created_at : `${item.created_at}Z`).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
+                {mine ? `  ${item.status === "read" ? "✓✓ " + t("v2.read") : "✓ " + t("v2.delivered")}` : ""}
               </T>
+            </View>
             </View>
           );
         }}

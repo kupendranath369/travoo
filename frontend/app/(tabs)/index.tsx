@@ -1,209 +1,93 @@
 import Ionicons from "@react-native-vector-icons/ionicons";
-import { Image } from "expo-image";
-import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useState } from "react";
 import { Pressable, RefreshControl, ScrollView, View } from "react-native";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { api, Loc } from "@/src/api";
-import { DateChips, isoDate } from "@/src/components/DateChips";
-import { LocationField } from "@/src/components/LocationField";
+import { api } from "@/src/api";
 import { Logo } from "@/src/components/Logo";
-import { Badge, Btn, Card, Section, Stepper, T, radius, space } from "@/src/components/ui";
-import { inr, useI18n } from "@/src/i18n";
+import { Card, IconName, T, radius, space } from "@/src/components/ui";
+import { useI18n } from "@/src/i18n";
 import { usesNativeTabs } from "@/src/navigation";
 import { useTheme } from "@/src/theme";
-
-const HERO = "https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?w=1200&q=70";
 
 export default function Home() {
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
-  const { t } = useI18n();
+  const { t, fmtDate } = useI18n();
   const router = useRouter();
-  const [from, setFrom] = useState<Loc | null>(null);
-  const [to, setTo] = useState<Loc | null>(null);
-  const [date, setDate] = useState<string | null>(isoDate(new Date()));
-  const [pax, setPax] = useState(1);
-  const [routes, setRoutes] = useState<any[]>([]);
+  const [recent, setRecent] = useState<any[]>([]);
   const [unread, setUnread] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
-  const [err, setErr] = useState("");
-  const [openFaq, setOpenFaq] = useState<number | null>(null);
 
   const load = useCallback(async () => {
-    try {
-      const [r, n] = await Promise.all([api("/routes/popular"), api("/notifications")]);
-      setRoutes(r);
-      setUnread(n.unread);
-    } catch (e: any) {
-      setErr(e.message);
-    }
+    const [r, n] = await Promise.all([api("/searches").catch(() => []), api("/notifications").catch(() => ({ unread: 0 }))]);
+    setRecent(r);
+    setUnread(n.unread);
   }, []);
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
-  const find = (o = from, d = to) => {
-    if (!o || !d) return setErr(t("search.pick_both"));
-    setErr("");
-    router.push({ pathname: "/search", params: { from: JSON.stringify(o), to: JSON.stringify(d), date: date ?? "", seats: String(pax) } });
-  };
+  const icon = (name: IconName, onPress: () => void, testID: string, dot?: boolean) => (
+    <Pressable testID={testID} onPress={onPress} hitSlop={6} style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: colors.surfaceTertiary, alignItems: "center", justifyContent: "center" }}>
+      <Ionicons name={name} size={20} color={colors.brand} />
+      {dot ? <View testID={`${testID}-dot`} style={{ position: "absolute", top: 7, right: 8, width: 9, height: 9, borderRadius: 5, backgroundColor: colors.brandTertiary }} /> : null}
+    </Pressable>
+  );
 
-  const how = [["search", 1], ["ticket", 2], ["car-sport", 3], ["cash", 4]] as const;
-  const why = [["shield-checkmark", "verified"], ["wallet", "afford"], ["alert-circle", "safety"], ["language", "lang"]] as const;
+  const service = (testID: string, ic: IconName, title: string, sub: string, bg: string, fg: string, onPress: () => void, delay: number) => (
+    <Animated.View entering={FadeInDown.delay(delay).duration(400)}>
+      <Pressable testID={testID} onPress={onPress} style={({ pressed }) => ({ backgroundColor: bg, borderRadius: radius.lg, padding: space.lg, flexDirection: "row", alignItems: "center", gap: space.md, opacity: pressed ? 0.9 : 1 })}>
+        <View style={{ width: 52, height: 52, borderRadius: 26, backgroundColor: "rgba(255,255,255,0.18)", alignItems: "center", justifyContent: "center" }}>
+          <Ionicons name={ic} size={26} color={fg} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <T size={17} weight="800" color={fg}>{title}</T>
+          <T size={12} color={fg} style={{ opacity: 0.85 }}>{sub}</T>
+        </View>
+        <Ionicons name="arrow-forward" size={20} color={fg} />
+      </Pressable>
+    </Animated.View>
+  );
+
+  const repeat = (s: any) => {
+    if (s.kind === "hire") router.push({ pathname: "/hire", params: { city: JSON.stringify(s.origin), service: s.service ?? "hourly" } });
+    else router.push({ pathname: "/search", params: { from: JSON.stringify(s.origin), to: JSON.stringify(s.destination), date: s.date && s.date >= new Date().toISOString().slice(0, 10) ? s.date : "", seats: String(s.seats || 1) } });
+  };
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.surface }}>
+      <View style={{ paddingTop: insets.top + space.sm, paddingHorizontal: space.lg, paddingBottom: space.sm, flexDirection: "row", alignItems: "center", backgroundColor: colors.surfaceSecondary, borderBottomWidth: 1, borderBottomColor: colors.border, gap: space.sm }}>
+        <View style={{ flex: 1 }}><Logo size={34} /></View>
+        {icon("language-outline", () => router.push("/language?from=profile"), "home-language-button")}
+        {icon("notifications-outline", () => router.push("/notifications"), "home-notifications-button", !!unread)}
+        {icon("person-circle-outline", () => router.push("/profile"), "home-profile-button")}
+        {icon("menu", () => router.push("/more"), "home-menu-button")}
+      </View>
       <ScrollView
         testID="home-scroll"
-        contentContainerStyle={{ paddingBottom: (usesNativeTabs ? insets.bottom : 0) + space.xl }}
+        contentContainerStyle={{ padding: space.lg, gap: space.md, paddingBottom: (usesNativeTabs ? insets.bottom : 0) + space.xl }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); await load(); setRefreshing(false); }} />}
       >
-        <View style={{ height: 330 + insets.top }}>
-          <Image source={{ uri: HERO }} style={{ position: "absolute", width: "100%", height: "100%" }} contentFit="cover" />
-          <LinearGradient colors={["rgba(7,59,130,0.75)", "rgba(7,59,130,0.35)", "rgba(7,59,130,0.9)"]} style={{ position: "absolute", width: "100%", height: "100%" }} />
-          <View style={{ paddingTop: insets.top + space.md, paddingHorizontal: space.lg, flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-            <View style={{ backgroundColor: colors.surfaceSecondary, padding: 6, paddingRight: space.md, borderRadius: radius.md }}>
-              <Logo size={32} />
-            </View>
-            <Pressable testID="home-notifications-button" onPress={() => router.push("/notifications")} style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: "rgba(255,255,255,0.2)", alignItems: "center", justifyContent: "center" }}>
-              <Ionicons name="notifications" size={22} color={colors.onBrand} />
-              {unread ? <View testID="home-unread-dot" style={{ position: "absolute", top: 8, right: 9, width: 10, height: 10, borderRadius: 5, backgroundColor: colors.brandTertiary }} /> : null}
-            </Pressable>
-          </View>
-          <Animated.View entering={FadeInDown.duration(500)} style={{ paddingHorizontal: space.lg, marginTop: space.xl, gap: space.sm }}>
-            <T testID="home-hero-title" size={30} weight="800" color={colors.onBrand}>{t("home.hero")}</T>
-            <T size={15} color={colors.onBrand} style={{ opacity: 0.9 }}>{t("home.sub")}</T>
-          </Animated.View>
+        {service("home-find-ride-button", "car-sport", t("v2.find_intercity"), t("v2.find_intercity_d"), colors.brand, colors.onBrand, () => router.push("/search"), 0)}
+        {service("home-hire-driver-button", "key", t("v2.hire"), t("v2.hire_d"), colors.brandPrimary, colors.onBrandPrimary, () => router.push("/hire"), 80)}
+        {service("home-offer-ride-button", "add-circle", t("btn.offer"), t("v2.offer_d"), colors.brandTertiary, colors.onBrandTertiary, () => router.push("/offer"), 160)}
+
+        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: space.md }}>
+          <T size={18} weight="800">{t("v2.recent")}</T>
+          {recent.length ? <Pressable testID="home-clear-recent" onPress={async () => { await api("/searches", { method: "DELETE" }); setRecent([]); }} hitSlop={8}><T weight="700" color={colors.brandPrimary}>{t("v2.clear")}</T></Pressable> : null}
         </View>
-
-        <Animated.View entering={FadeInDown.delay(120).duration(500)} style={{ marginHorizontal: space.lg, marginTop: -70 }}>
-          <Card testID="home-search-widget" style={{ gap: 0, paddingVertical: space.sm }}>
-            <LocationField testID="home-from-field" label={t("search.from")} value={from} onChange={setFrom} icon="radio-button-on" />
-            <View style={{ height: 1, backgroundColor: colors.divider }} />
-            <LocationField testID="home-to-field" label={t("search.to")} value={to} onChange={setTo} icon="location" />
-            <View style={{ height: 1, backgroundColor: colors.divider }} />
-            <View style={{ paddingVertical: space.sm, gap: space.xs }}>
-              <T size={12} color={colors.muted}>{t("search.date")}</T>
-              <DateChips value={date} onChange={setDate} allowAny days={30} testID="home-date" />
-            </View>
-            <View style={{ height: 1, backgroundColor: colors.divider }} />
-            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: space.sm }}>
-              <View style={{ flexDirection: "row", gap: space.md, alignItems: "center" }}>
-                <Ionicons name="people-outline" size={20} color={colors.brandPrimary} />
-                <T weight="600">{t("search.passengers")}</T>
-              </View>
-              <Stepper testID="home-passengers" value={pax} onChange={setPax} />
-            </View>
-            {err ? <T testID="home-search-error" size={13} color={colors.error}>{err}</T> : null}
-            <View style={{ flexDirection: "row", gap: space.sm, paddingTop: space.sm }}>
-              <Btn testID="home-find-ride-button" style={{ flex: 1 }} icon="search" label={t("btn.find")} onPress={() => find()} />
-              <Btn testID="home-offer-ride-button" style={{ flex: 1 }} variant="accent" icon="add-circle" label={t("btn.offer")} onPress={() => router.push("/offer")} />
-            </View>
-          </Card>
-        </Animated.View>
-
-        <View style={{ padding: space.lg, gap: space.xxl, paddingTop: space.xl }}>
-          <Section title={t("home.popular")}>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: space.md }}>
-              {routes.map((r) => (
-                <Pressable key={r.route_id} testID={`popular-route-${r.route_id}`} onPress={() => { setFrom(r.origin); setTo(r.destination); find(r.origin, r.destination); }} style={{ width: 200, borderRadius: radius.lg, padding: space.lg, backgroundColor: colors.brand, gap: space.sm }}>
-                  <Ionicons name="trail-sign" size={20} color={colors.brandTertiary} />
-                  <T weight="800" color={colors.onBrand} numberOfLines={1}>{r.origin.name}</T>
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                    <Ionicons name="arrow-forward" size={14} color={colors.brandTertiary} />
-                    <T weight="800" color={colors.onBrand} numberOfLines={1}>{r.destination.name}</T>
-                  </View>
-                  <T size={12} color={colors.onBrand} style={{ opacity: 0.8 }}>~{inr(r.price_hint)} {t("ride.per_seat")}</T>
-                </Pressable>
-              ))}
-            </ScrollView>
-          </Section>
-
-          <Section title={t("home.how")}>
-            {how.map(([icon, n]) => (
-              <View key={n} style={{ flexDirection: "row", gap: space.md, alignItems: "center" }}>
-                <View style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: n === 4 ? colors.accentSoft : colors.brandSoft, alignItems: "center", justifyContent: "center" }}>
-                  <Ionicons name={icon} size={22} color={n === 4 ? colors.brandTertiary : colors.brandPrimary} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <T weight="700">{n}. {t(`how.${n}.t`)}</T>
-                  <T size={13} color={colors.muted}>{t(`how.${n}.d`)}</T>
-                </View>
-              </View>
-            ))}
-          </Section>
-
-          <Card style={{ backgroundColor: colors.accentSoft, borderColor: colors.brandTertiary, flexDirection: "row", gap: space.md, alignItems: "center" }}>
-            <Ionicons name="cash-outline" size={28} color={colors.brandTertiary} />
+        {recent.length === 0 ? <T testID="home-recent-empty" color={colors.muted}>{t("v2.recent_empty")}</T> : null}
+        {recent.map((s) => (
+          <Card key={s.key} testID={`recent-search-${s.key}`} onPress={() => repeat(s)} style={{ flexDirection: "row", gap: space.md, alignItems: "center", padding: space.md }}>
+            <Ionicons name={s.kind === "hire" ? "key-outline" : "time-outline"} size={20} color={colors.brandPrimary} />
             <View style={{ flex: 1 }}>
-              <T weight="800">{t("pay.direct")}</T>
-              <T size={12} color={colors.muted}>{t("pay.note")}</T>
+              <T weight="700" numberOfLines={1}>{s.kind === "hire" ? `${s.origin?.name} · ${t(`v2.svc.${s.service ?? "hourly"}`)}` : `${s.origin?.name} → ${s.destination?.name}`}</T>
+              <T size={12} color={colors.muted}>{s.kind === "hire" ? t("v2.hire") : t("v2.find_intercity")} · {s.date ? fmtDate(s.date) : t("search.any_date")} · {fmtDate(s.at, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</T>
             </View>
+            <Ionicons name="refresh" size={18} color={colors.muted} />
           </Card>
-
-          <Section title={t("home.why")}>
-            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.md }}>
-              {why.map(([icon, k]) => (
-                <Card key={k} style={{ width: "47%", flexGrow: 1, gap: space.sm }}>
-                  <Ionicons name={icon} size={24} color={colors.brandPrimary} />
-                  <T weight="700">{t(`why.${k}.t`)}</T>
-                  <T size={12} color={colors.muted}>{t(`why.${k}.d`)}</T>
-                </Card>
-              ))}
-            </View>
-          </Section>
-
-          <Section title={t("safety.title")} right={<Btn small variant="ghost" label={t("common.view_all")} onPress={() => router.push("/support")} testID="home-safety-link" />}>
-            <Card style={{ gap: space.sm }}>
-              {[1, 2, 3, 4].map((i) => (
-                <View key={i} style={{ flexDirection: "row", gap: space.sm }}>
-                  <Ionicons name="checkmark-circle" size={18} color={colors.success} />
-                  <T size={13} style={{ flex: 1 }}>{t(`safety.${i}`)}</T>
-                </View>
-              ))}
-            </Card>
-          </Section>
-
-          <Section title={t("home.testimonials")} right={<Badge label={t("home.sample")} tone="muted" />}>
-            {[["Rohit, Pune", 1], ["Lakshmi, Madurai", 2]].map(([n, i]) => (
-              <Card key={i} style={{ gap: space.sm }}>
-                <Ionicons name="chatbox-ellipses" size={20} color={colors.brandTertiary} />
-                <T size={14}>“{t(`testi.${i}`)}”</T>
-                <T size={12} weight="700" color={colors.muted}>— {n}</T>
-              </Card>
-            ))}
-          </Section>
-
-          <Section title={t("home.faq")}>
-            {[1, 2, 3, 4].map((i) => (
-              <Card key={i} testID={`faq-${i}`} onPress={() => setOpenFaq(openFaq === i ? null : i)} style={{ gap: space.sm, padding: space.md }}>
-                <View style={{ flexDirection: "row", justifyContent: "space-between", gap: space.sm }}>
-                  <T weight="700" style={{ flex: 1 }}>{t(`faq.${i}.q`)}</T>
-                  <Ionicons name={openFaq === i ? "chevron-up" : "chevron-down"} size={18} color={colors.muted} />
-                </View>
-                {openFaq === i ? <T size={13} color={colors.muted}>{t(`faq.${i}.a`)}</T> : null}
-              </Card>
-            ))}
-          </Section>
-
-          <Section title={t("home.contact")}>
-            <T color={colors.muted}>{t("home.contact_body")}</T>
-            <T size={12} color={colors.muted}>{t("support.grievance")}</T>
-          </Section>
-
-          <View testID="home-footer" style={{ alignItems: "center", gap: space.sm, paddingTop: space.lg, borderTopWidth: 1, borderTopColor: colors.border }}>
-            <Logo size={34} />
-            <T size={12} weight="700" color={colors.brandPrimary}>{t("app.motto")}</T>
-            <View style={{ flexDirection: "row", gap: space.md, flexWrap: "wrap", justifyContent: "center" }}>
-              {["terms", "privacy", "cancellation"].map((d) => (
-                <T key={d} size={12} color={colors.muted} onPress={() => router.push(`/legal?doc=${d}`)} testID={`footer-${d}-link`}>{t(`legal.${d}`)}</T>
-              ))}
-            </View>
-            <T size={11} color={colors.muted}>{t("footer.rights")}</T>
-          </View>
-        </View>
+        ))}
       </ScrollView>
     </View>
   );

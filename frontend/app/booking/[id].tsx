@@ -116,6 +116,7 @@ export default function BookingScreen() {
             </View>
             {!b.is_driver && b.driver.driver_status === "approved" ? <Badge icon="shield-checkmark" label={t("ride.verified")} tone="success" /> : null}
           </View>
+          {!active ? <T size={12} color={colors.muted}>{t("v2.contact_hidden")}</T> : null}
           {active ? (
             <View style={{ flexDirection: "row", gap: space.sm }}>
               <Btn small style={{ flex: 1 }} testID="booking-chat-button" icon="chatbubbles-outline" label={t("booking.chat")} onPress={() => router.push(`/chat/${b.booking_id}`)} />

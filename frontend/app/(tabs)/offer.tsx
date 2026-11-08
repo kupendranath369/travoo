@@ -1,14 +1,17 @@
 import Ionicons from "@react-native-vector-icons/ionicons";
 import { useFocusEffect, useRouter } from "expo-router";
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, Switch, View } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { api, Loc, locPayload } from "@/src/api";
 import { useAuth } from "@/src/auth";
-import { DateChips, TimeChips, isoDate } from "@/src/components/DateChips";
+import { DateField } from "@/src/components/Calendar";
+import { TimeChips, isoDate } from "@/src/components/DateChips";
 import { LocationField, LocationSearchModal } from "@/src/components/LocationField";
+import { NearbyChips } from "@/src/components/NearbyChips";
+import { OsmMap } from "@/src/components/OsmMap";
 import { fmtDur } from "@/src/components/RideCard";
 import { useToast } from "@/src/components/toast";
 import { Badge, Btn, Card, Chip, Empty, Field, Loading, Stepper, T, space } from "@/src/components/ui";
@@ -43,6 +46,19 @@ export default function OfferScreen() {
   const [vid, setVid] = useState<string | null>(null);
   const [instant, setInstant] = useState(true);
   const [notes, setNotes] = useState("");
+  const [fuelPrice, setFuelPrice] = useState("");
+  const [mileage, setMileage] = useState("");
+  const [tolls, setTolls] = useState("0");
+  const [maint, setMaint] = useState("2");
+  const [mode, setMode] = useState<"equal" | "passenger">("equal");
+  const [routes, setRoutes] = useState<{ source: string; routes: any[] } | null>(null);
+  const [choice, setChoice] = useState(0);
+  const [tollsTouched, setTollsTouched] = useState(false);
+  const road = routes?.routes[choice] ? { ...routes.routes[choice], source: routes.source.startsWith("osrm") ? "osrm" : "estimate" } : null;
+  const [cap, setCap] = useState(1.5);
+  const [retOn, setRetOn] = useState(false);
+  const [retDate, setRetDate] = useState<string | null>(null);
+  const [retTime, setRetTime] = useState("17:00");
   const [preview, setPreview] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -62,12 +78,43 @@ export default function OfferScreen() {
     const pts = [o, ...stops, d];
     let dist = 0;
     for (let i = 0; i < pts.length - 1; i++) dist += km(pts[i], pts[i + 1]);
-    const road = Math.round(dist * 1.3);
-    const mins = Math.round((road / 55) * 60) + stops.length * 10;
+    const real = routes?.source.startsWith("osrm") ? routes.routes[choice] : null;
+    const road = real?.distance_km ?? Math.round(dist * 1.3);
+    const mins = (real?.duration_min ?? Math.round((road / 55) * 60)) + stops.length * 10;
     const [h, m] = time.split(":").map(Number);
     const tot = h * 60 + m + mins;
     return { road, mins, arrival: `${String(Math.floor(tot / 60) % 24).padStart(2, "0")}:${String(tot % 60).padStart(2, "0")}` };
-  }, [o, d, stops, time]);
+  }, [o, d, stops, time, routes, choice]);
+
+  const veh0 = vehicles?.find((v) => v.vehicle_id === vid);
+  useEffect(() => {
+    setChoice(0);
+    if (!o || !d) return setRoutes(null);
+    const pts = [o, ...stops, d].map((p) => `${p.lat},${p.lng}`).join(";");
+    api(`/geo/route?points=${pts}`).then(setRoutes).catch(() => setRoutes(null));
+  }, [o, d, stops]);
+  useEffect(() => {
+    if (!tollsTouched && road && road.source === "osrm") setTolls(String(road.toll_estimate ?? 0));
+  }, [road?.toll_estimate, road?.source, tollsTouched]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (veh0?.mileage) setMileage(String(veh0.mileage));
+    api(`/fuel-prices?state=${encodeURIComponent(o?.state ?? "")}`).then((r) => {
+      const fp = r.prices[veh0?.fuel_type ?? "petrol"];
+      if (fp) setFuelPrice(String(fp.price));
+      setMaint(String(r.maintenance_per_km));
+      setCap(r.max_price_factor);
+    }).catch(() => {});
+  }, [o?.state, veh0?.vehicle_id, veh0?.fuel_type, veh0?.mileage]);
+
+  const cost = useMemo(() => {
+    const km = road?.distance_km ?? est?.road;
+    const mil = Number(mileage), fp = Number(fuelPrice);
+    if (!km || !mil || !fp) return null;
+    const fuelUnits = km / mil, fuelCost = fuelUnits * fp, m = km * Number(maint || 0), total = fuelCost + Number(tolls || 0) + m;
+    const sharers = mode === "equal" ? seats + 1 : seats;
+    const rec = Math.max(50, Math.round(total / sharers));
+    return { km, fuelUnits, fuelCost, m, total, sharers, rec, max: Math.round(rec * cap) };
+  }, [road, est, mileage, fuelPrice, maint, tolls, mode, seats, cap]);
 
   const bottom = (usesNativeTabs ? insets.bottom : 0) + space.xl;
   if (!user || vehicles === null) return <Loading />;
@@ -106,7 +153,9 @@ export default function OfferScreen() {
     setErr("");
     try {
       const trip = await api("/trips", {
-        body: { origin: locPayload(o!), destination: locPayload(d!), stops: stops.map(locPayload), pickup_point: pickup.trim(), drop_point: drop.trim(), date, time, seats, price: Number(price), vehicle_id: vid, instant_booking: instant, notes: notes.trim() },
+        body: { origin: locPayload(o!), destination: locPayload(d!), stops: stops.map(locPayload), pickup_point: pickup.trim(), drop_point: drop.trim(), date, time, seats, price: Number(price), vehicle_id: vid, instant_booking: instant, notes: notes.trim(),
+          fuel_price: Number(fuelPrice) || null, mileage: Number(mileage) || null, tolls: Number(tolls) || 0, tolls_estimated: !tollsTouched, maintenance_per_km: Number(maint || 0), share_mode: mode, route_choice: stops.length ? 0 : choice,
+          return_date: retOn ? retDate ?? date : null, return_time: retOn ? retTime : null },
       });
       toast(t("offer.published"));
       setPreview(false);
@@ -152,8 +201,28 @@ export default function OfferScreen() {
               <View style={{ height: 1, backgroundColor: colors.divider }} />
               <LocationField testID="offer-dest-field" label={t("offer.dest")} value={d} onChange={setD} icon="location" />
             </Card>
+            {o && d && routes ? (
+              <View style={{ gap: space.sm }}>
+                <OsmMap testID="offer-route-map"
+                  markers={[o, ...stops, d].map((p, i, a) => ({ lat: p.lat, lng: p.lng, label: p.name, color: i === 0 ? colors.brandPrimary : i === a.length - 1 ? colors.brandTertiary : colors.muted }))}
+                  lines={routes.routes.map((r, i) => ({ coords: r.geometry, id: i, color: i === choice ? colors.brandPrimary : colors.borderStrong, width: i === choice ? 6 : 4, dashed: !routes.source.startsWith("osrm") })).sort((a, b) => Number(a.id === choice) - Number(b.id === choice))}
+                  onLinePress={setChoice} />
+                {routes.routes.length > 1 ? (
+                  <View style={{ gap: space.xs }}>
+                    <T size={13} weight="600" color={colors.muted}>{t("geo.routes")}</T>
+                    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.sm }}>
+                      {routes.routes.map((r, i) => (
+                        <Chip key={i} testID={`offer-route-${i}`} active={i === choice} icon="git-branch-outline" label={`${t("geo.route_n", { n: i + 1 })} · ${r.distance_km} km · ${fmtDur(r.duration_min)}${r.via?.[0] ? ` · ${r.via[0]}` : ""}`} onPress={() => setChoice(i)} />
+                      ))}
+                    </View>
+                  </View>
+                ) : road?.via?.length ? <T size={12} color={colors.muted}>{t("geo.via")} {road.via.join(", ")}</T> : null}
+              </View>
+            ) : null}
             <Field testID="offer-pickup-input" label={t("offer.pickup")} value={pickup} onChangeText={setPickup} placeholder="e.g. Silk Board Junction, Gate 2" />
+            <NearbyChips loc={o} onPick={setPickup} testID="offer-pickup-nearby" />
             <Field testID="offer-drop-input" label={t("offer.drop")} value={drop} onChangeText={setDrop} placeholder="e.g. Koyambedu Bus Terminus" />
+            <NearbyChips loc={d} onPick={setDrop} testID="offer-drop-nearby" />
             <View style={{ gap: space.sm }}>
               <T size={13} weight="600" color={colors.muted}>{t("offer.stops")}</T>
               <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.sm }}>
@@ -164,8 +233,7 @@ export default function OfferScreen() {
               </View>
             </View>
             <View style={{ gap: space.xs }}>
-              <T size={13} weight="600" color={colors.muted}>{t("offer.date")}</T>
-              <DateChips value={date} onChange={setDate} testID="offer-date" days={60} />
+              <DateField testID="offer-date" label={t("offer.date")} value={date} onChange={setDate} />
             </View>
             <View style={{ gap: space.xs }}>
               <T size={13} weight="600" color={colors.muted}>{t("offer.time")}: <T weight="800">{time}</T>{est ? `  ·  ${t("offer.est_arrival")}: ${est.arrival}` : ""}</T>
@@ -175,7 +243,37 @@ export default function OfferScreen() {
               <T weight="600">{t("offer.seats")}</T>
               <Stepper testID="offer-seats" value={seats} max={veh?.seats ?? 8} onChange={setSeats} />
             </View>
-            <Field testID="offer-price-input" label={t("offer.price")} value={price} onChangeText={(v) => setPrice(v.replace(/\D/g, ""))} keyboardType="number-pad" placeholder="700" />
+            <Card testID="offer-cost-calculator" style={{ gap: space.sm }}>
+              <T weight="800">{t("v2.cost_title")}</T>
+              {road ? <T testID="offer-road-distance" size={12} color={colors.muted}>{t("v2.road_distance")}: {road.distance_km} km{road.source !== "osrm" ? ` (${t("ride.est")})` : " (OpenStreetMap)"}</T> : null}
+              <View style={{ flexDirection: "row", gap: space.sm }}>
+                <View style={{ flex: 1 }}><Field testID="offer-mileage-input" label={`${t("v2.mileage")} (${veh?.fuel_type === "electric" ? "km/kWh" : veh?.fuel_type === "cng" ? "km/kg" : "km/l"})`} value={mileage} onChangeText={(v) => setMileage(v.replace(/[^\d.]/g, ""))} keyboardType="decimal-pad" /></View>
+                <View style={{ flex: 1 }}><Field testID="offer-fuel-price-input" label={`${t("v2.fuel_price")} (₹/${veh?.fuel_type === "electric" ? "kWh" : veh?.fuel_type === "cng" ? "kg" : "l"})`} value={fuelPrice} onChangeText={(v) => setFuelPrice(v.replace(/[^\d.]/g, ""))} keyboardType="decimal-pad" /></View>
+              </View>
+              <View style={{ flexDirection: "row", gap: space.sm }}>
+                <View style={{ flex: 1 }}><Field testID="offer-tolls-input" label={t("v2.tolls")} value={tolls} onChangeText={(v) => { setTollsTouched(true); setTolls(v.replace(/\D/g, "")); }} keyboardType="number-pad" /></View>
+                <View style={{ flex: 1 }}><Field testID="offer-maint-input" label={t("v2.maintenance")} value={maint} onChangeText={(v) => setMaint(v.replace(/[^\d.]/g, ""))} keyboardType="decimal-pad" /></View>
+              </View>
+              <T size={11} color={colors.brandTertiary}>{!tollsTouched && road?.source === "osrm" ? t("geo.toll_auto", { n: road.toll_km }) : t("v2.tolls_est")}</T>
+              <View style={{ flexDirection: "row", gap: space.sm, flexWrap: "wrap" }}>
+                <Chip testID="offer-mode-equal" label={t("v2.mode_equal")} active={mode === "equal"} onPress={() => setMode("equal")} />
+                <Chip testID="offer-mode-passenger" label={t("v2.mode_passenger")} active={mode === "passenger"} onPress={() => setMode("passenger")} />
+              </View>
+              {cost ? (
+                <View style={{ gap: 2 }}>
+                  <T size={13}>{t("v2.fuel_cost")}: {cost.km} ÷ {mileage} = {cost.fuelUnits.toFixed(2)} × ₹{fuelPrice} = {inr(cost.fuelCost)}</T>
+                  <T size={13}>{t("v2.maintenance")}: {inr(cost.m)} · {t("v2.tolls")}: {inr(Number(tolls))}</T>
+                  <T size={13} weight="700">{t("v2.total_cost")}: {inr(cost.total)} ÷ {cost.sharers}</T>
+                  <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                    <T weight="800" color={colors.brandPrimary} testID="offer-recommended">{t("v2.recommended")}: {inr(cost.rec)}</T>
+                    <Btn small variant="outline" label={t("v2.use_recommended")} onPress={() => setPrice(String(cost.rec))} testID="offer-use-recommended" />
+                  </View>
+                  <T size={11} color={colors.muted}>Max ₹{cost.max} · {t("v2.cost_note")}</T>
+                </View>
+              ) : null}
+            </Card>
+            <Field testID="offer-price-input" label={t("v2.your_price")} value={price} onChangeText={(v) => setPrice(v.replace(/\D/g, ""))} keyboardType="number-pad" placeholder="700" />
+            {cost && Number(price) > cost.max ? <T testID="offer-over-cap" size={12} color={colors.error}>{t("v2.over_cap", { n: cost.max })}</T> : null}
             {Number(price) ? <T size={13} color={colors.brandPrimary} weight="700">{t("offer.max_earn")}: {inr(seats * Number(price))}</T> : null}
             <View style={{ gap: space.sm }}>
               <T size={13} weight="600" color={colors.muted}>{t("offer.vehicle")}</T>
@@ -194,6 +292,17 @@ export default function OfferScreen() {
               <Switch testID="offer-instant-switch" value={instant} onValueChange={setInstant} trackColor={{ true: colors.brandPrimary, false: colors.border }} />
             </View>
             <Field testID="offer-notes-input" label={t("offer.notes")} value={notes} onChangeText={setNotes} multiline maxLength={500} />
+            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space.md }}>
+              <T weight="600" style={{ flex: 1 }}>{t("v2.return_trip")}</T>
+              <Switch testID="offer-return-switch" value={retOn} onValueChange={setRetOn} trackColor={{ true: colors.brandPrimary, false: colors.border }} />
+            </View>
+            {retOn ? (
+              <>
+                <DateField testID="offer-return-date" label={t("v2.return_date")} value={retDate ?? date} onChange={setRetDate} />
+                <T size={13} weight="600" color={colors.muted}>{t("v2.return_time")}: {retTime}</T>
+                <TimeChips value={retTime} onChange={setRetTime} />
+              </>
+            ) : null}
             {err ? <T testID="offer-error" color={colors.error}>{err}</T> : null}
             <Btn testID="offer-preview-button" label={t("offer.preview")} icon="eye-outline" onPress={() => { const v = validate(); if (v) setErr(v); else { setErr(""); setPreview(true); } }} />
           </>

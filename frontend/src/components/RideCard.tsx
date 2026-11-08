@@ -3,6 +3,7 @@ import { useRouter } from "expo-router";
 import React from "react";
 import { View } from "react-native";
 
+import { publicPhoto } from "@/src/api";
 import { Avatar, Badge, Card, Rating, T, space } from "@/src/components/ui";
 import { inr, useI18n } from "@/src/i18n";
 import { useTheme } from "@/src/theme";
@@ -42,17 +43,19 @@ export function RideCard({ trip, seats = 1 }: { trip: any; seats?: number }) {
         <Badge icon="time-outline" label={`${fmtDur(trip.duration_min)} · ~${trip.distance_km} km`} tone="muted" />
         <Badge icon="person-outline" label={t("ride.seats_left", { n: trip.seats_available })} tone={trip.seats_available ? "info" : "error"} />
         {trip.instant_booking ? <Badge icon="flash" label={t("trip.instant")} tone="warning" /> : null}
+        {trip.match?.type === "along_route" ? <Badge testID={`ride-along-route-${trip.trip_id}`} icon="git-merge-outline" label={t("geo.along_route", { n: trip.match.pickup_km, time: trip.match.pickup_eta ?? "" })} tone="accent" /> : null}
         {trip.is_demo ? <Badge label={t("common.demo")} tone="muted" /> : null}
       </View>
       <View style={{ height: 1, backgroundColor: colors.divider }} />
       <View style={{ flexDirection: "row", alignItems: "center", gap: space.md }}>
-        <Avatar name={trip.driver?.name} uri={trip.driver?.picture} size={40} />
+        <Avatar name={trip.driver?.name} uri={trip.driver?.has_photo ? publicPhoto(trip.driver_id) : trip.driver?.picture} size={44} />
         <View style={{ flex: 1 }}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
             <T weight="700" numberOfLines={1}>{trip.driver?.name}</T>
             {trip.driver?.driver_status === "approved" ? <Ionicons name="shield-checkmark" size={14} color={colors.success} /> : null}
           </View>
           <Rating value={trip.driver?.rating_avg} count={trip.driver?.rating_count} />
+          {trip.driver?.has_photo ? <Badge testID={`ride-photo-badge-${trip.trip_id}`} icon="camera" label={t("v2.verified_photo")} tone="success" /> : null}
         </View>
         <View style={{ alignItems: "flex-end" }}>
           <T size={12} weight="600">{v.make} {v.model}</T>

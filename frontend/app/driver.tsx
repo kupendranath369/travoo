@@ -23,7 +23,7 @@ export default function DriverScreen() {
   const toast = useToast();
   const [p, setP] = useState<any>(null);
   const [f, setF] = useState({ legal_name: "", vehicle_name: "", phone: "", licence_no: "", licence_expiry: "", rc_no: "" });
-  const [v, setV] = useState({ make: "", model: "", vtype: "sedan", color: "", reg_no: "", seats: 3, ac: true, luggage: "medium" });
+  const [v, setV] = useState({ make: "", model: "", vtype: "sedan", color: "", reg_no: "", seats: 3, ac: true, luggage: "medium", fuel_type: "petrol", mileage: "" });
   const [vOpen, setVOpen] = useState(false);
   const [err, setErr] = useState("");
   const [vErr, setVErr] = useState("");
@@ -61,9 +61,9 @@ export default function DriverScreen() {
     setBusy("veh");
     setVErr("");
     try {
-      await api("/vehicles", { body: v });
+      await api("/vehicles", { body: { ...v, mileage: Number(v.mileage) || null } });
       setVOpen(false);
-      setV({ make: "", model: "", vtype: "sedan", color: "", reg_no: "", seats: 3, ac: true, luggage: "medium" });
+      setV({ make: "", model: "", vtype: "sedan", color: "", reg_no: "", seats: 3, ac: true, luggage: "medium", fuel_type: "petrol", mileage: "" });
       await load();
     } catch (e: any) {
       setVErr(e.message);
@@ -145,6 +145,11 @@ export default function DriverScreen() {
               <View style={{ flexDirection: "row", gap: space.sm }}>
                 {["small", "medium", "large"].map((x) => <Chip key={x} testID={`vehicle-luggage-${x}`} label={t(`vehicle.${x}`)} active={v.luggage === x} onPress={() => setV({ ...v, luggage: x })} />)}
               </View>
+              <T size={13} weight="600" color={colors.muted}>{t("v2.fuel_type")}</T>
+              <View style={{ flexDirection: "row", gap: space.sm, flexWrap: "wrap" }}>
+                {["petrol", "diesel", "cng", "electric"].map((x) => <Chip key={x} testID={`vehicle-fuel-${x}`} label={x.toUpperCase()} active={v.fuel_type === x} onPress={() => setV({ ...v, fuel_type: x })} />)}
+              </View>
+              <Field testID="vehicle-mileage" label={`${t("v2.mileage")} (${v.fuel_type === "electric" ? "km/kWh" : v.fuel_type === "cng" ? "km/kg" : "km/l"})`} value={v.mileage} onChangeText={(x) => setV({ ...v, mileage: x.replace(/[^\d.]/g, "") })} keyboardType="decimal-pad" />
               {vErr ? <T testID="vehicle-error" color={colors.error}>{vErr}</T> : null}
               <Btn testID="vehicle-save-button" label={t("vehicle.save")} onPress={addVehicle} loading={busy === "veh"} />
               <Btn variant="ghost" label={t("common.cancel")} onPress={() => setVOpen(false)} testID="vehicle-cancel-button" />

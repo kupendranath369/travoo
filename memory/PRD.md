@@ -32,8 +32,24 @@ Pan-India intercity paid carpooling app (BlaBlaCar model) called TRAVOO, tagline
 - Admin Drivers tab shows thumbnails + full-screen preview; review only for submitted (under_review/approved) users
 - New labels translated into all 23 languages
 
+## Iteration 4 (Major update, two services)
+- Verified photo badges (public only for approved drivers) on ride cards, trip detail, hire results, profiles
+- Missing-place submission (native map pin / web lat-lng / GPS) → admin Places tab → searchable (source "community")
+- TRAVOO DRIVER (Hire a Driver): pro registration (city, areas, languages, experience, licence, vehicle types, availability, About Me, rates), admin approval, city/date/service search with estimate, request → accept/reject → start → complete, reviews
+- Chat: conversations list, unread counts, delivered/read, system booking messages, sender photos, 3s polling (not websockets)
+- Phones masked before confirmation; contact_access log
+- Cost-sharing calculator: OSRM road distance, admin fuel prices, tolls (estimated), maintenance/km, equal/passenger modes, cap = recommended × max_price_factor (enforced in backend), return journey
+- Month calendar (DateField), About Me 500, minimal homepage + recent searches, More/Info screens, Bookings "Driver hire" chip, admin Local drivers/Places/Fuel prices
+- Tested: iteration_4 — 72/72 backend tests, all UI flows pass; follow-up fixes applied (price cap mandatory, photo 404, empty chat, hire start→complete order, labels)
+
 ## Backlog
 - P0: Upload official logo image (currently a vector recreation); document/vehicle photo uploads (object storage)
-- P1: In-app map (route preview, map pin pick); Noto fonts for Urdu/Indic scripts; plural forms; LGD/Census bulk location import
+- P1: Bulk import of the government (LGD) and Census village lists; toll-data provider; daily fuel-price feed; websocket realtime chat; split server.py into modules
 - P1: Email/SMS/push notification providers; cancellation deadline enforcement
 - P2: Separate web admin dashboard; saved routes/favourite drivers; professional translation review
+
+## Iteration 5 (India-wide map database)
+- geo.py router: Photon autocomplete (OSM) + Nominatim fallback/enrichment (1 req/s, no autocomplete use), India Post PIN directory, OSRM routing w/ FOSSGIS mirror + alternatives + geometry, toll estimate (OSM toll tags else NH/expressway km), Overpass (3 mirrors) → Photon fallback for nearby stops/stations
+- Central MongoDB location DB (2dsphere) grows from every lookup; geo_cache TTL; pincodes collection; geo_misses (searches with no result); daily sync job (refresh OSM places >30d via Nominatim lookup, mark outdated, verify curated coords, refresh PINs, merge duplicates) + admin "Sync now" + last sync date shown
+- Trips store route_line; along-route passenger matching (direction-aware); route map on offer/trip, route alternatives, nearby pickup chips, OSM Leaflet maps (WebView/iframe) replace react-native-maps pin
+- MongoDB kept instead of PostGIS (2dsphere covers needs; no migration of existing data)

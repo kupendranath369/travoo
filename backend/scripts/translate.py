@@ -17,7 +17,7 @@ LANGS = {
 en = json.loads((OUT / "en.json").read_text())
 items = list(en.items())
 CHUNK = 110
-FORCE = {"verify.docs_note"}  # keys whose English text changed
+FORCE = {"geo.along_route"}  # keys whose English text changed
 
 
 async def translate_chunk(code, lang, chunk):

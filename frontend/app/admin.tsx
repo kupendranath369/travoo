@@ -8,14 +8,15 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { api, fileUrl, Loc, locPayload } from "@/src/api";
 import { useAuth } from "@/src/auth";
 import { LocationField } from "@/src/components/LocationField";
+import { MapDataCard } from "@/src/components/MapDataCard";
 import { useToast } from "@/src/components/toast";
 import { Badge, Btn, Card, Chip, Empty, ErrorBox, Field, Header, Loading, Section, Stepper, T, space, statusTone } from "@/src/components/ui";
 import { inr, useI18n } from "@/src/i18n";
 import { useTheme } from "@/src/theme";
 
-const TABS = ["overview", "drivers", "users", "trips", "bookings", "tickets", "reviews", "routes", "settings"] as const;
+const TABS = ["overview", "drivers", "pro", "places", "users", "trips", "bookings", "tickets", "reviews", "routes", "settings"] as const;
 type Tab = (typeof TABS)[number];
-const PATH: Record<Tab, string> = { overview: "/admin/stats", drivers: "/admin/drivers", users: "/admin/users", trips: "/admin/trips", bookings: "/admin/bookings", tickets: "/admin/tickets", reviews: "/admin/reviews", routes: "/routes/popular", settings: "/admin/settings" };
+const PATH: Record<Tab, string> = { overview: "/admin/stats", drivers: "/admin/drivers", pro: "/admin/pro-drivers", places: "/admin/locations/missing", users: "/admin/users", trips: "/admin/trips", bookings: "/admin/bookings", tickets: "/admin/tickets", reviews: "/admin/reviews", routes: "/routes/popular", settings: "/admin/settings" };
 
 export default function AdminScreen() {
   const insets = useSafeAreaInsets();
@@ -35,11 +36,15 @@ export default function AdminScreen() {
   const [rPrice, setRPrice] = useState("");
   const [note, setNote] = useState("");
   const [preview, setPreview] = useState<string | null>(null);
+  const [fuel, setFuel] = useState<Record<string, string>>({});
+  useEffect(() => {
+    if (tab === "settings") api("/fuel-prices").then((r) => setFuel(Object.fromEntries(Object.entries(r.prices).map(([k, v]: any) => [k, String(v.price)])))).catch(() => {});
+  }, [tab]);
 
   const load = useCallback(async () => {
     setErr("");
     try {
-      const path = tab === "drivers" ? `${PATH.drivers}?status=${dStatus}` : tab === "users" ? `${PATH.users}?q=${encodeURIComponent(q)}` : PATH[tab];
+      const path = tab === "drivers" || tab === "pro" ? `${PATH[tab]}?status=${dStatus}` : tab === "users" ? `${PATH.users}?q=${encodeURIComponent(q)}` : PATH[tab];
       const res = await api(path);
       setData(res);
       setDataTab(tab);
@@ -116,6 +121,7 @@ export default function AdminScreen() {
             <Section title={t("home.popular")}>
               {data.top_routes.map((r: any) => <T key={r._id} size={13}>{r._id} — {r.n}</T>)}
             </Section>
+            <MapDataCard />
             <Section title="User growth">
               {data.growth.map((g: any) => <T key={g._id} size={13}>{g._id}: +{g.users}</T>)}
             </Section>
@@ -156,6 +162,53 @@ export default function AdminScreen() {
             ))}
           </>
         );
+      case "pro":
+        return (
+          <>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: space.sm }}>
+              {["under_review", "approved", "rejected", "resubmit"].map((s) => <Chip key={s} testID={`admin-pro-filter-${s}`} label={t(`verify.status.${s}`)} active={dStatus === s} onPress={() => setDStatus(s)} />)}
+            </ScrollView>
+            {data.length === 0 ? <Empty title={t("admin.empty")} /> : null}
+            {data.map((p: any) => (
+              <Card key={p.user_id} testID={`admin-pro-${p.user_id}`} style={{ gap: space.sm }}>
+                <T weight="800">{p.name} · {p.email}</T>
+                <View style={{ flexDirection: "row", gap: space.sm }}>
+                  {["profile", "licence"].map((k) => (
+                    <Pressable key={k} testID={`admin-pro-doc-${k}-${p.user_id}`} onPress={() => p.documents?.photos?.[k] && setPreview(fileUrl(p.documents.photos[k]))} style={{ width: 72, height: 72, borderRadius: 8, overflow: "hidden", backgroundColor: colors.surfaceTertiary }}>
+                      {p.documents?.photos?.[k] ? <Image source={{ uri: fileUrl(p.documents.photos[k]) }} style={{ width: "100%", height: "100%" }} contentFit="cover" /> : null}
+                    </Pressable>
+                  ))}
+                </View>
+                <T size={12}>{p.city?.name} · {p.experience_years}y · {p.languages.join(", ")} · {p.vehicle_types.join(", ")}</T>
+                <T size={12}>{t("verify.licence")}: {p.licence_no} ({p.licence_expiry})</T>
+                <T size={12} color={colors.muted}>₹{p.rate_hourly}/h · ₹{p.rate_half_day} · ₹{p.rate_full_day} · {p.bio}</T>
+                {p.status === "under_review" ? (
+                  <View style={{ flexDirection: "row", gap: space.sm }}>
+                    <Btn small testID={`admin-pro-approve-${p.user_id}`} label={t("admin.approve")} onPress={() => act(`/admin/pro-drivers/${p.user_id}/review`, { decision: "approved", note })} />
+                    <Btn small variant="danger" testID={`admin-pro-reject-${p.user_id}`} label={t("admin.reject")} onPress={() => act(`/admin/pro-drivers/${p.user_id}/review`, { decision: "rejected", note })} />
+                  </View>
+                ) : null}
+              </Card>
+            ))}
+          </>
+        );
+      case "places":
+        return data.length === 0 ? <Empty title={t("admin.empty")} /> : data.map((r: any) => (
+          <Card key={r.request_id} testID={`admin-place-${r.request_id}`} style={{ gap: 4, padding: space.md }}>
+            <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+              <T weight="800" style={{ flex: 1 }}>{r.name} {r.local_name ? `(${r.local_name})` : ""}</T>
+              <Badge label={r.status} tone={statusTone(r.status === "pending" ? "pending" : r.status)} />
+            </View>
+            <T size={12}>{r.ltype} · {r.district}, {r.state} {r.pin ?? ""} · {r.lat.toFixed(5)}, {r.lng.toFixed(5)}</T>
+            <T size={11} color={colors.muted}>{r.user_name}</T>
+            {r.status === "pending" ? (
+              <View style={{ flexDirection: "row", gap: space.sm }}>
+                <Btn small testID={`admin-place-approve-${r.request_id}`} label={t("admin.approve")} onPress={() => act(`/admin/locations/missing/${r.request_id}`, { decision: "approved" })} />
+                <Btn small variant="outline" testID={`admin-place-reject-${r.request_id}`} label={t("admin.reject")} onPress={() => act(`/admin/locations/missing/${r.request_id}`, { decision: "rejected" })} />
+              </View>
+            ) : null}
+          </Card>
+        ));
       case "users":
         return (
           <>
@@ -247,6 +300,21 @@ export default function AdminScreen() {
             <View style={{ gap: space.sm }}>
               <T size={13} weight="600">{t("admin.driver_cancel_hours")}</T>
               <Stepper testID="admin-driver-cancel-hours" min={0} max={72} value={data.driver_cancel_hours ?? 12} onChange={(v) => act("/admin/settings", { driver_cancel_hours: v }, "PUT")} />
+            </View>
+            <View style={{ gap: space.sm }}>
+              <T weight="800">{t("v2.fuel_prices")} (₹)</T>
+              {["petrol", "diesel", "cng", "electric"].map((ft) => (
+                <View key={ft} style={{ flexDirection: "row", gap: space.sm, alignItems: "center" }}>
+                  <T style={{ width: 80 }}>{ft.toUpperCase()}</T>
+                  <View style={{ flex: 1 }}><Field testID={`admin-fuel-${ft}`} placeholder={ft === "electric" ? "₹/kWh" : ft === "cng" ? "₹/kg" : "₹/litre"} value={fuel[ft] ?? ""} onChangeText={(v) => setFuel({ ...fuel, [ft]: v.replace(/[^\d.]/g, "") })} keyboardType="decimal-pad" /></View>
+                  <Btn small testID={`admin-fuel-save-${ft}`} label={t("common.save")} disabled={!fuel[ft]} onPress={() => act("/admin/fuel-prices", { state: "default", fuel_type: ft, price: Number(fuel[ft]) })} />
+                </View>
+              ))}
+              <T size={11} color={colors.muted}>National default. Update regularly from official oil-company / state rates.</T>
+            </View>
+            <View style={{ gap: space.sm }}>
+              <T size={13} weight="600">{t("v2.maintenance")}</T>
+              <Stepper testID="admin-maint" min={0} max={20} value={Math.round(data.maintenance_per_km ?? 2)} onChange={(v) => act("/admin/settings", { maintenance_per_km: v }, "PUT")} />
             </View>
             <View style={{ flexDirection: "row", gap: space.sm, alignItems: "center" }}>
               <Ionicons name="information-circle-outline" size={18} color={colors.muted} />

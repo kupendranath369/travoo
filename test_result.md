@@ -101,3 +101,7 @@
 #====================================================================================================
 # Testing Data - Main Agent and testing sub agent both should log testing data below this section
 #====================================================================================================
+## Map database upgrade (iteration 5)
+- Backend: new /app/backend/geo.py router — /api/geo/search (Photon autocomplete + Nominatim fallback + local DB + India Post PIN), /api/geo/place/{loc_id} (enrich), /api/geo/reverse (?exact=true keeps pin), /api/geo/pincode/{pin}, /api/geo/route (OSRM + FOSSGIS mirror, alternatives, geometry, toll estimate), /api/geo/nearby (Overpass mirrors -> Photon fallback), /api/geo/status, /api/admin/geo/sync, /api/admin/geo/report. Legacy /api/locations/search, /locations/osm, /locations/reverse, /route/estimate kept.
+- Trips store route_line (GeoJSON, 2dsphere), route_via, toll_estimate; GET /api/trips/{id} returns `route` [[lat,lng]]; /api/trips/search matches along-route (match.type along_route) in correct direction.
+- Frontend: OsmMap (Leaflet/OSM in WebView / iframe), MapPicker, new LocationSearchModal (unified autocomplete, map preview, pick on map, last sync date), offer route map + alternatives + nearby pickup chips + auto toll, trip route map, RideCard along-route badge, admin Map database card, add-place OSM pin map.

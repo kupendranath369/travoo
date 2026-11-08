@@ -15,7 +15,7 @@ export default function BookingsScreen() {
   const { colors } = useTheme();
   const { t, fmtDate } = useI18n();
   const router = useRouter();
-  const [tab, setTab] = useState<"passenger" | "driver">("passenger");
+  const [tab, setTab] = useState<"passenger" | "driver" | "hire">("passenger");
   const [rows, setRows] = useState<any[] | null>(null);
   const [err, setErr] = useState("");
   const [refreshing, setRefreshing] = useState(false);
@@ -23,7 +23,7 @@ export default function BookingsScreen() {
   const load = useCallback(async () => {
     setErr("");
     try {
-      setRows(await api(tab === "passenger" ? "/bookings/mine" : "/trips/mine"));
+      setRows(await api(tab === "passenger" ? "/bookings/mine" : tab === "hire" ? "/hire/bookings" : "/trips/mine"));
     } catch (e: any) {
       setErr(e.message);
     }
@@ -39,6 +39,7 @@ export default function BookingsScreen() {
         <View style={{ flexDirection: "row", gap: space.sm, paddingHorizontal: space.lg, height: 56, alignItems: "center" }}>
           <Chip testID="bookings-tab-passenger" icon="person-outline" label={t("bookings.as_passenger")} active={tab === "passenger"} onPress={() => { setRows(null); setTab("passenger"); }} />
           <Chip testID="bookings-tab-driver" icon="car-outline" label={t("bookings.as_driver")} active={tab === "driver"} onPress={() => { setRows(null); setTab("driver"); }} />
+          <Chip testID="bookings-tab-hire" icon="key-outline" label={t("v2.hire_bookings")} active={tab === "hire"} onPress={() => { setRows(null); setTab("hire"); }} />
         </View>
       </View>
       {err ? (
@@ -54,7 +55,16 @@ export default function BookingsScreen() {
           contentContainerStyle={{ padding: space.lg, gap: space.md, paddingBottom: (usesNativeTabs ? insets.bottom : 0) + space.xl }}
           ListEmptyComponent={<Empty icon="ticket-outline" title={tab === "passenger" ? t("bookings.empty") : t("bookings.rides_empty")} />}
           renderItem={({ item }) =>
-            tab === "passenger" ? (
+            tab === "hire" ? (
+              <Card testID={`hire-row-${item.booking_id}`} onPress={() => router.push(`/hire/${item.booking_id}`)} style={{ gap: space.sm }}>
+                <View style={{ flexDirection: "row", justifyContent: "space-between", gap: space.sm }}>
+                  <T weight="800" style={{ flex: 1 }} numberOfLines={1}>{item.route}</T>
+                  {status(item.status)}
+                </View>
+                <T size={13} color={colors.muted}>{t(`v2.svc.${item.service_type}`)} · {fmtDate(item.date)} · {item.time} · {item.hours}h</T>
+                <T weight="800" color={colors.brandPrimary}>{inr(item.service_fee)}</T>
+              </Card>
+            ) : tab === "passenger" ? (
               <Card testID={`booking-row-${item.booking_id}`} onPress={() => router.push(`/booking/${item.booking_id}`)} style={{ gap: space.sm }}>
                 <View style={{ flexDirection: "row", justifyContent: "space-between", gap: space.sm }}>
                   <T weight="800" style={{ flex: 1 }} numberOfLines={1}>{item.route}</T>

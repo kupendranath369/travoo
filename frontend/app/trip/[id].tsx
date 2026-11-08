@@ -5,7 +5,8 @@ import { Pressable, View } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { api } from "@/src/api";
+import { api, publicPhoto } from "@/src/api";
+import { OsmMap } from "@/src/components/OsmMap";
 import { fmtDur } from "@/src/components/RideCard";
 import { useToast } from "@/src/components/toast";
 import { Avatar, Badge, Btn, Card, Chip, ErrorBox, Field, Header, Loading, Rating, Stepper, T, space, statusTone } from "@/src/components/ui";
@@ -92,16 +93,24 @@ export default function TripScreen() {
             </View>
           ))}
           <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.sm }}>
-            <Badge icon="speedometer-outline" label={`${t("ride.distance")} ~${trip.distance_km} km`} tone="muted" />
+            <Badge icon="speedometer-outline" label={`${t("ride.distance")} ${trip.route_source === "osrm" ? "" : "~"}${trip.distance_km} km`} tone="muted" />
             <Badge icon="time-outline" label={`${t("ride.duration")} ${fmtDur(trip.duration_min)} (${t("ride.est")})`} tone="muted" />
             <Badge icon={trip.instant_booking ? "flash" : "hand-left-outline"} label={trip.instant_booking ? t("trip.instant") : t("trip.request")} tone="warning" />
           </View>
+          <OsmMap testID="trip-route-map" style={{ height: 200 }}
+            markers={[
+              { lat: trip.origin.lat, lng: trip.origin.lng, color: colors.brandPrimary, label: trip.origin.name },
+              ...trip.stops.map((x: any) => ({ lat: x.lat, lng: x.lng, color: colors.muted, label: x.name })),
+              { lat: trip.destination.lat, lng: trip.destination.lng, color: colors.brandTertiary, label: trip.destination.name },
+            ]}
+            lines={[{ coords: trip.route ?? [trip.origin, ...trip.stops, trip.destination].map((x: any) => [x.lat, x.lng]), color: colors.brandPrimary, dashed: !trip.route }]} />
+          {trip.route_via?.length ? <T size={12} color={colors.muted}>{t("geo.via")} {trip.route_via.join(", ")}</T> : null}
           <Btn testID="trip-open-map-button" small variant="outline" icon="map-outline" label={t("trip.map")} onPress={() => openRouteInMaps(trip)} />
         </Card>
 
         <Card style={{ gap: space.md }}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: space.md }}>
-            <Avatar name={trip.driver.name} uri={trip.driver.picture} size={52} />
+            <Avatar name={trip.driver.name} uri={trip.driver.has_photo ? publicPhoto(trip.driver_id) : trip.driver.picture} size={52} />
             <View style={{ flex: 1 }}>
               <T testID="trip-driver-name" weight="800" size={16}>{trip.driver.name}</T>
               <Rating value={trip.driver.rating_avg} count={trip.driver.rating_count} />
@@ -117,7 +126,20 @@ export default function TripScreen() {
             </View>
           </View>
           {trip.notes ? <T size={13} color={colors.muted}>{t("trip.notes")}: {trip.notes}</T> : null}
+          {trip.driver.bio ? <T testID="trip-driver-bio" size={13}><T weight="700" size={13}>{t("v2.about_me")}: </T>{trip.driver.bio}</T> : null}
+          <Btn small variant="ghost" icon="person-outline" label={t("v2.view_profile")} onPress={() => router.push(`/user/${trip.driver_id}`)} testID="trip-driver-profile-link" />
         </Card>
+
+        {trip.cost_breakdown ? (
+          <Card testID="trip-cost-breakdown" style={{ gap: 2 }}>
+            <T weight="800">{t("v2.breakdown")}</T>
+            <T size={13}>{t("v2.fuel_cost")}: {trip.cost_breakdown.distance_km} km ÷ {trip.cost_breakdown.mileage} × ₹{trip.cost_breakdown.fuel_price} = {inr(trip.cost_breakdown.fuel_cost)}</T>
+            <T size={13}>{t("v2.tolls")}: {inr(trip.cost_breakdown.tolls)}{trip.cost_breakdown.tolls_estimated ? ` (${t("ride.est")})` : ""} · {t("v2.maintenance")}: {inr(trip.cost_breakdown.maintenance_cost)}</T>
+            <T size={13} weight="700">{t("v2.total_cost")}: {inr(trip.cost_breakdown.total)} ÷ {trip.cost_breakdown.sharers} = {inr(trip.cost_breakdown.recommended)} ({t("v2.recommended")})</T>
+            <T size={13} weight="800" color={colors.brandPrimary}>{t("v2.your_price")}: {inr(trip.price)}</T>
+            <T size={11} color={colors.muted}>{t("v2.cost_note")}</T>
+          </Card>
+        ) : null}
 
         <Card style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
           <View>

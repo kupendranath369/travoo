@@ -8,6 +8,8 @@ export const setApiToken = (t: string | null) => {
 };
 export const getApiToken = () => token;
 export const API_BASE = BASE;
+/** Public verified-driver badge photo (only served for approved drivers). */
+export const publicPhoto = (uid: string) => `${BASE}/public/photo/${uid}`;
 /** Private file URL (owner/admin only). Token in query so it works for <img> on web too. */
 export const fileUrl = (fid: string) => `${BASE}/files/${fid}?token=${encodeURIComponent(token ?? "")}`;
 export const setUnauthorizedHandler = (fn: () => void) => {
@@ -43,6 +45,9 @@ export type Loc = {
   lng: number;
   aliases?: string[];
   source?: string;
+  sub_district?: string;
+  address?: string;
+  precision?: string;
 };
 
 export const locPayload = (l: Loc) => ({

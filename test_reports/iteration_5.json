@@ -1,0 +1,54 @@
+{
+  "summary": "Iteration 5 (India-wide map/location database). Backend: new tests/test_iter5_geo.py (31 core tests pass; 4 'known issue' tests fail by design) + regression (test_travoo_api, test_iter4_features, test_driver_documents, test_iter3_retests = 73 tests; 6 DriverFlow failures were an outdated test body (fuel_price/mileage now mandatory) -> fixed test, now pass; 1 real regression: alias search 'Bangalore'). Verified live: /geo/search for Bengaluru, Chandigarh, Mawlynnong (village, East Khasi Hills), Hampi, Bastar, MG Road Bengaluru, Dharavi, PIN 560034/793110 (india_post source, post offices) all inside India with sources+attribution; /geo/place osm_n3178190161 -> East Khasi Hills; pin_ post-office refine; /geo/pincode 560034 ok, 000000 -> 400; /geo/reverse exact keeps coords (pin_ loc_id), outside India -> 400; /geo/route BLR-Chennai osrm 326 km via NH75/NH48 toll 343, rural 72 km, 3-point route ok, invalid -> 400; /geo/nearby Photon fallback ok; /geo/status, admin sync (ok, ~27 s) + report, passenger 403; legacy /locations/search|osm|reverse, /route/estimate ok; trip publish stores route (GET /trips/{id}.route, route_via, toll_estimate, route_line hidden); along-route match Vellore->Chennai = along_route, reverse direction not matched, direct match works, demo trip search (Chennai->Puducherry) works. Frontend (390x844): location modal autocomplete (village + PIN + post office), selection sets field, attribution + 'Map data updated' footer, per-result map preview, Choose on map (India view) -> tap -> reverse-geocoded place -> Confirm sets field, OSM tiles load in iframe (20/20 200), Offer tab route map + 'Via NH75, NH48' + tolls auto-filled 343 + pickup nearby chips (tap fills pickup) + publish -> trip detail with trip-route-map, RideCard along-route badge 'Passes your pickup (5.8 km)', admin Map database card + sync button, /add-place pin-map. No page errors. No deprecated Expo packages found.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "GET /api/geo/search (and legacy /api/locations/search)", "issue": "Alias/old-name searches bury the curated city: 'Bangalore' -> Bengaluru at #10 (top hit is a 'Bangalore' shop/landmark in Kasaragod, Kerala), 'Bombay' -> Mumbai #9 (top two 'bombay' landmarks in Kerala), 'Mysore' -> Mysuru #8 (top: landmark in Andhra Pradesh), 'Calcutta' -> Kolkata #9, 'Madras' -> Chennai not top 3. Regression: tests/test_travoo_api.py::TestLocations::test_bengaluru_aliases[Bangalore] now fails. RCA: geo.py search().score() computes exact/prefix only on x['name'] (aliases ignored) and uses 'curated' only as the last tiebreaker, so any OSM POI whose name equals the query outranks the curated city. Fix: treat a match on aliases/search_terms as exact, and rank by (exact, curated/city-type, TYPE_RANK) so travoo/community places and city/town/village beat landmarks/shops.", "priority": "HIGH"},
+      {"endpoint": "POST /api/trips", "issue": "500 Internal Server Error when origin and destination resolve to the same/near-identical point (e.g. curated city vs exact map pin at same spot, or different loc_ids same coords). OSRM returns geometry with 2 identical vertices -> route_line LineString invalid -> Mongo 2dsphere index rejects insert (BulkWriteError 16755 'GeoJSON LineString must have at least 2 vertices'). RCA: server.py build_trip() stores route_line without de-duplicating consecutive coords / validating >=2 distinct vertices, and create_trip has no minimum distance check. Fix: drop consecutive duplicate coords, omit route_line if <2 distinct points, and reject trips < ~2 km with 400.", "priority": "HIGH"}
+    ],
+    "minor": [
+      {"endpoint": "GET /api/geo/nearby", "issue": "Photon fallback (Overpass blocked from pod) uses text queries 'railway station'/'bus stand'/'bus stop' so stations not named that way are missed: Chennai centre (13.0827,80.2707) returns only 3 bus stops 2.6-5.8 km away (one named just 'Bus stop'), no Chennai Central (~0.5 km) / Egmore / CMBT. Suggest Photon /reverse?lat&lon&osm_tag=railway:station&radius=..&limit=.. per tag, and drop unnamed generic 'Bus stop'."},
+      {"endpoint": "POST /api/admin/geo/sync", "issue": "Sync runs synchronously inside the HTTP request (~27 s observed with tiny dataset; Nominatim 1.1 s/call for up to 10 lookup batches + 25 curated verifies + 20 PIN refreshes could exceed ingress timeout ~60 s). Run in background (asyncio task) and return {status:'started'}, UI polls /geo/status."},
+      {"endpoint": "Provider overpass circuit breaker", "issue": "Breaker opens only 60 s; since Overpass is blocked from the pod, every minute one nearby request waits ~7 s on a dead mirror before Photon fallback. Consider longer open period (e.g. 30 min) for overpass."},
+      {"endpoint": "GET /api/geo/search", "issue": "Dedupe misses duplicates: 'Bastar' returns two identical 'Bastar' district rows; 'bombay' landmark twice. Many Photon rows have empty district until /geo/place enrichment."},
+      {"endpoint": "GET /api/trips/search (data)", "issue": "Demo seeded trips are mostly dated in the past (Nov 6-7) yet status 'scheduled'; BLR->Chennai demo trips no longer appear (only TEST trips from earlier iterations). Pre-existing, consider rolling demo dates forward on startup."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "Along-route booking", "issue": "RideCard/trip for an along_route match shows driver's origin time (08:00 Bengaluru) and full BLR->Chennai fare (₹803) for a Vellore->Chennai passenger; no estimated pass time at pickup or segment pricing. Product decision but confusing.", "affected_testIDs": ["ride-along-route-<trip_id>"]},
+      {"flow": "Offer route alternatives", "issue": "Could not verify route option chips (offer-route-{i}) - public OSRM returned only 1 route for BLR->Chennai and BLR->Mysuru; chips only render when >1 route. Not a bug, just unverified.", "affected_testIDs": ["offer-route-0", "offer-route-1"]}
+    ],
+    "design_issues": [
+      {"screen": "Trip detail", "issues": ["Duration badge always says '(Estimated)' and distance '~326 km' even when route_source is osrm (app/trip/[id].tsx:96-97)."]},
+      {"screen": "MapPicker", "issues": ["'Use my current loc...' button label truncated at 390px width (map-picker-current)."]},
+      {"screen": "Search results", "issues": ["Pluralisation: '1 rides found', '1 Passengers'."]},
+      {"screen": "Location search modal (web)", "issues": ["Black browser focus outline around TextInput (location-search-input) on web; add outlineStyle none."]}
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/test_iter5_geo.py", "/app/test_reports/pytest/iter5_geo.xml", "/app/test_reports/pytest/iter5_regression.xml"],
+  "action_items": [
+    "HIGH: Fix geo.py search() ranking so alias/old names (Bangalore, Bombay, Madras, Calcutta, Mysore) return the curated city first (match aliases as exact; prefer curated & city/town types over landmarks). Re-run tests/test_travoo_api.py::TestLocations and tests/test_iter5_geo.py::TestKnownIssues.",
+    "HIGH: Prevent 500 on POST /api/trips with degenerate route_line (dedupe consecutive coords, skip route_line if <2 distinct vertices, 400 for origin~=destination / < 2 km).",
+    "MEDIUM: Improve /geo/nearby Photon fallback to find stations by tag (Photon reverse with osm_tag + radius) - major stations like Chennai Central missing.",
+    "MEDIUM: Move admin geo sync to a background task to avoid request timeouts as data grows.",
+    "LOW: Trip detail '(Estimated)'/'~' labels for OSRM routes; truncated 'Use my current location' label; pluralisation; dedupe identical district rows; longer Overpass breaker; roll demo trip dates forward.",
+    "NOTE (production): tile.openstreetmap.org usage policy disallows heavy app traffic - plan a commercial/self-hosted tile source; also OSM default tiles depict international borders per OSM, not Survey of India - check compliance for an India-facing app."
+  ],
+  "critical_code_review_comments": [
+    "server.py build_trip(): route_line stored without geometry validation -> 2dsphere insert failure surfaces as uncaught 500.",
+    "geo.py search(): score ignores aliases; curated priority is last tiebreaker.",
+    "geo.py Provider: single global lock per provider serialises all Nominatim calls at 1.1 s -> concurrent PIN/place lookups queue linearly; fine for low traffic, also limits multiply if multiple uvicorn workers.",
+    "geo.py run_sync step 4 deletes duplicate locations docs (merge) - safe for trips (snapshots) but ensure nothing else references loc_id by FK.",
+    "geo.py online_search cache key uses 'if lat' truthiness (lat=0 edge, harmless in India). legacy /locations/search limit lacks ge=1.",
+    "server.py is 1745 lines (>700) - should be split into modules."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter5_geo.py (new)", "/app/backend/tests/test_travoo_api.py (_trip_body now sends fuel_price/mileage which are mandatory since iter4)"],
+  "success_rate": {"backend": "94% (core geo 31/31; regression 72/73 after test fix; 2 real bugs: alias ranking, degenerate-route 500)", "frontend": "95% (all requested flows worked; route-alternative chips unverifiable)"},
+  "seed_data_creation": "Created TEST trips via driver@travoo.in (2 by pytest, 1 via UI trip_9b4f232e1c91) - all cancelled with reason 'TEST cleanup'. Admin geo sync was run twice (status ok, 0 merged/0 changed). No seed/user data modified.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "pytest.ini runs xdist (-n 2 --dist loadscope); module-level dict S is not shared between workers so TestPlace::test_pin_post_office_place may skip under xdist - run with -n0 to get it. Trip cancel endpoint requires JSON body {reason}. Login flow on web: /auth may show language screen first (language-continue-button). Overpass is blocked from pod; Photon fallback. OSRM public demo usually returns 1 route (no alternatives). Demo trips mostly in the past; Chennai->Puducherry demo (trip_6b898c99b39f) still searchable. Leftover TEST trips/TEST_drv users from earlier iterations exist in DB.",
+  "rca_of_issue": "1) Alias ranking: score() in geo.py search() = (exact on name only, TYPE_RANK+dist, curated). OSM POIs named exactly 'Bangalore'/'bombay' get exact=0 while curated 'Bengaluru' (alias Bangalore) gets exact=2. Repro: GET /api/geo/search?q=Bangalore. 2) Trip 500: POST /api/trips with origin & destination same lat/lng -> OSRM geometry [[x,y],[x,y]] -> route_line LineString with 1 distinct vertex -> Mongo error 16755 on 2dsphere index route_line -> BulkWriteError -> 500 (see backend.err.log)."
+}

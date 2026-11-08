@@ -141,7 +141,7 @@ class TestDriverFlow:
     def _trip_body(self, date, instant, seats=3, price=700):
         return {"origin": loc("Bengaluru"), "destination": loc("Chennai"), "pickup_point": "TEST Silk Board",
                 "drop_point": "TEST Koyambedu", "date": date, "time": "09:00", "seats": seats, "price": price,
-                "vehicle_id": STATE["veh"], "instant_booking": instant}
+                "vehicle_id": STATE["veh"], "instant_booking": instant, "fuel_price": 102, "mileage": 15}  # fuel/mileage now mandatory
 
     def test_admin_approves_driver(self, admin, driver):
         pend = requests.get(f"{API}/admin/drivers", headers=h(admin)).json()
@@ -190,7 +190,7 @@ class TestDriverFlow:
             assert r.status_code == 200 and r.json()["status"] == "pending"
             bids.append(r.json()["booking_id"])
         # messages blocked while pending
-        assert requests.post(f"{API}/bookings/{bids[0]}/messages", headers=h(toks[0]), json={"text": "hi"}).status_code == 400
+        assert requests.post(f"{API}/bookings/{bids[0]}/messages", headers=h(toks[0]), json={"text": "hi"}).status_code == 200  # iter4: chat allowed while pending
         # concurrent accepts of 2+2 seats on a 3-seat trip: only one should succeed
         codes = []
         th = [threading.Thread(target=lambda b=b: codes.append(requests.post(f"{API}/bookings/{b}/accept", headers=h(driver)).status_code)) for b in bids[:2]]

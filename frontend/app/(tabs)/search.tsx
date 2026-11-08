@@ -1,11 +1,11 @@
 import Ionicons from "@react-native-vector-icons/ionicons";
-import { useLocalSearchParams } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
 import { FlatList, Pressable, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { api, Loc } from "@/src/api";
-import { DateChips } from "@/src/components/DateChips";
+import { api, Loc, locPayload } from "@/src/api";
+import { DateField } from "@/src/components/Calendar";
 import { LocationField } from "@/src/components/LocationField";
 import { RideCard } from "@/src/components/RideCard";
 import { Card, Chip, Empty, ErrorBox, Loading, Stepper, T, space } from "@/src/components/ui";
@@ -31,6 +31,8 @@ export default function SearchScreen() {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
   const [editing, setEditing] = useState(true);
+  const [marked, setMarked] = useState<Set<string>>(new Set());
+  const router = useRouter();
 
   useEffect(() => {
     if (p.from && p.to) {
@@ -50,7 +52,10 @@ export default function SearchScreen() {
       const q = new URLSearchParams({ from_lat: String(from.lat), from_lng: String(from.lng), to_lat: String(to.lat), to_lng: String(to.lng), seats: String(seats), sort, ac: String(ac) });
       if (date) q.set("date", date);
       if (maxPrice) q.set("max_price", String(maxPrice));
-      setRes(await api(`/trips/search?${q}`));
+      const r = await api(`/trips/search?${q}`);
+      setRes(r);
+      setMarked(new Set(r.available_dates.map((a: any) => a.date)));
+      api("/searches", { body: { kind: "intercity", origin: locPayload(from), destination: locPayload(to), date, seats } }).catch(() => {});
     } catch (e: any) {
       setErr(e.message);
     }
@@ -69,14 +74,18 @@ export default function SearchScreen() {
             <T size={22} weight="800" style={{ marginBottom: space.xs }}>{t("search.title")}</T>
             <LocationField testID="search-from-field" label={t("search.from")} value={from} onChange={setFrom} icon="radio-button-on" />
             <LocationField testID="search-to-field" label={t("search.to")} value={to} onChange={setTo} icon="location" />
-            <DateChips value={date} onChange={setDate} allowAny days={30} testID="search-date" />
+            <DateField testID="search-date" label={t("search.date")} value={date} onChange={setDate} allowClear marked={marked} />
             <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: space.sm }}>
               <T weight="600">{t("search.passengers")}</T>
               <Stepper testID="search-passengers" value={seats} onChange={setSeats} />
             </View>
-            <Pressable testID="search-submit-button" disabled={!from || !to} onPress={() => setEditing(false)} style={{ height: 50, borderRadius: 25, backgroundColor: colors.brandPrimary, alignItems: "center", justifyContent: "center", opacity: from && to ? 1 : 0.5, flexDirection: "row", gap: space.sm }}>
+            <Pressable testID="search-submit-button" disabled={!from || !to} onPress={() => { if (editing) setEditing(false); else run(); }} style={{ height: 50, borderRadius: 25, backgroundColor: colors.brandPrimary, alignItems: "center", justifyContent: "center", opacity: from && to ? 1 : 0.5, flexDirection: "row", gap: space.sm }}>
               <Ionicons name="search" size={18} color={colors.onBrandPrimary} />
               <T weight="700" color={colors.onBrandPrimary}>{t("btn.find")}</T>
+            </Pressable>
+            <Pressable testID="search-hire-link" onPress={() => router.push("/hire")} style={{ flexDirection: "row", gap: space.sm, alignItems: "center", justifyContent: "center", paddingTop: space.md }}>
+              <Ionicons name="key-outline" size={16} color={colors.brandTertiary} />
+              <T weight="700" color={colors.brandTertiary}>{t("v2.hire")} · {t("v2.hire_d")}</T>
             </Pressable>
           </View>
         ) : (

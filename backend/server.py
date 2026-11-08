@@ -23,6 +23,7 @@ from pymongo import ASCENDING, DESCENDING, GEOSPHERE, IndexModel, ReturnDocument
 from pymongo.errors import DuplicateKeyError
 from starlette.middleware.cors import CORSMiddleware
 
+from geo import GEO_INDEXES, LOC_OUT, circle, get_router, haversine, loc_doc
 from seed_data import PLACES, POPULAR_ROUTES, STATES
 
 ROOT_DIR = Path(__file__).parent
@@ -33,8 +34,6 @@ db = client[os.environ["DB_NAME"]]
 JWT_SECRET = os.environ["JWT_SECRET"]
 IST = timezone(timedelta(hours=5, minutes=30))
 EMERGENT_SESSION_URL = "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data"
-NOMINATIM = "https://nominatim.openstreetmap.org"
-OSM_HEADERS = {"User-Agent": "Travoo-Carpool/1.0 (support@travoo.in)"}
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger("travoo")
@@ -53,6 +52,7 @@ INDEXES: dict[str, list[IndexModel]] = {
                  IndexModel([("owner_id", ASCENDING)], name="owner")],
     "trips": [IndexModel([("trip_id", ASCENDING)], name="tid", unique=True),
               IndexModel([("origin.geo", GEOSPHERE)], name="origin_geo"),
+              IndexModel([("route_line", GEOSPHERE)], name="route_line"),
               IndexModel([("status", ASCENDING), ("date", ASCENDING)], name="status_date"),
               IndexModel([("driver_id", ASCENDING)], name="driver")],
     "bookings": [IndexModel([("booking_id", ASCENDING)], name="bid", unique=True),
@@ -68,9 +68,19 @@ INDEXES: dict[str, list[IndexModel]] = {
     "notifications": [IndexModel([("user_id", ASCENDING), ("created_at", DESCENDING)], name="user_time")],
     "tickets": [IndexModel([("ticket_id", ASCENDING)], name="tkid", unique=True), IndexModel([("user_id", ASCENDING)], name="user")],
     "files": [IndexModel([("file_id", ASCENDING)], name="fid", unique=True), IndexModel([("owner_id", ASCENDING)], name="owner")],
+    "pro_drivers": [IndexModel([("user_id", ASCENDING)], name="uid", unique=True), IndexModel([("city.geo", GEOSPHERE)], name="city_geo"),
+                    IndexModel([("status", ASCENDING)], name="status")],
+    "hires": [IndexModel([("booking_id", ASCENDING)], name="bid", unique=True), IndexModel([("driver_id", ASCENDING), ("date", ASCENDING)], name="driver_date"),
+              IndexModel([("passenger_id", ASCENDING)], name="customer")],
+    "searches": [IndexModel([("user_id", ASCENDING), ("key", ASCENDING)], name="uniq", unique=True)],
+    "missing_locations": [IndexModel([("request_id", ASCENDING)], name="rid", unique=True)],
+    "contact_access": [IndexModel([("viewer_id", ASCENDING), ("owner_id", ASCENDING), ("booking_id", ASCENDING)], name="uniq", unique=True)],
+    "fuel_prices": [IndexModel([("state", ASCENDING), ("fuel_type", ASCENDING)], name="uniq", unique=True)],
     "popular_routes": [IndexModel([("route_id", ASCENDING)], name="rid", unique=True)],
     "audit_logs": [IndexModel([("created_at", DESCENDING)], name="time")],
 }
+for _c, _m in GEO_INDEXES.items():
+    INDEXES[_c] = INDEXES.get(_c, []) + _m
 
 
 async def ensure_indexes() -> None:
@@ -118,16 +128,6 @@ def make_token(user_id: str) -> str:
     return jwt.encode({"sub": user_id, "exp": now() + timedelta(days=7), "iat": now()}, JWT_SECRET, algorithm="HS256")
 
 
-def haversine(a: dict, b: dict) -> float:
-    lat1, lon1, lat2, lon2 = map(math.radians, [a["lat"], a["lng"], b["lat"], b["lng"]])
-    h = math.sin((lat2 - lat1) / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin((lon2 - lon1) / 2) ** 2
-    return 6371 * 2 * math.asin(math.sqrt(h))
-
-
-def norm(s: str) -> str:
-    return re.sub(r"\s+", " ", s.strip().lower())
-
-
 def route_label(trip: dict) -> str:
     return f"{trip['origin']['name']} → {trip['destination']['name']}"
 
@@ -148,6 +148,8 @@ async def audit(actor: str, action: str, target: str, extra: Optional[dict] = No
 async def notify(user_id: str, ntype: str, params: dict, ref: Optional[str] = None):
     await db.notifications.insert_one({"notif_id": nid("ntf"), "user_id": user_id, "type": ntype, "params": params,
                                        "ref": ref, "read": False, "created_at": now()})
+    if ref and ntype in SYS_EVENTS:
+        await sys_message(ref, ntype, params)
 
 
 async def ledger(driver_id: str, booking: dict, etype: str, amount: int, method: Optional[str] = None):
@@ -291,7 +293,7 @@ class ProfileIn(BaseModel):
     phone: Optional[str] = Field(default=None, max_length=15)
     upi_id: Optional[str] = Field(default=None, max_length=60)
     language: Optional[str] = Field(default=None, max_length=8)
-    bio: Optional[str] = Field(default=None, max_length=300)
+    bio: Optional[str] = Field(default=None, max_length=500)
 
 
 @api.put("/me")
@@ -311,81 +313,7 @@ async def user_profile(uid: str, _: dict = Depends(get_user)):
     return {"user": u, "reviews": reviews}
 
 
-# ---------------------------------------------------------------- locations
-def loc_doc(name, ltype, district, state, pin, lat, lng, aliases, source="travoo", loc_id=None):
-    terms = sorted({norm(x) for x in [name, *aliases, district or "", state or ""] if x})
-    return {"loc_id": loc_id or f"in_{re.sub(r'[^a-z0-9]+', '_', norm(name))}_{re.sub(r'[^a-z0-9]+', '_', norm(state or ''))}",
-            "name": name, "type": ltype, "district": district, "state": state, "pin": pin, "lat": lat, "lng": lng,
-            "aliases": aliases, "search_terms": terms, "geo": {"type": "Point", "coordinates": [lng, lat]}, "source": source}
-
-
-LOC_OUT = {"_id": 0, "search_terms": 0, "geo": 0}
-
-
-@api.get("/locations/search")
-async def search_locations(q: str = Query(min_length=1, max_length=80), limit: int = Query(12, le=30)):
-    qn = norm(q)
-    if qn.isdigit():
-        filt = {"pin": {"$regex": f"^{re.escape(qn)}"}}
-    else:
-        filt = {"search_terms": {"$regex": f"(^|\\s){re.escape(qn)}"}}
-    rows = await db.locations.find(filt, LOC_OUT).limit(60).to_list(60)
-    type_rank = {"city": 0, "town": 1, "airport": 2, "railway_station": 2, "bus_terminal": 2}
-
-    def score(r):
-        exact = 0 if norm(r["name"]).startswith(qn) else 1
-        return (exact, type_rank.get(r["type"], 3), r["name"])
-    rows.sort(key=score)
-    return rows[:limit]
-
-
-def osm_to_loc(item: dict) -> dict:
-    a = item.get("address", {})
-    name = item.get("name") or item.get("display_name", "").split(",")[0]
-    district = a.get("state_district") or a.get("county") or a.get("city_district") or a.get("city") or ""
-    otype = item.get("addresstype") or item.get("type") or "place"
-    mapping = {"village": "village", "hamlet": "village", "town": "town", "city": "city", "suburb": "locality",
-               "neighbourhood": "locality", "aerodrome": "airport", "station": "railway_station", "bus_station": "bus_terminal"}
-    ltype = mapping.get(otype, mapping.get(item.get("type", ""), "landmark" if item.get("class") in ("amenity", "tourism", "historic") else "place"))
-    return loc_doc(name, ltype, district.replace(" District", ""), a.get("state", ""), a.get("postcode"),
-                   float(item["lat"]), float(item["lon"]), [], source="openstreetmap",
-                   loc_id=f"osm_{item.get('osm_type', 'x')[:1]}{item.get('osm_id')}")
-
-
-@api.get("/locations/osm")
-async def osm_search(q: str = Query(min_length=2, max_length=120)):
-    """Searches OpenStreetMap (Nominatim, © OpenStreetMap contributors, ODbL) for villages/landmarks; caches results."""
-    try:
-        async with httpx.AsyncClient(timeout=10, headers=OSM_HEADERS) as hc:
-            r = await hc.get(f"{NOMINATIM}/search", params={"q": q, "countrycodes": "in", "format": "jsonv2",
-                                                              "addressdetails": 1, "limit": 8, "accept-language": "en"})
-        items = r.json() if r.status_code == 200 else []
-    except Exception as exc:
-        logger.warning("osm search failed: %s", exc)
-        raise HTTPException(503, "Map search is unavailable right now. Try the built-in list.")
-    out = []
-    for it in items:
-        d = osm_to_loc(it)
-        await db.locations.update_one({"loc_id": d["loc_id"]}, {"$setOnInsert": d}, upsert=True)
-        out.append({k: v for k, v in d.items() if k not in ("search_terms", "geo")})
-    return out
-
-
-@api.get("/locations/reverse")
-async def osm_reverse(lat: float, lng: float):
-    try:
-        async with httpx.AsyncClient(timeout=10, headers=OSM_HEADERS) as hc:
-            r = await hc.get(f"{NOMINATIM}/reverse", params={"lat": lat, "lon": lng, "format": "jsonv2", "addressdetails": 1, "zoom": 14, "accept-language": "en"})
-        item = r.json()
-    except Exception:
-        raise HTTPException(503, "Map service unavailable")
-    if "lat" not in item:
-        raise HTTPException(404, "No place found here")
-    d = osm_to_loc(item)
-    await db.locations.update_one({"loc_id": d["loc_id"]}, {"$setOnInsert": d}, upsert=True)
-    return {k: v for k, v in d.items() if k not in ("search_terms", "geo")}
-
-
+# ---------------------------------------------------------------- locations (search/geocoding/routing live in geo.py)
 @api.get("/geo/states")
 async def states():
     return await db.locations.find({"type": {"$in": ["state", "union_territory"]}}, LOC_OUT).sort("name", 1).to_list(50)
@@ -569,6 +497,8 @@ class VehicleIn(BaseModel):
     seats: int = Field(ge=1, le=8)
     ac: bool = True
     luggage: Literal["small", "medium", "large"] = "medium"
+    fuel_type: Literal["petrol", "diesel", "cng", "electric"] = "petrol"
+    mileage: Optional[float] = Field(default=None, gt=0, le=60)  # km/l, km/kg (CNG) or km/kWh (EV)
 
 
 @api.post("/vehicles")
@@ -602,6 +532,35 @@ class TripIn(BaseModel):
     vehicle_id: str
     instant_booking: bool = True
     notes: str = Field(default="", max_length=500)
+    fuel_price: Optional[float] = Field(default=None, gt=0, le=500)
+    mileage: Optional[float] = Field(default=None, gt=0, le=60)
+    tolls: float = Field(default=0, ge=0, le=20000)
+    tolls_estimated: bool = True
+    maintenance_per_km: Optional[float] = Field(default=None, ge=0, le=20)
+    share_mode: Literal["equal", "passenger"] = "equal"
+    return_date: Optional[str] = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
+    return_time: Optional[str] = Field(default=None, pattern=r"^\d{2}:\d{2}$")
+    route_choice: int = Field(default=0, ge=0, le=2)
+
+
+async def road_route(pts: list, choice: int = 0) -> Optional[dict]:
+    """Road route (OSRM on OpenStreetMap data, with mirror fallback). None if no routing provider answered."""
+    res = await geo_router.route_options(pts, alternatives=True)
+    if not res["source"].startswith("osrm"):
+        return None
+    return res["routes"][min(choice, len(res["routes"]) - 1)]
+
+
+def cost_breakdown(km: float, mileage: float, fuel_price: float, tolls: float, maint: float, seats: int, mode: str, fuel_type: str) -> dict:
+    fuel_units = km / mileage
+    fuel_cost = fuel_units * fuel_price
+    maint_cost = km * maint
+    total = fuel_cost + tolls + maint_cost
+    sharers = seats + 1 if mode == "equal" else seats
+    return {"distance_km": km, "fuel_type": fuel_type, "mileage": mileage, "fuel_price": fuel_price,
+            "fuel_units": round(fuel_units, 2), "fuel_cost": round(fuel_cost), "tolls": round(tolls),
+            "maintenance_per_km": maint, "maintenance_cost": round(maint_cost), "total": round(total),
+            "share_mode": mode, "sharers": sharers, "recommended": max(50, round(total / sharers))}
 
 
 class TripUpdate(BaseModel):
@@ -626,18 +585,34 @@ def trip_metrics(origin: dict, dest: dict, stops: list, date: str, time: str):
 async def build_trip(body: TripIn, driver: dict, vehicle: dict, is_demo=False) -> dict:
     o, d = loc_snapshot(body.origin), loc_snapshot(body.destination)
     stops = [loc_snapshot(s) for s in body.stops]
+    if haversine(o, d) < 2:
+        raise HTTPException(400, "Origin and destination are too close — TRAVOO is for intercity trips")
     km, mins, dep, arr = trip_metrics(o, d, stops, body.date, body.time)
+    route_source, extra = "estimate", {}
+    if not is_demo:
+        road = await road_route([o, *stops, d], body.route_choice if not stops else 0)
+        if road:
+            km, mins, route_source = road["distance_km"], road["duration_min"] + 10 * len(stops), "osrm"
+            arr = dep + timedelta(minutes=mins)
+            geom = road["geometry"]
+            line = []
+            for p in [*geom[:: max(1, len(geom) // 200)], geom[-1]]:
+                if not line or line[-1] != [p[1], p[0]]:
+                    line.append([p[1], p[0]])
+            extra = {"route_via": road["via"], "toll_km": road["toll_km"], "toll_estimate": road["toll_estimate"]}
+            if len(line) >= 2:
+                extra["route_line"] = {"type": "LineString", "coordinates": line}
     return {"trip_id": nid("trip"), "driver_id": driver["user_id"], "origin": o, "destination": d, "stops": stops,
             "pickup_point": body.pickup_point, "drop_point": body.drop_point, "date": body.date, "time": body.time,
             "departure_at": dep.astimezone(timezone.utc), "arrival_time": arr.strftime("%H:%M"),
-            "arrival_date": arr.strftime("%Y-%m-%d"), "distance_km": km, "duration_min": mins,
+            "arrival_date": arr.strftime("%Y-%m-%d"), "distance_km": km, "duration_min": mins, "route_source": route_source,
             "seats_total": body.seats, "seats_available": body.seats, "price": body.price,
-            "vehicle": {k: vehicle.get(k) for k in ("vehicle_id", "make", "model", "vtype", "color", "ac", "luggage", "verified")},
+            "vehicle": {k: vehicle.get(k) for k in ("vehicle_id", "make", "model", "vtype", "color", "ac", "luggage", "verified", "fuel_type")},
             "instant_booking": body.instant_booking, "notes": body.notes, "status": "scheduled",
-            "is_demo": is_demo, "created_at": now()}
+            "is_demo": is_demo, "created_at": now(), **extra}
 
 
-TRIP_OUT = {"_id": 0, "origin.geo": 0, "destination.geo": 0, "stops.geo": 0}
+TRIP_OUT = {"_id": 0, "origin.geo": 0, "destination.geo": 0, "stops.geo": 0, "route_line": 0}
 
 
 @api.post("/trips")
@@ -654,7 +629,30 @@ async def create_trip(body: TripIn, user: dict = Depends(get_user)):
     trip = await build_trip(body, user, vehicle)
     if trip["departure_at"] < now():
         raise HTTPException(400, "Departure must be in the future")
-    await db.trips.insert_one(trip)
+    settings = await get_settings()
+    mileage = body.mileage or vehicle.get("mileage")
+    if not (body.fuel_price and mileage):
+        raise HTTPException(400, "Enter vehicle mileage and fuel price so the cost-sharing contribution can be calculated")
+    if body.fuel_price and mileage:
+        maint = body.maintenance_per_km if body.maintenance_per_km is not None else settings.get("maintenance_per_km", 2)
+        cb = cost_breakdown(trip["distance_km"], mileage, body.fuel_price, body.tolls, maint, body.seats, body.share_mode, vehicle.get("fuel_type", "petrol"))
+        cb["tolls_estimated"] = body.tolls_estimated
+        cap = round(cb["recommended"] * settings.get("max_price_factor", 1.5))
+        if body.price > cap:
+            raise HTTPException(400, f"Price exceeds the cost-sharing limit of ₹{cap} per seat for this trip")
+        trip["cost_breakdown"] = cb
+    trips = [trip]
+    if body.return_date and body.return_time:
+        rb = body.model_copy(update={"origin": body.destination, "destination": body.origin, "stops": list(reversed(body.stops)),
+                                     "pickup_point": body.drop_point, "drop_point": body.pickup_point, "date": body.return_date, "time": body.return_time})
+        rt = await build_trip(rb, user, vehicle)
+        if rt["departure_at"] <= trip["departure_at"]:
+            raise HTTPException(400, "Return must be after the outbound departure")
+        if trip.get("cost_breakdown"):
+            rt["cost_breakdown"] = trip["cost_breakdown"]
+        rt["return_of"] = trip["trip_id"]
+        trips.append(rt)
+    await db.trips.insert_many(trips)
     await audit(user["user_id"], "trip.create", trip["trip_id"])
     return await db.trips.find_one({"trip_id": trip["trip_id"]}, TRIP_OUT)
 
@@ -674,12 +672,17 @@ async def update_trip(tid: str, body: TripUpdate, user: dict = Depends(get_user)
     if "price" in upd and await db.bookings.count_documents({"trip_id": tid, "status": {"$in": ["pending", "confirmed"]}}):
         raise HTTPException(400, "Price cannot change after bookings are made")
     await db.trips.update_one({"trip_id": tid}, {"$set": upd})
+    async for b in db.bookings.find({"trip_id": tid, "status": {"$in": ["pending", "confirmed"]}}, {"_id": 0}):
+        await notify(b["passenger_id"], "trip_updated", {"route": b["route"]}, b["booking_id"])
     return await db.trips.find_one({"trip_id": tid}, TRIP_OUT)
 
 
 async def enrich_trips(trips: list) -> list:
     ids = list({t["driver_id"] for t in trips})
     drivers = {u["user_id"]: u for u in await db.users.find({"user_id": {"$in": ids}}, PUBLIC_FIELDS).to_list(len(ids) or 1)}
+    with_photo = set(await db.driver_documents.distinct("user_id", {"user_id": {"$in": ids}, "photos.profile": {"$exists": True}}))
+    for d in drivers.values():
+        d["has_photo"] = d["user_id"] in with_photo and d.get("driver_status") == "approved"
     for t in trips:
         t["driver"] = drivers.get(t["driver_id"], {"name": "Driver"})
     return trips
@@ -690,21 +693,47 @@ async def search_trips(from_lat: float, from_lng: float, to_lat: float, to_lng: 
                        date: Optional[str] = None, seats: int = Query(1, ge=1, le=8),
                        sort: Literal["early", "price", "rating"] = "early", ac: bool = False,
                        max_price: Optional[int] = None, vtype: Optional[str] = None, radius_km: int = Query(35, le=100)):
+    along_km = min(radius_km, 12)
     base = {"status": "scheduled", "seats_available": {"$gte": seats}, "departure_at": {"$gt": now()},
-            "origin.geo": {"$geoWithin": {"$centerSphere": [[from_lng, from_lat], radius_km / 6378.1]}}}
+            "$or": [{"origin.geo": {"$geoWithin": {"$centerSphere": [[from_lng, from_lat], radius_km / 6378.1]}}},
+                    {"route_line": {"$geoIntersects": {"$geometry": circle(from_lat, from_lng, along_km)}}}]}
     if ac:
         base["vehicle.ac"] = True
     if max_price:
         base["price"] = {"$lte": max_price}
     if vtype:
         base["vehicle.vtype"] = vtype
-    to = {"lat": to_lat, "lng": to_lng}
+    to, frm = {"lat": to_lat, "lng": to_lng}, {"lat": from_lat, "lng": from_lng}
+    out_proj = {k: v for k, v in TRIP_OUT.items() if k != "route_line"}
 
-    def dest_ok(t):
-        return haversine(t["destination"], to) <= radius_km or any(haversine(s, to) <= radius_km for s in t.get("stops", []))
+    def nearest(pts: list, p: dict) -> tuple[int, float]:
+        return min(((i, haversine({"lat": c[1], "lng": c[0]}, p)) for i, c in enumerate(pts)), key=lambda x: x[1])
+
+    def match(t) -> Optional[dict]:
+        """Direct match (origin & destination/stop nearby) or along-route match (driver passes pickup, then drop)."""
+        from_near = haversine(t["origin"], frm) <= radius_km
+        if from_near and (haversine(t["destination"], to) <= radius_km or any(haversine(s, to) <= radius_km for s in t.get("stops", []))):
+            return {"type": "direct"}
+        pts = (t.get("route_line") or {}).get("coordinates") or []
+        if len(pts) < 2:
+            return None
+        (ia, da), (ib, db_) = (0, 0.0) if from_near else nearest(pts, frm), nearest(pts, to)
+        if ib > ia and da <= along_km and db_ <= along_km:
+            hh, mm = map(int, t["time"].split(":"))
+            eta = hh * 60 + mm + round((t.get("duration_min") or 0) * ia / (len(pts) - 1))
+            return {"type": "along_route", "pickup_km": round(da, 1), "drop_km": round(db_, 1),
+                    "pickup_eta": f"{eta // 60 % 24:02d}:{eta % 60:02d}"}
+        return None
+
+    def keep(t) -> bool:
+        m = match(t)
+        t.pop("route_line", None)
+        if m:
+            t["match"] = m
+        return bool(m)
 
     q = {**base, **({"date": date} if date else {})}
-    rows = [t for t in await db.trips.find(q, TRIP_OUT).limit(300).to_list(300) if dest_ok(t)]
+    rows = [t for t in await db.trips.find(q, out_proj).limit(300).to_list(300) if keep(t)]
     rows = await enrich_trips(rows)
     if sort == "price":
         rows.sort(key=lambda t: (t["price"], t["departure_at"]))
@@ -713,13 +742,14 @@ async def search_trips(from_lat: float, from_lng: float, to_lat: float, to_lng: 
     else:
         rows.sort(key=lambda t: t["departure_at"])
     alt = []
+    others = [t for t in await db.trips.find(base, {"date": 1, "time": 1, "duration_min": 1, "origin": 1, "destination": 1, "stops": 1, "route_line": 1, "_id": 0}).limit(500).to_list(500) if keep(t)]
+    counts: dict = {}
+    for t in others:
+        counts[t["date"]] = counts.get(t["date"], 0) + 1
+    available = [{"date": k, "count": v} for k, v in sorted(counts.items())]
     if not rows and date:
-        others = [t for t in await db.trips.find(base, {"date": 1, "destination": 1, "stops": 1, "_id": 0}).limit(300).to_list(300) if dest_ok(t)]
-        counts: dict = {}
-        for t in others:
-            counts[t["date"]] = counts.get(t["date"], 0) + 1
-        alt = [{"date": k, "count": v} for k, v in sorted(counts.items())[:7]]
-    return {"trips": rows, "alternative_dates": alt}
+        alt = available[:7]
+    return {"trips": rows, "alternative_dates": alt, "available_dates": available}
 
 
 @api.get("/trips/mine")
@@ -735,7 +765,10 @@ async def get_trip(tid: str, user: dict = Depends(get_user)):
     trip = await db.trips.find_one({"trip_id": tid}, TRIP_OUT)
     if not trip:
         raise HTTPException(404, "Trip not found")
+    line = await db.trips.find_one({"trip_id": tid}, {"_id": 0, "route_line": 1})
+    trip["route"] = [[c[1], c[0]] for c in line["route_line"]["coordinates"]] if line.get("route_line") else None
     trip["driver"] = await public_user(trip["driver_id"])
+    trip["driver"]["has_photo"] = trip["driver"].get("driver_status") == "approved" and await has_badge_photo(trip["driver_id"])
     trip["is_driver"] = trip["driver_id"] == user["user_id"]
     if trip["is_driver"] or user.get("role") == "admin":
         bookings = await db.bookings.find({"trip_id": tid}, {"_id": 0}).sort("created_at", 1).to_list(100)
@@ -883,7 +916,7 @@ async def my_bookings(user: dict = Depends(get_user)):
 
 
 async def booking_for(bid: str, user: dict) -> dict:
-    b = await db.bookings.find_one({"booking_id": bid}, {"_id": 0})
+    b = await db.bookings.find_one({"booking_id": bid}, {"_id": 0}) or await db.hires.find_one({"booking_id": bid}, {"_id": 0})
     if not b or (user["user_id"] not in (b["passenger_id"], b["driver_id"]) and user.get("role") != "admin"):
         raise HTTPException(404, "Booking not found")
     return b
@@ -898,10 +931,14 @@ async def get_booking(bid: str, user: dict = Depends(get_user)):
                                                               "rating_count": 1, "driver_status": 1, "phone": 1, "upi_id": 1})
     if not active:
         d.pop("phone", None)
+    elif user["user_id"] == b["passenger_id"]:
+        await log_contact(user["user_id"], b["driver_id"], bid)
     b["driver"] = d
     p = await db.users.find_one({"user_id": b["passenger_id"]}, {"_id": 0, "user_id": 1, "name": 1, "picture": 1, "rating_avg": 1, "phone": 1})
     if not active:
         p.pop("phone", None)
+    elif user["user_id"] == b["driver_id"]:
+        await log_contact(user["user_id"], b["passenger_id"], bid)
     b["passenger"] = p
     b["is_driver"] = user["user_id"] == b["driver_id"]
     b["my_reviews"] = await db.reviews.find({"booking_id": bid, "reviewer_id": user["user_id"]}, {"_id": 0}).to_list(5)
@@ -1046,16 +1083,23 @@ class MessageIn(BaseModel):
 @api.get("/bookings/{bid}/messages")
 async def get_messages(bid: str, user: dict = Depends(get_user)):
     await booking_for(bid, user)
-    return await db.messages.find({"booking_id": bid}, {"_id": 0}).sort("created_at", 1).to_list(500)
+    await db.messages.update_many({"booking_id": bid, "sender_id": {"$ne": user["user_id"]}, "read_by": {"$ne": user["user_id"]}},
+                                  {"$addToSet": {"read_by": user["user_id"]}})
+    rows = await db.messages.find({"booking_id": bid}, {"_id": 0}).sort("created_at", 1).to_list(500)
+    for m in rows:
+        m["status"] = "read" if any(r != m["sender_id"] for r in m.get("read_by", [])) else "delivered"
+    return rows
 
 
 @api.post("/bookings/{bid}/messages")
 async def post_message(bid: str, body: MessageIn, user: dict = Depends(get_user)):
     b = await booking_for(bid, user)
-    if b["status"] not in ("confirmed", "started", "completed"):
-        raise HTTPException(400, "Chat opens after the booking is confirmed")
+    if not body.text.strip():
+        raise HTTPException(400, "Message cannot be empty")
+    if b["status"] not in ("pending", "confirmed", "started", "completed"):
+        raise HTTPException(400, "Chat is closed for this booking")
     msg = {"message_id": nid("msg"), "booking_id": bid, "sender_id": user["user_id"], "sender_name": user["name"],
-           "text": body.text.strip(), "created_at": now()}
+           "sender_picture": user.get("picture"), "text": body.text.strip(), "read_by": [], "created_at": now()}
     await db.messages.insert_one(msg)
     other = b["passenger_id"] if user["user_id"] == b["driver_id"] else b["driver_id"]
     await notify(other, "new_message", {"route": b["route"]}, bid)
@@ -1251,6 +1295,8 @@ class SettingsIn(BaseModel):
     instant_driver_approval: Optional[bool] = None
     passenger_cancel_hours: Optional[int] = Field(default=None, ge=0, le=72)
     driver_cancel_hours: Optional[int] = Field(default=None, ge=0, le=72)
+    maintenance_per_km: Optional[float] = Field(default=None, ge=0, le=20)
+    max_price_factor: Optional[float] = Field(default=None, ge=1, le=3)
 
 
 @api.get("/admin/settings")
@@ -1323,7 +1369,371 @@ async def seed():
             await db.trips.insert_one(await build_trip(body, drv, veh, is_demo=True))
 
 
+# ---------------------------------------------------------------- v2: contacts, chat, profiles, searches, places, fuel, hire-a-driver
+async def log_contact(viewer: str, owner: str, bid: str):
+    await db.contact_access.update_one({"viewer_id": viewer, "owner_id": owner, "booking_id": bid},
+                                       {"$setOnInsert": {"first_at": now()}, "$set": {"last_at": now()}}, upsert=True)
+
+
+SYS_EVENTS = {"booking_confirmed", "booking_rejected", "booking_cancelled", "trip_cancelled", "trip_started", "trip_completed",
+              "booking_request", "new_booking", "hire_request", "hire_confirmed", "hire_rejected", "hire_cancelled", "hire_completed", "trip_updated"}
+
+
+async def sys_message(bid: str, ntype: str, params: dict):
+    await db.messages.update_one({"booking_id": bid, "sys_type": ntype},
+                                 {"$setOnInsert": {"message_id": nid("msg"), "booking_id": bid, "sender_id": "system", "sender_name": "Travoo",
+                                                   "sys_type": ntype, "params": params, "text": "", "read_by": [], "created_at": now()}}, upsert=True)
+
+
+def mask_phone(p: Optional[str]) -> str:
+    return f"{p[:2]}••••••{p[-2:]}" if p and len(p) >= 6 else ""
+
+
+@api.get("/public/photo/{uid}")
+async def public_driver_photo(uid: str):
+    """Verified badge photo: only the profile photo of an APPROVED driver is public. Documents stay private."""
+    u = await db.users.find_one({"user_id": uid}, {"_id": 0, "driver_status": 1})
+    pro = await db.pro_drivers.find_one({"user_id": uid, "status": "approved"}, {"_id": 1})
+    doc = await db.driver_documents.find_one({"user_id": uid}, {"_id": 0, "photos.profile": 1})
+    fid = ((doc or {}).get("photos") or {}).get("profile")
+    if not fid or not (pro or (u and u.get("driver_status") == "approved")):
+        raise HTTPException(404, "No verified photo")
+    f = await db.files.find_one({"file_id": fid, "deleted": {"$ne": True}}, {"_id": 0})
+    if not f:
+        raise HTTPException(404, "No verified photo")
+    data, ctype = await run_in_threadpool(get_object, f["path"])
+    return Response(content=data, media_type=f.get("content_type") or ctype,
+                    headers={"Cache-Control": "public, max-age=86400", "X-Content-Type-Options": "nosniff"})
+
+
+async def has_badge_photo(uid: str) -> bool:
+    return bool(await db.driver_documents.find_one({"user_id": uid, "photos.profile": {"$exists": True}}, {"_id": 1}))
+
+
+@api.get("/users/{uid}/profile")
+async def full_public_profile(uid: str, _: dict = Depends(get_user)):
+    u = await public_user(uid)
+    pro = await db.pro_drivers.find_one({"user_id": uid}, {"_id": 0, "licence_no": 0, "licence_expiry": 0, "phone": 0, "email": 0})
+    verified = u.get("driver_status") == "approved" or (pro or {}).get("status") == "approved"
+    u["has_photo"] = verified and await has_badge_photo(uid)
+    vehicles = await db.vehicles.find({"owner_id": uid, "deleted": {"$ne": True}}, {"_id": 0, "make": 1, "model": 1, "vtype": 1, "ac": 1, "verified": 1}).to_list(10)
+    completed = await db.trips.count_documents({"driver_id": uid, "status": "completed"}) + await db.hires.count_documents({"driver_id": uid, "status": "completed"})
+    reviews = await db.reviews.find({"target_id": uid, "hidden": {"$ne": True}}, {"_id": 0}).sort("created_at", -1).to_list(20)
+    return {"user": u, "pro": pro if (pro or {}).get("status") == "approved" else None, "vehicles": vehicles,
+            "completed_journeys": completed, "reviews": reviews, "verified": verified}
+
+
+@api.get("/conversations")
+async def conversations(user: dict = Depends(get_user)):
+    uid = user["user_id"]
+    q = {"$or": [{"passenger_id": uid}, {"driver_id": uid}], "status": {"$in": ["pending", "confirmed", "started", "completed"]}}
+    rows = [{**b, "kind": "carpool"} for b in await db.bookings.find(q, {"_id": 0}).to_list(300)]
+    rows += [{**h, "kind": "hire"} for h in await db.hires.find(q, {"_id": 0}).to_list(300)]
+    out = []
+    for b in rows:
+        last = await db.messages.find_one({"booking_id": b["booking_id"]}, {"_id": 0}, sort=[("created_at", -1)])
+        if not last and b["status"] == "completed":
+            continue
+        other_id = b["driver_id"] if uid == b["passenger_id"] else b["passenger_id"]
+        other = await db.users.find_one({"user_id": other_id}, {"_id": 0, "user_id": 1, "name": 1, "picture": 1})
+        unread = await db.messages.count_documents({"booking_id": b["booking_id"], "sender_id": {"$ne": uid}, "read_by": {"$ne": uid}})
+        out.append({"booking_id": b["booking_id"], "kind": b["kind"], "route": b.get("route"), "date": b.get("date"), "status": b["status"],
+                    "other": other, "last": last, "unread": unread, "sort": (last or {}).get("created_at") or b["created_at"]})
+    out.sort(key=lambda x: x["sort"], reverse=True)
+    return {"items": out, "unread": sum(x["unread"] for x in out)}
+
+
+class SearchIn(BaseModel):
+    kind: Literal["intercity", "hire"]
+    origin: Optional[LocIn] = None
+    destination: Optional[LocIn] = None
+    date: Optional[str] = None
+    seats: int = 1
+    service: Optional[str] = None
+
+
+@api.post("/searches")
+async def save_search(body: SearchIn, user: dict = Depends(get_user)):
+    key = f"{body.kind}:{body.origin.loc_id if body.origin else ''}:{body.destination.loc_id if body.destination else ''}:{body.service or ''}"
+    await db.searches.update_one({"user_id": user["user_id"], "key": key},
+                                 {"$set": {**body.model_dump(), "user_id": user["user_id"], "key": key, "at": now()}}, upsert=True)
+    return {"ok": True}
+
+
+@api.get("/searches")
+async def list_searches(user: dict = Depends(get_user)):
+    return await db.searches.find({"user_id": user["user_id"]}, {"_id": 0}).sort("at", -1).to_list(10)
+
+
+@api.delete("/searches")
+async def clear_searches(user: dict = Depends(get_user)):
+    await db.searches.delete_many({"user_id": user["user_id"]})
+    return {"ok": True}
+
+
+class MissingPlaceIn(BaseModel):
+    name: str = Field(min_length=2, max_length=100)
+    local_name: str = Field(default="", max_length=100)
+    ltype: Literal["village", "town", "locality", "landmark", "bus_terminal", "railway_station", "other"] = "village"
+    district: str = Field(min_length=2, max_length=80)
+    state: str = Field(min_length=2, max_length=80)
+    pin: Optional[str] = Field(default=None, pattern=r"^\d{6}$")
+    lat: float = Field(ge=6, le=37.5)
+    lng: float = Field(ge=68, le=97.5)
+
+
+@api.post("/locations/missing")
+async def submit_missing_place(body: MissingPlaceIn, user: dict = Depends(get_user)):
+    doc = {"request_id": nid("mlr"), **body.model_dump(), "user_id": user["user_id"], "user_name": user["name"], "status": "pending", "created_at": now()}
+    await db.missing_locations.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+@api.get("/admin/locations/missing")
+async def admin_missing_places(_: dict = Depends(get_admin)):
+    return await db.missing_locations.find({}, {"_id": 0}).sort([("status", -1), ("created_at", -1)]).to_list(200)
+
+
+class DecisionIn(BaseModel):
+    decision: Literal["approved", "rejected"]
+    note: str = Field(default="", max_length=300)
+
+
+@api.post("/admin/locations/missing/{rid}")
+async def admin_review_place(rid: str, body: DecisionIn, admin: dict = Depends(get_admin)):
+    r = await db.missing_locations.find_one({"request_id": rid, "status": "pending"}, {"_id": 0})
+    if not r:
+        raise HTTPException(404, "Pending request not found")
+    if body.decision == "approved":
+        d = loc_doc(r["name"], r["ltype"], r["district"], r["state"], r.get("pin"), r["lat"], r["lng"],
+                    [x for x in [r.get("local_name")] if x], source="community", loc_id=f"cm_{rid}")
+        await db.locations.update_one({"loc_id": d["loc_id"]}, {"$setOnInsert": d}, upsert=True)
+    await db.missing_locations.update_one({"request_id": rid}, {"$set": {"status": body.decision, "note": body.note, "reviewed_at": now()}})
+    await audit(admin["user_id"], f"place.{body.decision}", rid)
+    return {"ok": True}
+
+
+class FuelPriceIn(BaseModel):
+    state: str = Field(default="default", max_length=80)
+    fuel_type: Literal["petrol", "diesel", "cng", "electric"]
+    price: float = Field(gt=0, le=500)
+
+
+@api.get("/fuel-prices")
+async def fuel_prices(state: str = ""):
+    rows = await db.fuel_prices.find({"state": {"$in": [state, "default"]}}, {"_id": 0}).to_list(50)
+    out: dict = {}
+    for r in sorted(rows, key=lambda x: x["state"] != "default"):  # state-specific overrides default
+        out[r["fuel_type"]] = r
+    s = await get_settings()
+    return {"prices": out, "maintenance_per_km": s.get("maintenance_per_km", 2), "max_price_factor": s.get("max_price_factor", 1.5)}
+
+
+@api.post("/admin/fuel-prices")
+async def admin_set_fuel(body: FuelPriceIn, admin: dict = Depends(get_admin)):
+    await db.fuel_prices.update_one({"state": body.state, "fuel_type": body.fuel_type},
+                                    {"$set": {**body.model_dump(), "updated_at": now(), "updated_by": admin["user_id"]}}, upsert=True)
+    await audit(admin["user_id"], "fuel.set", f"{body.state}:{body.fuel_type}", {"price": body.price})
+    return {"ok": True}
+
+
+# ---- Hire a Driver (TRAVOO DRIVER): customer supplies the car, verified professional driver drives it
+SERVICE_HOURS = {"hourly": None, "half_day": 4, "full_day": 8, "one_way": None, "airport": None, "outstation": None, "custom": None}
+
+
+class ProDriverIn(BaseModel):
+    city: LocIn
+    areas: List[str] = Field(default_factory=list, max_length=15)
+    languages: List[str] = Field(min_length=1, max_length=10)
+    experience_years: int = Field(ge=1, le=50)
+    licence_no: str = Field(min_length=8, max_length=20)
+    licence_expiry: str = Field(pattern=r"^\d{2}-\d{2}-\d{4}$")
+    vehicle_types: List[Literal["hatchback", "sedan", "suv", "muv", "luxury", "automatic", "ev"]] = Field(min_length=1)
+    days: List[int] = Field(min_length=1, max_length=7)  # 0=Mon..6=Sun
+    start_time: str = Field(pattern=r"^\d{2}:\d{2}$")
+    end_time: str = Field(pattern=r"^\d{2}:\d{2}$")
+    bio: str = Field(min_length=20, max_length=500)
+    rate_hourly: int = Field(ge=50, le=5000)
+    rate_half_day: int = Field(ge=100, le=20000)
+    rate_full_day: int = Field(ge=200, le=40000)
+    rate_one_way: Optional[int] = Field(default=None, ge=100, le=40000)
+
+
+@api.get("/pro/me")
+async def pro_me(user: dict = Depends(get_user)):
+    p = await db.pro_drivers.find_one({"user_id": user["user_id"]}, {"_id": 0})
+    doc = await db.driver_documents.find_one({"user_id": user["user_id"]}, {"_id": 0, "photos": 1}) or {}
+    if p:
+        p["licence_no"] = mask(p["licence_no"])
+    return {"profile": p, "photos": doc.get("photos", {})}
+
+
+@api.post("/pro/register")
+async def pro_register(body: ProDriverIn, user: dict = Depends(get_user)):
+    if not (user.get("phone") and re.fullmatch(r"[6-9]\d{9}", user["phone"])):
+        raise HTTPException(400, "Add a valid registered mobile number in your profile first")
+    existing = await db.pro_drivers.find_one({"user_id": user["user_id"]}, {"_id": 0, "status": 1})
+    if existing and existing["status"] in ("under_review", "approved"):
+        raise HTTPException(400, "Local driver profile already submitted")
+    doc = await db.driver_documents.find_one({"user_id": user["user_id"]}, {"_id": 0, "photos": 1}) or {}
+    missing = [k for k in ("profile", "licence") if not (doc.get("photos") or {}).get(k)]
+    if missing:
+        raise HTTPException(400, f"Please upload: {', '.join(missing)} photo")
+    status = "approved" if (await get_settings()).get("instant_driver_approval") else "under_review"
+    rec = {**body.model_dump(), "city": loc_snapshot(body.city), "licence_no": body.licence_no.upper(), "user_id": user["user_id"],
+           "name": user["name"], "status": status, "submitted_at": now(), "admin_note": ""}
+    await db.pro_drivers.update_one({"user_id": user["user_id"]}, {"$set": rec}, upsert=True)
+    await db.users.update_one({"user_id": user["user_id"]}, {"$set": {"bio": body.bio}})
+    if status == "approved":
+        await notify(user["user_id"], "driver_approved", {})
+    await audit(user["user_id"], "pro.submit", user["user_id"], {"status": status})
+    return {"status": status}
+
+
+def hire_estimate(p: dict, service: str, hours: int) -> int:
+    if service == "half_day":
+        return p["rate_half_day"]
+    if service == "full_day":
+        return p["rate_full_day"]
+    if service in ("one_way", "airport") and p.get("rate_one_way"):
+        return p["rate_one_way"]
+    if service == "outstation":
+        return p["rate_full_day"] * max(1, math.ceil(hours / 8))
+    return p["rate_hourly"] * max(1, hours)
+
+
+@api.get("/hire/drivers")
+async def hire_search(lat: float, lng: float, date: str = Query(pattern=r"^\d{4}-\d{2}-\d{2}$"), service: str = "hourly",
+                      hours: int = Query(4, ge=1, le=72), vehicle_type: Optional[str] = None, language: Optional[str] = None,
+                      min_exp: int = 0, user: dict = Depends(get_user)):
+    weekday = datetime.strptime(date, "%Y-%m-%d").weekday()
+    q = {"status": "approved", "days": weekday, "experience_years": {"$gte": min_exp}, "user_id": {"$ne": user["user_id"]},
+         "city.geo": {"$geoWithin": {"$centerSphere": [[lng, lat], 60 / 6378.1]}}}
+    if vehicle_type:
+        q["vehicle_types"] = vehicle_type
+    if language:
+        q["languages"] = {"$regex": f"^{re.escape(language)}$", "$options": "i"}
+    rows = await db.pro_drivers.find(q, {"_id": 0, "licence_no": 0, "licence_expiry": 0, "city.geo": 0}).to_list(100)
+    out = []
+    for p in rows:
+        busy = await db.hires.count_documents({"driver_id": p["user_id"], "date": date, "status": {"$in": ["confirmed", "started"]}})
+        if busy:
+            continue
+        u = await public_user(p["user_id"])
+        out.append({**p, "user": {**u, "has_photo": await has_badge_photo(p["user_id"])}, "estimate": hire_estimate(p, service, hours)})
+    out.sort(key=lambda x: (-(x["user"].get("rating_avg") or 0), x["estimate"]))
+    return out
+
+
+class HireIn(BaseModel):
+    driver_id: str
+    service_type: Literal["hourly", "half_day", "full_day", "one_way", "airport", "outstation", "custom"]
+    date: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
+    time: str = Field(pattern=r"^\d{2}:\d{2}$")
+    hours: int = Field(ge=1, le=72)
+    city: LocIn
+    pickup: str = Field(min_length=2, max_length=150)
+    destination: str = Field(default="", max_length=150)
+    vehicle_type: str = Field(max_length=20)
+    vehicle_desc: str = Field(min_length=2, max_length=80)
+    notes: str = Field(default="", max_length=500)
+
+
+@api.post("/hire/bookings")
+async def hire_book(body: HireIn, user: dict = Depends(get_user)):
+    p = await db.pro_drivers.find_one({"user_id": body.driver_id, "status": "approved"}, {"_id": 0})
+    if not p or body.driver_id == user["user_id"]:
+        raise HTTPException(400, "This driver is not available")
+    dt = datetime.strptime(f"{body.date} {body.time}", "%Y-%m-%d %H:%M").replace(tzinfo=IST)
+    if dt < now():
+        raise HTTPException(400, "Start time must be in the future")
+    if await db.hires.find_one({"driver_id": body.driver_id, "passenger_id": user["user_id"], "date": body.date, "status": {"$in": ["pending", "confirmed"]}}):
+        raise HTTPException(409, "You already requested this driver for this date")
+    h = {"booking_id": "HIR-" + secrets.token_hex(4).upper(), **body.model_dump(), "city": loc_snapshot(body.city), "passenger_id": user["user_id"],
+         "service_fee": hire_estimate(p, body.service_type, body.hours), "route": f"{body.city.name} · {body.pickup}" + (f" → {body.destination}" if body.destination else ""),
+         "status": "pending", "starts_at": dt.astimezone(timezone.utc), "settlement": {"status": "unpaid"}, "created_at": now()}
+    await db.hires.insert_one(h)
+    await notify(body.driver_id, "hire_request", {"route": h["route"]}, h["booking_id"])
+    await sys_message(h["booking_id"], "hire_request", {"route": h["route"]})
+    h.pop("_id", None)
+    return h
+
+
+@api.get("/hire/bookings")
+async def hire_list(user: dict = Depends(get_user)):
+    uid = user["user_id"]
+    return await db.hires.find({"$or": [{"passenger_id": uid}, {"driver_id": uid}]}, {"_id": 0, "city.geo": 0}).sort("starts_at", -1).to_list(200)
+
+
+@api.get("/hire/bookings/{bid}")
+async def hire_get(bid: str, user: dict = Depends(get_user)):
+    h = await db.hires.find_one({"booking_id": bid}, {"_id": 0, "city.geo": 0})
+    if not h or (user["user_id"] not in (h["passenger_id"], h["driver_id"]) and user.get("role") != "admin"):
+        raise HTTPException(404, "Booking not found")
+    active = h["status"] in ("confirmed", "started", "completed")
+    for role, uid in (("driver", h["driver_id"]), ("customer", h["passenger_id"])):
+        u = await db.users.find_one({"user_id": uid}, {"_id": 0, "user_id": 1, "name": 1, "picture": 1, "rating_avg": 1, "rating_count": 1, "phone": 1})
+        u["phone"] = u.get("phone") if active else mask_phone(u.get("phone"))
+        u["phone_masked"] = not active
+        if active and uid != user["user_id"]:
+            await log_contact(user["user_id"], uid, bid)
+        h[role] = u
+    h["driver"]["has_photo"] = await has_badge_photo(h["driver_id"])
+    h["is_driver"] = user["user_id"] == h["driver_id"]
+    h["my_reviews"] = await db.reviews.find({"booking_id": bid, "reviewer_id": user["user_id"]}, {"_id": 0}).to_list(5)
+    return h
+
+
+@api.post("/hire/bookings/{bid}/{action}")
+async def hire_action(bid: str, action: Literal["accept", "reject", "start", "complete", "cancel"], body: ReasonIn, user: dict = Depends(get_user)):
+    h = await db.hires.find_one({"booking_id": bid}, {"_id": 0})
+    if not h or user["user_id"] not in (h["passenger_id"], h["driver_id"]):
+        raise HTTPException(404, "Booking not found")
+    is_driver = user["user_id"] == h["driver_id"]
+    rules = {"accept": (["pending"], "confirmed", True), "reject": (["pending"], "rejected", True), "start": (["confirmed"], "started", True),
+             "complete": (["started"], "completed", True), "cancel": (["pending", "confirmed"], "cancelled", None)}
+    allowed, new, driver_only = rules[action]
+    if driver_only and not is_driver:
+        raise HTTPException(403, "Only the driver can do this")
+    upd = {"status": new, f"{action}_at": now()}
+    if action in ("cancel", "reject"):
+        upd.update(cancel_reason=body.reason, cancelled_by="driver" if is_driver else "customer", refund_note=body.refund_note)
+    res = await db.hires.update_one({"booking_id": bid, "status": {"$in": allowed}}, {"$set": upd})
+    if not res.modified_count:
+        raise HTTPException(400, f"Cannot {action} this booking now")
+    ntype = {"accept": "hire_confirmed", "reject": "hire_rejected", "cancel": "hire_cancelled", "complete": "hire_completed", "start": "trip_started"}[action]
+    other = h["passenger_id"] if is_driver else h["driver_id"]
+    await notify(other, ntype, {"route": h["route"]}, bid)
+    await sys_message(bid, ntype, {"route": h["route"]})
+    if action == "complete":
+        await db.hires.update_one({"booking_id": bid}, {"$set": {"completed_at": now()}})
+    return {"ok": True}
+
+
+@api.get("/admin/pro-drivers")
+async def admin_pro_drivers(status: str = "under_review", _: dict = Depends(get_admin)):
+    rows = await db.pro_drivers.find({"status": status}, {"_id": 0, "city.geo": 0}).to_list(200)
+    for r in rows:
+        r["documents"] = await db.driver_documents.find_one({"user_id": r["user_id"]}, {"_id": 0, "photos": 1})
+        r["email"] = (await db.users.find_one({"user_id": r["user_id"]}, {"_id": 0, "email": 1}) or {}).get("email")
+    return rows
+
+
+@api.post("/admin/pro-drivers/{uid}/review")
+async def admin_review_pro(uid: str, body: DriverReviewIn, admin: dict = Depends(get_admin)):
+    r = await db.pro_drivers.update_one({"user_id": uid, "status": {"$in": ["under_review", "approved"]}},
+                                        {"$set": {"status": body.decision, "admin_note": body.note, "reviewed_at": now()}})
+    if not r.modified_count:
+        raise HTTPException(400, "Only submitted local-driver profiles can be reviewed")
+    await notify(uid, "driver_approved" if body.decision == "approved" else "driver_rejected", {})
+    await audit(admin["user_id"], f"pro.{body.decision}", uid, {"note": body.note})
+    return {"ok": True}
+
+
+geo_router = get_router(db, get_admin)
 app.include_router(api)
+app.include_router(geo_router)
 app.add_middleware(CORSMiddleware, allow_credentials=True, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 
@@ -1331,6 +1741,7 @@ app.add_middleware(CORSMiddleware, allow_credentials=True, allow_origins=["*"], 
 async def startup():
     await ensure_indexes()
     await seed()
+    app.state.geo_sync = asyncio.create_task(geo_router.sync_loop())
     try:
         await run_in_threadpool(init_storage)
     except Exception as exc:

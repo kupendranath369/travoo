@@ -1,0 +1,52 @@
+{
+  "summary": "Iteration 4 (major update) tested backend + Expo web UI (375x667). Backend: 17 new tests (test_iter4_features.py) + 55 regression tests = 72/72 pass AFTER fixing a CRITICAL regression: POST /api/vehicles had lost its @api.post decorator (404, drivers could not add vehicles). Verified: OSRM route estimate (326 km BLR-Chennai, source osrm), cost_breakdown math, price cap 400, return trip with return_of, recent searches upsert/max10/clear, missing place submit->admin approve->searchable, fuel prices admin/public, full hire flow (phone gate, photo gate, under_review, admin approve, public photo 404->200, search estimate + has_photo, booking pending, masked phone 98••••••78, 409 duplicate, accept by driver only, phones unmasked, start/complete, HIR review, profile About Me), chat (conversations kind/unread, delivered->read ticks, system messages for hire_request/confirmed/cancelled and carpool booking_confirmed/cancelled, outsider 404). Frontend: home (logo, 4 header icons, 3 service cards, recent search appears + Clear works), /more groups, search calendar (past days disabled), search-hire-link, offer calculator (road distance 326 km OSM, recommended ₹717, use-recommended, return switch), hire form->results->/user/[id] About Me->send request->/hire/[id] masked, pro driver Bookings 'Driver hire' chip->accept->unmasked->chat with system msgs + Delivered tick, /messages list with unread badge, LocationField 'can't find' -> /add-place submit, admin pro/places/settings tabs. Fixed missing i18n keys admin.pro/admin.places (tabs showed raw keys). No deprecated expo packages found.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "POST /api/vehicles", "issue": "Route decorator missing (add_vehicle defined without @api.post) -> 404; drivers could not add vehicles. FIXED by tester in server.py.", "priority": "CRITICAL"}
+    ],
+    "minor": [
+      {"endpoint": "POST /api/trips", "issue": "Price cap only enforced when fuel_price is sent; omitting fuel_price lets a driver publish ₹5000/seat (verified 200). Enforce cap server-side using admin fuel price + vehicle mileage, or require calculator inputs."},
+      {"endpoint": "GET /api/fuel-prices", "issue": "No default fuel prices seeded -> prices {} so the Offer calculator mileage/fuel fields start empty (demo vehicle also has no mileage). Seed 'default' petrol/diesel/cng/electric."},
+      {"endpoint": "GET /api/public/photo/{uid}", "issue": "If files record is missing, f is None -> 500 instead of 404 (server.py ~1458)."},
+      {"endpoint": "POST /api/bookings/{id}/messages", "issue": "Whitespace-only text passes min_length then strip() stores empty message."},
+      {"endpoint": "POST /api/hire/bookings/{id}/complete", "issue": "Allowed directly from 'confirmed' (skips start); UI shows Start and Complete together when confirmed. Confirm intended."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Admin tabs", "issue": "Tabs 'pro' and 'places' displayed raw keys 'admin.pro'/'admin.places' (missing en.json keys). FIXED by tester.", "testID": "admin-tab-pro, admin-tab-places", "priority": "medium"},
+      {"component": "add-place", "issue": "After successful submit router.back() with no history raises 'The action GO_BACK was not handled' (direct URL/refresh). Use router.canGoBack() ? back() : replace('/').", "testID": "place-submit-button", "priority": "low"},
+      {"component": "hire/[id] driver view", "issue": "Customer contact card is labelled 'Passengers' (t('search.passengers')) for hire bookings; should be 'Customer'.", "testID": "contact-phone-*", "priority": "low"},
+      {"component": "Admin Local drivers 'Approved' filter", "issue": "Approved profiles still show Approve/Reject buttons.", "testID": "admin-pro-approve-*", "priority": "low"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Offer", "issues": ["Typing price 9999 (cap ₹1076) shows no inline warning before publishing; only the backend rejects it", "Return date calendar defaults to 'Any date', which makes no sense for a return trip", "Toast after hire accept says generic 'Saved'"]},
+      {"screen": "More", "issues": ["testIDs are generated with a double dash (e.g. more--info-s-about); cosmetic"]}
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/test_iter4_features.py", "/app/backend/tests/test_travoo_api.py", "/app/test_reports/pytest/iter4.xml"],
+  "action_items": [
+    "Keep the restored @api.post('/vehicles') decorator (server.py) and add a regression test",
+    "Enforce the price cap even when fuel_price is omitted",
+    "Seed default fuel prices (state 'default') so the calculator prefills",
+    "Guard public photo against a missing file record (404 not 500)",
+    "Reject whitespace-only chat messages",
+    "add-place: fall back when router cannot go back",
+    "hire/[id]: label the customer as 'Customer' for the driver; consider hiding Complete until the trip is started",
+    "Admin pro 'Approved' list: hide Approve, show Suspend/Reject only",
+    "Split server.py (1806 lines) into routers (hire, chat, places, trips)"
+  ],
+  "critical_code_review_comments": [
+    "server.py is 1806 lines (>700); split into modules",
+    "hire_action calls notify() (which already writes the system message for SYS_EVENTS) and then sys_message() again; harmless due to upsert but redundant",
+    "sys_message upserts by (booking_id, sys_type): a repeated event of the same type is only recorded once"
+  ],
+  "updated_files": ["/app/backend/server.py (restored @api.post('/vehicles'))", "/app/frontend/src/i18n/locales/en.json (admin.pro, admin.places)", "/app/backend/tests/test_iter4_features.py (new)", "/app/backend/tests/test_travoo_api.py (chat on pending booking now expected 200)"],
+  "success_rate": {"backend": "100% (72/72) after vehicles fix", "frontend": "~95% (all requested flows work; minor UI issues)"},
+  "seed_data_creation": "Created TEST_ users/pro drivers/trips/places/fuel row. Cleanup: TEST pro profiles set to rejected, TEST community locations + TEST_State fuel row deleted, TEST trips cancelled. A UI hire booking HIR-C389EABD on passenger@travoo.in was cancelled, and its recent searches were cleared (they were empty before the test).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Web app shows a language picker first (language-continue-button), then /auth (auth-toggle-mode switches to login). Hire search needs approved pro drivers whose days include the weekday; tests create TEST_pro users (password Passw0rd!x). The pin map is native-only; on web use pin-lat-input/pin-lng-input. Run pytest with -n0 (xdist is installed and breaks the shared-state ordering)."
+}
