@@ -21,14 +21,16 @@ export default function ForgotPasswordScreen() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [sent, setSent] = useState(false);
+  const [resetToken, setResetToken] = useState("");
 
   const submit = async () => {
     if (!email || !email.includes("@")) return setErr("Please enter a valid email");
     setBusy(true);
     setErr("");
     try {
-      await api("/auth/forgot-password", { body: { email } });
+      const res = await api("/auth/forgot-password", { body: { email } });
       setSent(true);
+      setResetToken(res.reset_token || "");
       toast("Password reset email sent");
     } catch (e: any) {
       setErr(e.message);
@@ -45,7 +47,13 @@ export default function ForgotPasswordScreen() {
             <Ionicons name="mail-check" size={80} color={colors.success} />
             <T size={20} weight="700" center>Email Sent</T>
             <T center color={colors.muted}>We've sent a password reset link to {email}. Please check your inbox and follow the instructions.</T>
-            <Btn label="Back to Login" onPress={() => router.back()} />
+            {resetToken ? (
+              <View style={{ gap: space.sm, alignItems: "center" }}>
+                <T size={12} color={colors.brandTertiary} center>For testing: Click below to reset password</T>
+                <Btn label="Reset Password" onPress={() => router.push({ pathname: "/reset-password", params: { token: resetToken } })} />
+              </View>
+            ) : null}
+            <Btn variant="ghost" label="Back to Login" onPress={() => router.back()} />
           </View>
         ) : (
           <>

@@ -270,7 +270,31 @@ async def forgot_password(body: ForgotPasswordIn):
     # For now, log the reset token
     reset_token = make_token(user["user_id"])
     logger.info(f"Password reset for {body.email}: token={reset_token}")
-    return {"message": "Password reset email sent"}
+    return {"message": "Password reset email sent", "reset_token": reset_token}
+
+
+class ResetPasswordIn(BaseModel):
+    token: str
+    new_password: str = Field(min_length=8, max_length=128)
+
+
+@api.post("/auth/reset-password")
+async def reset_password(body: ResetPasswordIn):
+    """Reset password using the token"""
+    try:
+        uid = jwt.decode(body.token, JWT_SECRET, algorithms=["HS256"]).get("sub")
+    except jwt.InvalidTokenError:
+        raise HTTPException(400, "Invalid or expired reset token")
+    
+    user = await db.users.find_one({"user_id": uid})
+    if not user:
+        raise HTTPException(404, "User not found")
+    
+    new_hash = hash_pw(body.new_password)
+    await db.users.update_one({"user_id": uid}, {"$set": {"password_hash": new_hash}})
+    await audit(uid, "password.reset", uid, {})
+    
+    return {"message": "Password reset successfully"}
 
 
 @api.post("/auth/session")
