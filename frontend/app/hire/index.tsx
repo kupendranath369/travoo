@@ -62,9 +62,9 @@ export default function HireScreen() {
       <Card style={{ gap: 0, paddingVertical: space.sm }}>
         <LocationField testID="hire-city-field" label={t("v2.city")} value={city} onChange={setCity} icon="business-outline" />
         <DateField testID="hire-date" label={t("search.date")} value={date} onChange={setDate} />
+        <LocationField testID="hire-pickup-field" label={t("v2.pickup_loc")} value={pickup} onChange={setPickup} icon="location-outline" />
+        <LocationField testID="hire-destination-field" label={t("v2.destination_opt")} value={dest} onChange={setDest} icon="navigate-outline" />
       </Card>
-      <LocationField testID="hire-pickup-field" label={t("v2.pickup_loc")} value={pickup} onChange={setPickup} icon="location-outline" />
-      <LocationField testID="hire-destination-field" label={t("v2.destination_opt")} value={dest} onChange={setDest} icon="navigate-outline" />
       <T size={13} weight="600" color={colors.muted}>{t("v2.service")}</T>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: space.sm }}>
         {SERVICES.map((s) => <Chip key={s} testID={`hire-service-${s}`} label={t(`v2.svc.${s}`)} active={service === s} onPress={() => setService(s)} />)}

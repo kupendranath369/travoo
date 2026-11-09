@@ -34,35 +34,65 @@ export function DocPhotos({ photos, editable, onUploaded }: { photos: Record<str
   const upload = async (k: string, asset: ImagePicker.ImagePickerAsset) => {
     setBusy(k);
     try {
+      console.log(`Uploading ${k}:`, { uri: asset.uri, fileName: asset.fileName, mimeType: asset.mimeType });
+      
+      // Handle mobile file URI
+      const fileUri = asset.uri;
+      const fileName = asset.fileName || `${k}_${Date.now()}.jpg`;
+      const mimeType = asset.mimeType || "image/jpeg";
+      
       const res = await uploadForm(`${API_BASE}/driver/documents/${k}`, {
         headers: { Authorization: `Bearer ${getApiToken()}` },
-        files: { file: { uri: asset.uri, name: asset.fileName ?? `${k}.jpg`, mimeType: asset.mimeType ?? "image/jpeg" } },
+        files: { file: { uri: fileUri, name: fileName, mimeType } },
       });
+      console.log(`Upload response for ${k}:`, res.status);
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
+        console.error(`Upload failed for ${k}:`, d);
         throw new Error((d as any).detail || "Upload failed");
       }
       toast(`${t(`verify.photo.${k}`)} · ${t("verify.uploaded")}`);
       onUploaded();
     } catch (e: any) {
-      toast(e.message, "error");
+      console.error(`Upload error for ${k}:`, e);
+      toast(e.message || "Upload failed. Please try again.", "error");
     }
     setBusy(null);
   };
 
   const launch = async (s: Source) => {
     const k = kind!;
-    const opts: ImagePicker.ImagePickerOptions = { mediaTypes: ["images"], quality: 0.6, allowsEditing: true };
-    const r = s === "camera" ? await ImagePicker.launchCameraAsync(opts) : await ImagePicker.launchImageLibraryAsync(opts);
-    setKind(null);
-    setPerm(null);
-    if (!r.canceled && r.assets[0]) upload(k, r.assets[0]);
+    const opts: ImagePicker.ImagePickerOptions = { 
+      mediaTypes: ["images"], 
+      quality: 0.8, 
+      allowsEditing: true,
+      exif: false,
+    };
+    try {
+      const r = s === "camera" ? await ImagePicker.launchCameraAsync(opts) : await ImagePicker.launchImageLibraryAsync(opts);
+      setKind(null);
+      setPerm(null);
+      if (!r.canceled && r.assets && r.assets[0]) {
+        console.log(`Selected ${k} from ${s}:`, r.assets[0]);
+        upload(k, r.assets[0]);
+      }
+    } catch (e: any) {
+      console.error(`Error launching ${s} for ${k}:`, e);
+      toast(e.message || "Failed to open camera/gallery", "error");
+      setKind(null);
+      setPerm(null);
+    }
   };
 
   const choose = async (s: Source) => {
-    const p = await getPerm(s);
-    if (p.granted) return launch(s);
-    setPerm({ source: s, blocked: !p.canAskAgain }); // show why we need it before the system prompt
+    try {
+      const p = await getPerm(s);
+      if (p.granted) return launch(s);
+      setPerm({ source: s, blocked: !p.canAskAgain }); // show why we need it before the system prompt
+    } catch (e: any) {
+      console.error(`Permission check error for ${s}:`, e);
+      toast("Failed to check permissions", "error");
+    }
   };
 
   const allow = async () => {
