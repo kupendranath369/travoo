@@ -14,9 +14,9 @@ import { Badge, Btn, Card, Chip, Empty, ErrorBox, Field, Header, Loading, Sectio
 import { inr, useI18n } from "@/src/i18n";
 import { useTheme } from "@/src/theme";
 
-const TABS = ["overview", "drivers", "pro", "places", "users", "trips", "bookings", "tickets", "reviews", "routes", "settings"] as const;
+const TABS = ["overview", "drivers", "licence_verifications", "pro", "places", "users", "trips", "bookings", "tickets", "reviews", "routes", "settings"] as const;
 type Tab = (typeof TABS)[number];
-const PATH: Record<Tab, string> = { overview: "/admin/stats", drivers: "/admin/drivers", pro: "/admin/pro-drivers", places: "/admin/locations/missing", users: "/admin/users", trips: "/admin/trips", bookings: "/admin/bookings", tickets: "/admin/tickets", reviews: "/admin/reviews", routes: "/routes/popular", settings: "/admin/settings" };
+const PATH: Record<Tab, string> = { overview: "/admin/stats", drivers: "/admin/drivers", licence_verifications: "/admin/licence-verifications", pro: "/admin/pro-drivers", places: "/admin/locations/missing", users: "/admin/users", trips: "/admin/trips", bookings: "/admin/bookings", tickets: "/admin/tickets", reviews: "/admin/reviews", routes: "/routes/popular", settings: "/admin/settings" };
 
 export default function AdminScreen() {
   const insets = useSafeAreaInsets();
@@ -45,6 +45,8 @@ export default function AdminScreen() {
     documents_clear: false,
     vehicle_verified: false,
   });
+  const [parivahanEnabled, setParivahanEnabled] = useState(false);
+  const [digilockerEnabled, setDigilockerEnabled] = useState(false);
   useEffect(() => {
     if (tab === "settings") api("/fuel-prices").then((r) => setFuel(Object.fromEntries(Object.entries(r.prices).map(([k, v]: any) => [k, String(v.price)])))).catch(() => {});
   }, [tab]);
@@ -200,6 +202,42 @@ export default function AdminScreen() {
                   <Btn small testID={`admin-approve-${u.user_id}`} label={t("admin.approve")} onPress={() => act(`/admin/drivers/${u.user_id}/review`, { decision: "approved", note })} />
                   <Btn small variant="danger" testID={`admin-reject-${u.user_id}`} label={t("admin.reject")} onPress={() => act(`/admin/drivers/${u.user_id}/review`, { decision: "rejected", note })} />
                   <Btn small variant="outline" testID={`admin-resubmit-${u.user_id}`} label={t("admin.resubmit")} onPress={() => act(`/admin/drivers/${u.user_id}/review`, { decision: "resubmit", note })} />
+                </View>
+              </Card>
+            ))}
+          </>
+        );
+      case "licence_verifications":
+        return (
+          <>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: space.sm }}>
+              {["pending", "under_review", "verified", "rejected", "resubmit_required"].map((s) => <Chip key={s} label={s} active={dStatus === s} onPress={() => setDStatus(s)} />)}
+            </ScrollView>
+            {data.length === 0 ? <Empty title={t("admin.empty")} /> : null}
+            {data.map((v: any) => (
+              <Card key={v.verification_id} style={{ gap: space.sm }}>
+                <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                  <T weight="800">{v.user?.name} · {v.user?.email}</T>
+                  <Badge label={v.status} tone={statusTone(v.status)} />
+                </View>
+                <View style={{ flexDirection: "row", gap: space.sm }}>
+                  <Pressable style={{ flex: 1, aspectRatio: 1.6, borderRadius: 8, overflow: "hidden", backgroundColor: colors.surfaceTertiary, alignItems: "center", justifyContent: "center" }} onPress={() => v.licence_front && setPreview(fileUrl(v.licence_front))}>
+                    {v.licence_front ? <Image source={{ uri: fileUrl(v.licence_front) }} style={{ width: "100%", height: "100%" }} contentFit="cover" /> : <Ionicons name="card-outline" size={18} color={colors.muted} />}
+                    <T size={10} weight="700" color={colors.onSurface} center>Licence Front</T>
+                  </Pressable>
+                  <Pressable style={{ flex: 1, aspectRatio: 1.6, borderRadius: 8, overflow: "hidden", backgroundColor: colors.surfaceTertiary, alignItems: "center", justifyContent: "center" }} onPress={() => v.licence_back && setPreview(fileUrl(v.licence_back))}>
+                    {v.licence_back ? <Image source={{ uri: fileUrl(v.licence_back) }} style={{ width: "100%", height: "100%" }} contentFit="cover" /> : <Ionicons name="card-outline" size={18} color={colors.muted} />}
+                    <T size={10} weight="700" color={colors.onSurface} center>Licence Back</T>
+                  </Pressable>
+                </View>
+                <T size={12}>Licence No: {v.manual_licence_no}</T>
+                <T size={12}>Expiry: {v.manual_expiry}</T>
+                <T size={12}>Name: {v.manual_name}</T>
+                {v.ocr_data?.name ? <T size={12} color={colors.muted}>OCR Name: {v.ocr_data.name}</T> : null}
+                <View style={{ flexDirection: "row", gap: space.sm, flexWrap: "wrap" }}>
+                  <Btn small label="Verify" onPress={() => act(`/admin/licence-verifications/${v.verification_id}/review`, { decision: "verified", reason: note, verification_method: "manual", official_verified: false })} />
+                  <Btn small variant="danger" label="Reject" onPress={() => act(`/admin/licence-verifications/${v.verification_id}/review`, { decision: "rejected", reason: note, verification_method: "manual", official_verified: false })} />
+                  <Btn small variant="outline" label="Resubmit" onPress={() => act(`/admin/licence-verifications/${v.verification_id}/review`, { decision: "resubmit_required", reason: note, verification_method: "manual", official_verified: false })} />
                 </View>
               </Card>
             ))}

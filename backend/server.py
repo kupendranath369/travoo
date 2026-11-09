@@ -48,6 +48,8 @@ INDEXES: dict[str, list[IndexModel]] = {
                   IndexModel([("search_terms", ASCENDING)], name="terms"),
                   IndexModel([("pin", ASCENDING)], name="pin"),
                   IndexModel([("geo", GEOSPHERE)], name="geo")],
+    "licence_verifications": [IndexModel([("user_id", ASCENDING)], name="uid", unique=True),
+                              IndexModel([("status", ASCENDING)], name="status")],
     "vehicles": [IndexModel([("vehicle_id", ASCENDING)], name="vid", unique=True),
                  IndexModel([("owner_id", ASCENDING)], name="owner")],
     "trips": [IndexModel([("trip_id", ASCENDING)], name="tid", unique=True),
@@ -356,6 +358,22 @@ class VerificationIn(BaseModel):
     licence_no: str = Field(min_length=8, max_length=20)
     licence_expiry: str = Field(pattern=r"^\d{2}-\d{2}-\d{4}$")
     rc_no: str = Field(min_length=6, max_length=15)
+
+
+class LicenceVerificationIn(BaseModel):
+    licence_front: str = Field(..., description="File ID of licence front")
+    licence_back: str = Field(..., description="File ID of licence back")
+    ocr_data: Optional[dict] = Field(default=None, description="OCR extracted data")
+    manual_licence_no: str = Field(min_length=8, max_length=20)
+    manual_expiry: str = Field(pattern=r"^\d{2}-\d{2}-\d{4}$")
+    manual_name: str = Field(min_length=3, max_length=100)
+
+
+class LicenceReviewIn(BaseModel):
+    decision: Literal["verified", "rejected", "resubmit_required"]
+    reason: str = Field(default="", max_length=500)
+    verification_method: Literal["ocr", "manual", "parivahan", "digilocker"] = "manual"
+    official_verified: bool = Field(default=False, description="Only true if verified through official government source")
 
 
 def mask(v: str) -> str:
@@ -1224,6 +1242,164 @@ async def admin_review_driver(uid: str, body: DriverReviewIn, admin: dict = Depe
     await notify(uid, "driver_approved" if body.decision == "approved" else "driver_rejected", {})
     await audit(admin["user_id"], f"driver.{body.decision}", uid, {"note": body.note})
     return {"ok": True}
+
+
+# ---------------------------------------------------------------- Licence Verification System
+@api.post("/driver/licence-verification")
+async def submit_licence_verification(body: LicenceVerificationIn, user: dict = Depends(get_user)):
+    """Submit driving licence for verification with front/back images and OCR data."""
+    if user.get("driver_status") in ("under_review", "approved"):
+        raise HTTPException(400, "Verification already submitted")
+    
+    # Verify file ownership
+    for fid in [body.licence_front, body.licence_back]:
+        f = await db.files.find_one({"file_id": fid, "owner_id": user["user_id"], "deleted": {"$ne": True}}, {"_id": 0})
+        if not f:
+            raise HTTPException(400, f"File {fid} not found or not owned by user")
+    
+    # Store licence verification record
+    verification = {
+        "verification_id": nid("lic"),
+        "user_id": user["user_id"],
+        "licence_front": body.licence_front,
+        "licence_back": body.licence_back,
+        "ocr_data": body.ocr_data or {},
+        "manual_licence_no": body.manual_licence_no.upper(),
+        "manual_expiry": body.manual_expiry,
+        "manual_name": body.manual_name.strip(),
+        "status": "pending",
+        "submitted_at": now(),
+        "reviewed_at": None,
+        "reviewed_by": None,
+        "admin_note": "",
+        "official_verified": False,
+        "verification_method": "manual",
+    }
+    
+    await db.licence_verifications.update_one({"user_id": user["user_id"]}, {"$set": verification}, upsert=True)
+    await audit(user["user_id"], "licence.verification.submit", user["user_id"], {"verification_id": verification["verification_id"]})
+    
+    return {"verification_id": verification["verification_id"], "status": "pending"}
+
+
+@api.get("/driver/licence-verification")
+async def get_licence_verification(user: dict = Depends(get_user)):
+    """Get current licence verification status."""
+    verification = await db.licence_verifications.find_one({"user_id": user["user_id"]}, {"_id": 0})
+    if not verification:
+        return {"status": "not_submitted"}
+    # Mask sensitive data
+    if "manual_licence_no" in verification:
+        verification["manual_licence_no"] = mask(verification["manual_licence_no"])
+    return verification
+
+
+@api.get("/admin/licence-verifications")
+async def admin_licence_verifications(status: str = "pending", _: dict = Depends(get_admin)):
+    """Get all licence verifications for admin review."""
+    verifications = await db.licence_verifications.find({"status": status}, {"_id": 0}).sort("submitted_at", -1).to_list(100)
+    for v in verifications:
+        v["user"] = await db.users.find_one({"user_id": v["user_id"]}, {"_id": 0, "user_id": 1, "name": 1, "email": 1})
+        # Mask sensitive data
+        if "manual_licence_no" in v:
+            v["manual_licence_no"] = mask(v["manual_licence_no"])
+    return verifications
+
+
+@api.post("/admin/licence-verifications/{verification_id}/review")
+async def review_licence_verification(verification_id: str, body: LicenceReviewIn, admin: dict = Depends(get_admin)):
+    """Admin review of licence verification."""
+    verification = await db.licence_verifications.find_one({"verification_id": verification_id}, {"_id": 0})
+    if not verification:
+        raise HTTPException(404, "Verification not found")
+    
+    if verification["status"] not in ("pending", "under_review"):
+        raise HTTPException(400, "This verification has already been reviewed")
+    
+    # Only mark as officially verified if verified through government source
+    if body.official_verified and body.verification_method not in ("parivahan", "digilocker"):
+        raise HTTPException(400, "Official verification only allowed through Parivahan or DigiLocker")
+    
+    update = {
+        "status": body.decision,
+        "admin_note": body.reason,
+        "reviewed_at": now(),
+        "reviewed_by": admin["user_id"],
+        "verification_method": body.verification_method,
+        "official_verified": body.official_verified,
+    }
+    
+    await db.licence_verifications.update_one({"verification_id": verification_id}, {"$set": update})
+    
+    # Update driver status if verified
+    if body.decision == "verified":
+        await db.users.update_one({"user_id": verification["user_id"]}, {"$set": {"driver_status": "under_review"}})
+    
+    await audit(admin["user_id"], f"licence.{body.decision}", verification["user_id"], {
+        "verification_id": verification_id,
+        "method": body.verification_method,
+        "official": body.official_verified,
+        "reason": body.reason
+    })
+    
+    return {"ok": True}
+
+
+@api.get("/admin/licence-verifications/{verification_id}/documents")
+async def get_licence_documents(verification_id: str, _: dict = Depends(get_admin)):
+    """Get licence document images for admin review (admin only)."""
+    verification = await db.licence_verifications.find_one({"verification_id": verification_id}, {"_id": 0})
+    if not verification:
+        raise HTTPException(404, "Verification not found")
+    
+    # Get file URLs for front and back
+    front_fid = verification.get("licence_front")
+    back_fid = verification.get("licence_back")
+    
+    return {
+        "verification_id": verification_id,
+        "licence_front": fileUrl(front_fid) if front_fid else None,
+        "licence_back": fileUrl(back_fid) if back_fid else None,
+        "ocr_data": verification.get("ocr_data", {}),
+        "manual_data": {
+            "licence_no": mask(verification.get("manual_licence_no", "")),
+            "expiry": verification.get("manual_expiry"),
+            "name": verification.get("manual_name"),
+        }
+    }
+
+
+# ---------------------------------------------------------------- Parivahan Integration Placeholder (Manual Verification Only)
+@api.get("/admin/parivahan/check/{licence_no}")
+async def check_parivahan(licence_no: str, _: dict = Depends(get_admin)):
+    """
+    Placeholder for Parivahan integration.
+    NOTE: This does NOT scrape Parivahan or bypass authentication.
+    Admins should manually check https://parivahan.gov.in/parivahan/
+    This endpoint only provides a structured link for manual verification.
+    """
+    return {
+        "message": "Manual verification required",
+        "parivahan_url": f"https://parivahan.gov.in/parivahan/en/fw/dlinfo/",
+        "licence_no": licence_no,
+        "instructions": "Visit the official Parivahan portal to verify licence details manually",
+        "disclaimer": "Do not scrape or bypass authentication. Official API integration requires government approval."
+    }
+
+
+# ---------------------------------------------------------------- DigiLocker Integration Placeholder (Disabled Until Official Approval)
+@api.get("/admin/digilocker/status")
+async def digilocker_status(_: dict = Depends(get_admin)):
+    """
+    Placeholder for DigiLocker integration.
+    NOTE: This is DISABLED until Travoo receives official partner approval and API credentials.
+    """
+    return {
+        "enabled": False,
+        "message": "DigiLocker integration is disabled. Requires official government partner approval and API credentials.",
+        "instructions": "Contact DigiLocker for official API access: https://www.digilocker.gov.in/",
+        "disclaimer": "Do not attempt to integrate without official approval."
+    }
 
 
 @api.get("/admin/trips")

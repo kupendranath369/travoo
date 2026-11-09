@@ -1,11 +1,11 @@
 import Ionicons from "@react-native-vector-icons/ionicons";
 import { useFocusEffect } from "expo-router";
 import React, { useCallback, useState } from "react";
-import { Pressable, Switch, View } from "react-native";
+import { Image, Pressable, Switch, View } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { api } from "@/src/api";
+import { api, fileUrl } from "@/src/api";
 import { useAuth } from "@/src/auth";
 import { DOC_KINDS, DocPhotos } from "@/src/components/DocPhotos";
 import { useToast } from "@/src/components/toast";
@@ -28,10 +28,21 @@ export default function DriverScreen() {
   const [err, setErr] = useState("");
   const [vErr, setVErr] = useState("");
   const [busy, setBusy] = useState("");
+  const [licenceFront, setLicenceFront] = useState<string | null>(null);
+  const [licenceBack, setLicenceBack] = useState<string | null>(null);
+  const [licenceVerification, setLicenceVerification] = useState<any>(null);
 
   const load = useCallback(async () => {
     const r = await api("/driver/profile");
     setP(r);
+    // Load licence verification status
+    try {
+      const lv = await api("/driver/licence-verification");
+      setLicenceVerification(lv);
+    } catch (e) {
+      // Verification not submitted yet
+      setLicenceVerification({ status: "not_submitted" });
+    }
     await refresh();
   }, [refresh]);
   useFocusEffect(useCallback(() => { load().catch((e) => setErr(e.message)); }, [load]));
@@ -51,6 +62,31 @@ export default function DriverScreen() {
     try {
       const r = await api("/driver/verification", { body: { ...f, licence_no: f.licence_no.replace(/\s/g, ""), rc_no: f.rc_no.replace(/\s/g, "") } });
       toast(t(`verify.status.${r.status}`));
+      await load();
+    } catch (e: any) {
+      setErr(e.message);
+    }
+    setBusy("");
+  };
+
+  const submitLicenceVerification = async () => {
+    if (!licenceFront || !licenceBack) return setErr("Please upload both front and back of licence");
+    if (f.licence_no.replace(/\s/g, "").length < 8) return setErr(`${t("verify.licence")} *`);
+    if (!/^\d{2}-\d{2}-\d{4}$/.test(f.licence_expiry)) return setErr(`${t("verify.licence_exp")} *`);
+    if (f.legal_name.trim().length < 3) return setErr(`${t("verify.legal_name")} *`);
+    setBusy("licence");
+    setErr("");
+    try {
+      const r = await api("/driver/licence-verification", {
+        body: {
+          licence_front: licenceFront,
+          licence_back: licenceBack,
+          manual_licence_no: f.licence_no,
+          manual_expiry: f.licence_expiry,
+          manual_name: f.legal_name,
+        }
+      });
+      toast("Licence verification submitted");
       await load();
     } catch (e: any) {
       setErr(e.message);
@@ -89,6 +125,27 @@ export default function DriverScreen() {
             <T weight="800">{t("verify.photos")}</T>
             <DocPhotos photos={p.documents?.photos ?? {}} editable onUploaded={() => load().catch(() => {})} />
             {DOC_KINDS.some((k) => !p.documents?.photos?.[k]) ? <T testID="verify-photos-required" size={12} color={colors.brandTertiary}>{t("verify.photos_required")}</T> : null}
+            
+            <Section title="Driving Licence Verification" right={
+              licenceVerification?.status === "verified" ? 
+              <Badge label="Verified" tone="success" /> : 
+              licenceVerification?.status === "pending" ? 
+              <Badge label="Pending" tone="muted" /> : null
+            }>
+              <T size={12} color={colors.muted}>Upload front and back of your Indian driving licence for government verification</T>
+              <View style={{ flexDirection: "row", gap: space.md }}>
+                <Pressable style={{ flex: 1, aspectRatio: 1.6, borderRadius: radius.md, borderWidth: 1, borderStyle: "dashed", borderColor: colors.borderStrong, backgroundColor: colors.surfaceTertiary, alignItems: "center", justifyContent: "center" }} onPress={() => setLicenceFront("temp_fid")}>
+                  <Ionicons name="card-outline" size={30} color={colors.brandPrimary} />
+                  <T size={12} weight="700" color={colors.onSurface} center>Licence Front</T>
+                </Pressable>
+                <Pressable style={{ flex: 1, aspectRatio: 1.6, borderRadius: radius.md, borderWidth: 1, borderStyle: "dashed", borderColor: colors.borderStrong, backgroundColor: colors.surfaceTertiary, alignItems: "center", justifyContent: "center" }} onPress={() => setLicenceBack("temp_fid")}>
+                  <Ionicons name="card-outline" size={30} color={colors.brandPrimary} />
+                  <T size={12} weight="700" color={colors.onSurface} center>Licence Back</T>
+                </Pressable>
+              </View>
+              <Btn label="Submit for Verification" onPress={submitLicenceVerification} loading={busy === "licence"} disabled={!licenceFront || !licenceBack} />
+            </Section>
+            
             <Field testID="verify-legal-name" label={t("verify.legal_name")} value={f.legal_name} onChangeText={(x) => setF({ ...f, legal_name: x })} />
             <Field testID="verify-vehicle-name" label={t("verify.vehicle_name")} value={f.vehicle_name} onChangeText={(x) => setF({ ...f, vehicle_name: x })} placeholder="Maruti Suzuki Dzire" />
             {f.vehicle_name ? <T size={12} color={colors.brandPrimary} weight="600">{f.vehicle_name}</T> : null}
