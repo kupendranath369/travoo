@@ -8,6 +8,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { api } from "@/src/api";
 import { Logo } from "@/src/components/Logo";
 import { Card, IconName, T, radius, space } from "@/src/components/ui";
+import { useAuth } from "@/src/auth";
 import { useI18n } from "@/src/i18n";
 import { usesNativeTabs } from "@/src/navigation";
 import { useTheme } from "@/src/theme";
@@ -17,6 +18,7 @@ export default function Home() {
   const { colors } = useTheme();
   const { t, fmtDate } = useI18n();
   const router = useRouter();
+  const { user } = useAuth();
   const [recent, setRecent] = useState<any[]>([]);
   const [unread, setUnread] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
@@ -59,6 +61,7 @@ export default function Home() {
     <View style={{ flex: 1, backgroundColor: colors.surface }}>
       <View style={{ paddingTop: insets.top + space.sm, paddingHorizontal: space.lg, paddingBottom: space.sm, flexDirection: "row", alignItems: "center", backgroundColor: colors.surfaceSecondary, borderBottomWidth: 1, borderBottomColor: colors.border, gap: space.sm }}>
         <View style={{ flex: 1 }}><Logo size={34} /></View>
+        {user?.role === "admin" && icon("shield-checkmark-outline", () => router.push("/admin"), "home-admin-button")}
         {icon("language-outline", () => router.push("/language?from=profile"), "home-language-button")}
         {icon("notifications-outline", () => router.push("/notifications"), "home-notifications-button", !!unread)}
         {icon("person-circle-outline", () => router.push("/profile"), "home-profile-button")}

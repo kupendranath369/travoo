@@ -127,7 +127,7 @@ export function DocPhotos({ photos, editable, onUploaded }: { photos: Record<str
             {fid ? <Image source={{ uri: fileUrl(fid) }} style={{ position: "absolute", width: "100%", height: "100%" }} contentFit="cover" /> : <Ionicons name={ICONS[k]} size={30} color={colors.brandPrimary} />}
             <View style={{ position: "absolute", left: 0, right: 0, bottom: 0, paddingVertical: space.sm, paddingHorizontal: space.xs, backgroundColor: fid ? colors.brand : "transparent", alignItems: "center", justifyContent: "center", gap: 4 }}>
               {busy === k ? <ActivityIndicator size="small" color={fid ? colors.onBrand : colors.brandPrimary} /> : fid ? <Ionicons name="checkmark-circle" size={14} color={colors.onBrand} /> : null}
-              <T size={10} weight="700" color={fid ? colors.onBrand : colors.onSurface} numberOfLines={2} center textAlign="center">{t(`verify.photo.${k}`)}</T>
+              <T size={10} weight="700" color={fid ? colors.onBrand : colors.onSurface} numberOfLines={2} center>{t(`verify.photo.${k}`)}</T>
             </View>
           </Pressable>
         );
