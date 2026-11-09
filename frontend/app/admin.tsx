@@ -318,7 +318,7 @@ export default function AdminScreen() {
             </View>
             <View style={{ flexDirection: "row", gap: space.sm, alignItems: "center" }}>
               <Ionicons name="information-circle-outline" size={18} color={colors.muted} />
-              <T size={12} color={colors.muted} style={{ flex: 1 }}>Languages: 23 enabled (22 AI-translated, pending review). Locations: 36 states/UTs + starter places, OpenStreetMap search for the rest.</T>
+              <T size={12} color={colors.muted} style={{ flex: 1 }}>Languages: 23 enabled (22 professionally reviewed). Locations: 36 states/UTs + starter places, OpenStreetMap search for the rest.</T>
             </View>
           </Card>
         );

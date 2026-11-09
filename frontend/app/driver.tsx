@@ -102,10 +102,24 @@ export default function DriverScreen() {
         ) : p.documents?.licence_no ? (
           <Card style={{ gap: 4 }}>
             <DocPhotos photos={p.documents?.photos ?? {}} editable={false} onUploaded={() => {}} />
-            <T size={13}>{t("verify.legal_name")}: <T weight="700" size={13}>{p.documents.legal_name}</T></T>
-            {p.documents.vehicle_name ? <T size={13}>{t("verify.vehicle_name")}: {p.documents.vehicle_name}</T> : null}
-            <T size={13}>{t("verify.licence")}: {p.documents.licence_no}</T>
-            <T size={13}>{t("verify.rc")}: {p.documents.rc_no}</T>
+            <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+              <T size={13} color={colors.muted}>{t("verify.legal_name")}:</T>
+              <T size={13} weight="700">{p.documents.legal_name}</T>
+            </View>
+            {p.documents.vehicle_name ? (
+              <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+                <T size={13} color={colors.muted}>{t("verify.vehicle_name")}:</T>
+                <T size={13}>{p.documents.vehicle_name}</T>
+              </View>
+            ) : null}
+            <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+              <T size={13} color={colors.muted}>{t("verify.licence")}:</T>
+              <T size={13}>{p.documents.licence_no}</T>
+            </View>
+            <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+              <T size={13} color={colors.muted}>{t("verify.rc")}:</T>
+              <T size={13}>{p.documents.rc_no}</T>
+            </View>
           </Card>
         ) : null}
 

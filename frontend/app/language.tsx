@@ -56,7 +56,7 @@ export default function LanguageScreen() {
                 {active ? <Ionicons name="checkmark-circle" size={20} color={colors.brandPrimary} /> : null}
               </View>
               <T size={12} color={colors.muted}>{item.english}</T>
-              {planned ? <Badge label="Coming soon" tone="muted" /> : item.status === "ai" ? <Badge label="AI · review pending" tone="warning" /> : null}
+              {planned ? <Badge label="Coming soon" tone="muted" /> : null}
             </Pressable>
           );
         }}
