@@ -60,7 +60,7 @@ def future(days=3):
 
 @pytest.fixture(scope="module")
 def admin():
-    return login("admin@travoo.in", "TravooAdmin@2026")
+    return login("admin@travoo.in", os.environ.get("ADMIN_PASSWORD", "change-me"))
 
 
 @pytest.fixture(scope="module")

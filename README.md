@@ -1,200 +1,164 @@
-# expo
+# TRAVOO — India's Intercity Carpooling & Driver Booking Platform
 
-A small starter for a mobile app with a backend: **FastAPI with MongoDB**
-behind an **Expo + expo-router** app in strict TypeScript. The app runs as a
-web preview in the browser, in Expo Go on a phone, and as a native build.
-Nothing app-specific is built yet; it is a skeleton to build on.
+TRAVOO connects drivers who have empty seats on intercity trips with passengers going the same way, and lets customers **hire a professional local driver** by the hour or day. Payments are made **directly between users in cash or UPI**. There is deliberately **no payment gateway**.
 
-Versions are not written down here. Every package is at whatever
-`package.json` pins; open that file only when a version actually matters.
+---
 
-## Layout
+## 1. Features
+
+| Area | Highlights |
+|---|---|
+| **Carpooling** | Publish trips with intermediate stops, return journeys, instant or request booking, seat locking, cancellations, start/complete trip, settlement (cash/UPI declared by driver) |
+| **Hire a Driver (TRAVOO DRIVER)** | Professional driver registration (areas, languages, licence, rates), admin approval, search by city/date/service, request → accept → start → complete, reviews |
+| **Cost-sharing calculator** | Road distance (OSRM), fuel price per state, mileage, toll estimate, maintenance/km, equal or per-passenger split, price cap enforced on the server |
+| **Maps & locations (India-wide)** | Autocomplete across villages, towns, PIN codes, districts, states, streets, stations, bus stops and landmarks; drop-a-pin picker; route map with alternatives; nearby stops/stations; along-route passenger matching; daily map-data sync |
+| **Trust & safety** | Driver verification with document photos (private storage), verified badges, phone numbers revealed only after a booking is confirmed, report/SOS info, ratings and reviews |
+| **Chat** | Per-booking in-app chat with unread counts and read receipts (3 s polling) |
+| **Languages** | English + 22 scheduled Indian languages (AI-translated, RTL for Urdu/Kashmiri/Sindhi) |
+| **Admin (in-app)** | Stats, users, driver approvals, pro drivers, trips, bookings, complaints, reviews, popular routes, fuel prices, missing places, map-database health and sync |
+| **Auth** | Email + password (JWT) and Google sign-in (Emergent-managed) |
+
+## 2. Technology stack
+
+- **Frontend:** Expo SDK 58, React Native, TypeScript, expo-router (file-based routing), react-native-webview + Leaflet for maps, expo-location, expo-image-picker.
+- **Backend:** Python 3.11, FastAPI, Motor/PyMongo, bcrypt, PyJWT, httpx.
+- **Database:** MongoDB (2dsphere geo indexes, TTL caches).
+- **Open data services:** OpenStreetMap (Photon, Nominatim, Overpass), India Post PIN API, OSRM routing.
+
+## 3. Repository layout
 
 ```
-expo/
-  backend/   FastAPI + motor (async MongoDB) + Pydantic v2 — python, /root/.venv
-  frontend/  Expo + expo-router (file-based routes under app/)
-  memory/    test_credentials.md — logins the testing subagent reads
-  tests/     backend pytest package
+travoo-app/
+├── backend/                 FastAPI service
+│   ├── server.py            Auth, users, trips, bookings, chat, hire-a-driver, admin, uploads, seeding, indexes
+│   ├── geo.py               India location search, geocoding, PIN codes, routing, nearby stops, map sync
+│   ├── seed_data.py         36 states/UTs + curated places + popular routes
+│   ├── scripts/translate.py AI translation of UI strings into 22 Indian languages
+│   ├── tests/               pytest API test suites
+│   ├── requirements.txt
+│   └── .env.example
+├── frontend/                Expo / React Native app
+│   ├── app/                 Screens (expo-router): (tabs)/, trip/, booking/, chat/, hire/, user/, admin.tsx, …
+│   ├── src/components/      Reusable UI: LocationField, MapPicker, OsmMap, RideCard, Calendar, DocPhotos, Logo, …
+│   ├── src/i18n/            i18n provider + 23 locale JSON files
+│   ├── src/api.ts           API client  · src/auth.tsx  auth context · src/theme.ts  design tokens
+│   ├── assets/              Official TRAVOO logo, icons, splash, fonts
+│   ├── app.json  package.json  yarn.lock
+│   └── .env.example
+├── docs/                    API.md, DATABASE.md, DEPLOYMENT.md
+├── memory/PRD.md            Product requirements & change log
+├── test_reports/            Automated test reports
+├── .env.example  .gitignore  CONTRIBUTING.md  LICENSE
 ```
 
-## Running
+## 4. Architecture
 
-Supervisor runs everything in the pod (see "Pod conventions"). By hand, from
-two terminals:
+**Frontend.** expo-router file-based navigation with a 5-tab layout (Home, Search, Offer, Bookings, Profile) plus stack screens. All server calls go through `src/api.ts`, which prefixes `EXPO_PUBLIC_BACKEND_URL` + `/api` and sends the JWT as a Bearer token. Colours come from `src/theme.ts`. Maps are rendered by `OsmMap` (Leaflet + OSM tiles in a WebView on native, an iframe on web).
+
+**Backend.** A single FastAPI app (`server.py`) with an `/api` router, plus the geo router (`geo.py`). On startup it creates all MongoDB indexes, seeds states/places/demo data and starts the daily map-sync task. All routes are prefixed with `/api`.
+
+**Database.** MongoDB collections: `users`, `user_sessions`, `vehicles`, `trips`, `bookings`, `earnings_ledger`, `reviews`, `messages`, `notifications`, `tickets`, `files`, `pro_drivers`, `hires`, `searches`, `locations`, `pincodes`, `geo_cache`, `geo_meta`, `geo_misses`, `missing_locations`, `contact_access`, `fuel_prices`, `popular_routes`, `settings`, `audit_logs`. See [docs/DATABASE.md](docs/DATABASE.md).
+
+## 5. Requirements
+
+- Node.js 20+ and Yarn 1.x (the frontend uses `yarn`)
+- Python 3.11+
+- MongoDB 6+ (local or Atlas)
+- Expo Go app (phone) or Android Studio / Xcode for native builds
+
+## 6. Environment variables
+
+Copy the examples and fill in real values. **Never commit real `.env` files.**
 
 ```bash
-cd backend && uvicorn server:app --host 0.0.0.0 --port 8001 --reload   # http://localhost:8001
-cd frontend && yarn expo start --port 3000                             # web preview + Expo Go QR
+cp backend/.env.example backend/.env
+cp frontend/.env.example frontend/.env
 ```
 
-## How the app reaches the backend
+| Variable | Where | Purpose |
+|---|---|---|
+| `MONGO_URL` | backend | MongoDB connection string |
+| `DB_NAME` | backend | Database name |
+| `JWT_SECRET` | backend | Long random string used to sign login tokens |
+| `ADMIN_EMAIL` / `ADMIN_PASSWORD` | backend | Admin account created on first start |
+| `EMERGENT_LLM_KEY` | backend | Emergent key — used for document/photo storage and the translation script |
+| `INTEGRATION_PROXY_URL` | backend (optional) | Override for the Emergent storage endpoint |
+| `EXPO_PUBLIC_BACKEND_URL` | frontend | Public URL of the backend (without `/api`), e.g. `http://192.168.1.10:8001` |
 
-Every backend route lives under `/api`, because the backend mounts one
-`APIRouter(prefix="/api")`. The public preview URL sits in front of both
-servers: `/api/*` is forwarded to the backend on `8001`, everything else to
-Metro on `3000`.
+## 7. Firebase, Google Maps & authentication
 
-The app reads that URL from `EXPO_PUBLIC_BACKEND_URL` in its `.env` (filled in
-by the platform) and calls `EXPO_PUBLIC_BACKEND_URL + "/api/..."`. The URL has
-to be absolute because the same bundle runs on a phone in Expo Go, where a
-relative `/api` has nothing to reach. So: never `localhost`, never a port,
-never a relative path. Only `EXPO_PUBLIC_*` names are visible to the app, and
-Metro bakes their values in at bundle time, so a `.env` change takes effect
-only after you restart the Metro program (`expo`).
+- **Firebase:** TRAVOO does **not** currently use Firebase. No Firebase config or rules are required. (Push notifications are stored in-app only.)
+- **Google Maps:** TRAVOO does **not** use the Google Maps SDK or an API key. Maps use **OpenStreetMap** (Leaflet tiles) and open geocoding/routing services. The "Open in Maps" button simply opens a Google Maps URL, which needs no key.
+- **Email/password auth:** built in (bcrypt + JWT). It works anywhere once `JWT_SECRET` is set.
+- **Google sign-in:** uses Emergent-managed auth (`https://auth.emergentagent.com` in `frontend/src/auth.tsx`, verified in `POST /api/auth/session`). Outside Emergent, replace it with your own Google OAuth client, or hide the Google button.
 
-## Backend
-
-FastAPI, async throughout. The venv is `/root/.venv` (`python` on PATH);
-dependencies come from `backend/requirements.txt`.
-
-- **Entry point.** `backend/server.py` creates `app`, creates
-  `api_router = APIRouter(prefix="/api")`, registers routes **on the router**,
-  then calls `app.include_router(api_router)`. CORS is open. Never attach a
-  route to `app` directly; it lands outside `/api` and the phone cannot reach
-  it.
-- **The route pattern.** Copy the `status` route: a Pydantic model for the
-  body and one for the response (`StatusCheckCreate`, `StatusCheck`), an
-  `async def` handler decorated with
-  `@api_router.post("/status", response_model=StatusCheck)`, and an awaited
-  motor call inside. FastAPI validates the body before your handler runs; a bad
-  body gets an automatic `422` with `{"detail": [...]}`.
-- **Growing.** When `server.py` gets crowded, move models to `backend/models/`
-  and routes to `backend/routers/`, one module per resource, each exporting an
-  `APIRouter` that `server.py` mounts with `api_router.include_router(...)`.
-- **MongoDB.** `server.py` creates `client = AsyncIOMotorClient(MONGO_URL)` and
-  `db = client[DB_NAME]`; routers import `db` from there (or from
-  `backend/lib/db.py` once you split files). Collections are attributes:
-  `await db.status_checks.find({}, {"_id": 0}).sort("timestamp", -1).limit(limit).to_list(limit)`.
-  Every query's index goes in `INDEXES` next to `db`. Motor connects
-  lazily, so importing `server` never waits on Mongo.
-- **Ids.** Documents use a string `id` from `uuid4`, not `ObjectId`, which
-  cannot be turned into JSON. Keep the `uuid4` default-factory pattern and
-  leave `_id` out of every response.
-- **Config.** `backend/.env` holds `MONGO_URL` and `DB_NAME`, loaded with
-  `python-dotenv`. Mongo runs in the pod, so `MONGO_URL` is `localhost`. Add
-  new secrets here and read them with `os.environ`.
-- **Dates.** Store aware UTC (`datetime.now(timezone.utc)`, never `utcnow()`);
-  motor returns datetimes without a timezone, so attach one before comparing.
-- **Quick check.** `cd /app/backend && python -c 'import server'` catches
-  syntax and import errors without waiting for the supervisor log.
-
-## Frontend
-
-- The app is built with Expo, React Native and React, written in strict
-  TypeScript. The version is as per mentioned in `package.json`. Check there
-  if it matters. Metro, the dev server, listens on port `3000` and
-  does two jobs at once: it serves the web preview you see in the browser, and
-  it serves the manifest that Expo Go downloads when a phone scans the QR
-  code. The import alias `@/*` points at the root of the app folder, so
-  `@/src/theme` means `frontend/src/theme.ts`.
-- **Routing** is expo-router, file-based: every file under `app/` is a screen
-  (`app/profile/settings.tsx` is `/profile/settings`), `_layout.tsx` files
-  define navigators, typed routes are on. Non-screen code (components, hooks,
-  the API module, utilities) goes under `src/`. `app/index.tsx` is a
-  placeholder; replace it.
-- **Root layout.** `app/_layout.tsx` wraps the app in `ErrorBoundary` →
-  `QueryClientProvider` → `KeyboardProvider` → `<Stack>`. Keep those when you
-  rewrite it; add your route groups and login gating inside the `Stack`.
-- **Theme.** `src/theme.ts` holds the color tokens (keys match the `color`
-  block of `/app/design_guidelines.json`), `useTheme()` and `makeStyles()`.
-  Every color in a `.tsx` file comes from it; see `TEMPLATE.md` §5.
-- **Storage.** `import { storage } from "@/src/utils/storage"`: `getItem`,
-  `setItem`, `removeItem` for ordinary data; `secureGet`, `secureSet`,
-  `secureRemove` for tokens. Never import AsyncStorage, SecureStore, MMKV or
-  `expo-sqlite/kv-store` directly.
-- **Uploads.** `import { uploadForm } from "@/src/utils/upload"` for every
-  file upload: `uploadForm(url, { fields, files: { image: { uri, name, mimeType } } })`.
-  Never append `{ uri, name, type }` to a `FormData` yourself and never set
-  `Content-Type`; that passes in the web preview and throws
-  `Unsupported FormDataPart implementation` on a phone (see `TEMPLATE.md` §9).
-- **Data.** TanStack Query is wired (`src/query-client.ts`, provider in the
-  root layout). Use `useQuery` and `useMutation` against one typed API module
-  (`src/api.ts`, see `TEMPLATE.md` §4), not fetch inside `useEffect`. Nothing
-  generates types across the Python boundary: write a TypeScript interface
-  mirroring each Pydantic model and change both in the same edit.
-- **Error boundary.** `src/components/error-boundary.tsx` is mounted once at
-  the root; a render crash shows a reload screen instead of a blank app. Do not
-  add more.
-- **testIDs.** `constants/testIds/` is the registry (`auth.js` ships); one file
-  per feature, re-exported from `index.js`. React Native uses `testID`, with
-  kebab-case values by role.
-- **`app.json`** is yours: name, slug, scheme, icon/splash, plugins,
-  permissions. `ios.bundleIdentifier` and `android.package` are set by the
-  platform; leave them unless the user asks.
-- **Packages.** `yarn expo install <package>` for SDK-matched versions. Never
-  npm; avoid plain `yarn add` for Expo/RN packages. The `preinstall` guard
-  refuses `expo-av`, `expo-barcode-scanner`, `expo-background-fetch` and
-  `expo-file-system/legacy`.
-
-## TypeScript
-
-`tsconfig.json` extends `expo/tsconfig.base` with `strict: true`. In the pod:
+## 8. Local development
 
 ```bash
-cd /app/frontend && yarn tsc --noEmit
+# 1) Backend
+cd backend
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt   # see note on emergentintegrations below
+uvicorn server:app --host 0.0.0.0 --port 8001 --reload
+
+# 2) Frontend (new terminal)
+cd frontend
+yarn install
+yarn start            # press w for web, or scan the QR code with Expo Go
 ```
 
-Metro only transpiles, so this is the only place type errors show up. Lint
-with `yarn lint` from the same directory (`expo lint`).
+> `requirements.txt` includes `emergentintegrations`, which is installed from Emergent's package index:
+> `pip install emergentintegrations --extra-index-url https://d33sy5i8bnduwe.cloudfront.net/simple/`
+> It is only needed by `scripts/translate.py`. You can remove that line if you don't regenerate translations.
 
-## When the build is complete (tier 1)
+> `frontend/package.json` has a `preinstall` guard script from the Emergent template. If it blocks installs on your machine, remove the `preinstall` line.
 
-Run three checks once, in the same turn: a curl smoke over the key `/api`
-endpoints through `EXPO_PUBLIC_BACKEND_URL` (status plus one field, and one
-request that should fail); `yarn tsc --noEmit` from the app dir; and one
-happy-path walk through the core journey on the web preview at a phone
-viewport. All clean → restart Metro and finish. Any failure is a real bug: fix
-it, re-run that check, then hand over to the testing subagent. No typecheck,
-lint or smoke passes while still building; tier 1 runs exactly once.
+**Demo accounts** are created by the seeder (driver/passenger demo users). The admin account comes from `ADMIN_EMAIL` / `ADMIN_PASSWORD`. **Change all demo passwords before going to production.**
 
-## Testing
-
-**Backend (pytest).** Specs in `tests/` at the template root as `test_*.py`.
-The ini lives in `backend/`, so pass it explicitly or its settings are skipped:
+## 9. Testing
 
 ```bash
-cd /app && pytest -c backend/pytest.ini tests
+cd backend
+export EXPO_PUBLIC_BACKEND_URL=http://localhost:8001
+export ADMIN_PASSWORD=<your admin password>
+pytest -q                    # API suites in backend/tests
+cd ../frontend && yarn lint  # ESLint
+npx tsc --noEmit             # type check
 ```
 
-`backend/pytest.ini` sets `addopts = -n 2 --dist loadscope`, so tests already
-run in parallel; do not pass your own `-n`. Serial is `-n 0`, never
-`-p no:xdist` (it errors, because `addopts` still passes `-n`). Tests hit the
-live uvicorn process on `8001`, the same app the preview shows.
+## 10. Build & deployment
 
-**Frontend (web preview).** The testing subagent drives `http://localhost:3000`
-with Playwright at a phone viewport and writes
-`/app/test_reports/iteration_N.json`. It cannot open Expo Go, so native-only
-chrome (native tabs, SF Symbols, permission prompts) is checked by following
-`TEMPLATE.md` §6 to §8, not by screenshot. Give it every login through
-`memory/test_credentials.md`.
+- **Inside Emergent:** use **Publish → Deploy**, then generate iOS/Android builds.
+- **Self-hosted:** run the backend behind HTTPS (Docker, Render, Railway, a VM, etc.) with MongoDB Atlas. Build the app with EAS (`eas build -p android|ios`) under your own Expo account, after changing `bundleIdentifier`/`package` in `app.json`.
 
-## Pod conventions
+Full guide: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
-In the Emergent pod this template runs under supervisord; these override the
-local-run notes above.
+## 11. Dependencies on Emergent services
 
-- Programs: `expo` (Metro, `/app/frontend`), `backend` (uvicorn,
-  `/app/backend`), `mongodb`. After changing
-  `.env` or `app.json`, or installing a dependency, restart and wait:
+| Feature | Emergent dependency | Independent replacement |
+|---|---|---|
+| Driver document & profile photos | Emergent Object Storage (`EMERGENT_LLM_KEY`) | S3 / Cloudinary / GCS — update `put_object`/`get_object` in `server.py` |
+| Google sign-in | Emergent-managed auth | Your own Google OAuth client |
+| Re-generating translations | `emergentintegrations` + Emergent LLM key | Any LLM API (the existing JSON files already work offline) |
+| Hosting & builds | Emergent deploy/build | Any host + EAS Build |
 
-  ```bash
-  sudo supervisorctl restart expo backend
-  for i in $(seq 60); do curl -sf http://localhost:8001/api/ >/dev/null && break; sleep 1; done
-  for i in $(seq 90); do curl -s -m 2 http://localhost:3000/status | grep -q 'packager-status:running' && break; sleep 2; done
-  ```
+Everything else (carpooling, bookings, chat, hire-a-driver, admin, maps, PIN search, routing, email/password login) runs without Emergent.
 
-- Status only after a restart you triggered: `sudo supervisorctl status expo
-  backend`. Logs: `/var/log/supervisor/expo.err.log`,
-  `expo.out.log`, `backend.err.log`, `backend.out.log`.
-- In a browser, open the preview URL. On a phone,
-  scan the Expo Go QR code. The backend answers on `8001` directly, or through
-  the preview URL under `/api`.
-- Mongo runs in the pod (`mongod --bind_ip_all`); `MONGO_URL` is `localhost`.
-- Both servers reload on code edits (Fast Refresh, uvicorn `--reload`), so
-  normal iteration needs no restart. You still restart after `.env`,
-  `app.json` or package changes, and always restart Metro before handing the
-  preview back to the user.
-- Protected, never edit (relative to the app dir): `metro.config.js`,
-  `scripts/**`, `tsconfig.json`, `eslint.config.js`, the platform keys in
-  `.env`, and `backend/pytest.ini`. Never create `eas.json`.
+## 12. Map data & attribution
+
+Map data © OpenStreetMap contributors (ODbL). PIN codes © India Post. Routing by OSRM. Respect each provider's usage policy: Nominatim allows at most 1 request/s and no autocomplete use, and is rate-limited in `geo.py`. For production traffic, use a commercial or self-hosted tile, geocoding and routing provider. Also check that the map's borders follow Survey of India rules before launch.
+
+## 13. Troubleshooting
+
+| Problem | Fix |
+|---|---|
+| App shows network errors | `EXPO_PUBLIC_BACKEND_URL` must be reachable from the phone (use your LAN IP, not `localhost`) |
+| `KeyError: 'JWT_SECRET'` | Create `backend/.env` from the example |
+| Photo uploads fail | `EMERGENT_LLM_KEY` is missing, or replace the storage provider (section 11) |
+| Location search slow or empty | Public OSM services are rate-limited or down; results are cached and fall back automatically. Check Admin → Map database |
+| Google login fails outside Emergent | Expected. See section 7 |
+| Metro cache issues | `yarn start --clear` |
+
+## 14. License
+
+Proprietary — all rights reserved. See [LICENSE](LICENSE).

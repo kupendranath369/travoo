@@ -155,7 +155,7 @@ class TestSync:
         assert requests.get(f"{API}/admin/geo/report", timeout=20).status_code in (401, 403)
 
     def test_admin_sync_and_report(self):
-        tok = login("admin@travoo.in", "TravooAdmin@2026")
+        tok = login("admin@travoo.in", os.environ.get("ADMIN_PASSWORD", "change-me"))
         r = requests.post(f"{API}/admin/geo/sync", headers=h(tok), timeout=180)
         assert r.status_code == 200, r.text
         assert r.json()["status"] in ("started", "running"), r.json()

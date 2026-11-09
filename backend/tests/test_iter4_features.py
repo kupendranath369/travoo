@@ -1,3 +1,4 @@
+import os
 """TRAVOO iteration 4: route estimate, cost-sharing cap + return trip, recent searches, missing places, fuel prices,
 Hire-a-Driver flow (pro register/approve/search/book/mask/accept/start/complete/review), chat conversations/read ticks/system msgs,
 public verified photo."""
@@ -24,7 +25,7 @@ def next_weekday_date(days_ahead=3):
 
 @pytest.fixture(scope="module")
 def admin():
-    return login("admin@travoo.in", "TravooAdmin@2026")
+    return login("admin@travoo.in", os.environ.get("ADMIN_PASSWORD", "change-me"))
 
 
 @pytest.fixture(scope="module")

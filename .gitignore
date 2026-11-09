@@ -80,3 +80,14 @@ memory/test_credentials.md
 
 # Mobile development
 android-sdk/
+# Secrets — never commit real environment files or keys
+.env
+.env.*
+**/.env
+**/.env.*
+!.env.example
+!**/.env.example
+*.key
+*serviceAccount*.json
+google-services.json
+GoogleService-Info.plist

@@ -1,9 +1,10 @@
+import os
 """Helper: create approved TEST driver + vehicle and print creds (for UI tests)."""
 import uuid
 import requests
 from test_travoo_api import API, h, login
 
-adm = login("admin@travoo.in", "TravooAdmin@2026")
+adm = login("admin@travoo.in", os.environ.get("ADMIN_PASSWORD", "change-me"))
 email = f"test_uidrv_{uuid.uuid4().hex[:6]}@example.com"
 r = requests.post(f"{API}/auth/register", json={"email": email, "password": "Passw0rd!x", "name": "TEST UiDriver", "consent": True}).json()
 tok, uid = r["token"], r["user"]["user_id"]

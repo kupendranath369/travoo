@@ -47,7 +47,7 @@ VERIF = {"legal_name": "TEST Driver Doc", "vehicle_name": "Maruti Swift", "phone
 
 @pytest.fixture(scope="module", autouse=True)
 def setup():
-    S["admin"] = login("admin@travoo.in", "TravooAdmin@2026")
+    S["admin"] = login("admin@travoo.in", os.environ.get("ADMIN_PASSWORD", "change-me"))
     S["tok"], S["user"] = register("docs")
     S["other"], _ = register("other")
     S["empty"], S["empty_user"] = register("empty")
