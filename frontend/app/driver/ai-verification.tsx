@@ -8,7 +8,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { api } from "@/src/api";
 import { useAuth } from "@/src/auth";
 import { useToast } from "@/src/components/toast";
-import { Badge, Btn, Card, Field, Header, T, space } from "@/src/components/ui";
+import { Badge, Btn, Card, Field, Header, T, radius, space } from "@/src/components/ui";
 import { useI18n } from "@/src/i18n";
 import { useTheme } from "@/src/theme";
 import { extractLicenceInfo, extractRCInfo, extractTextFromImage } from "@/src/utils/ocr";

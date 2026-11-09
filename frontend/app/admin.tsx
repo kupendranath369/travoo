@@ -11,7 +11,7 @@ import { useAuth } from "@/src/auth";
 import { LocationField } from "@/src/components/LocationField";
 import { MapDataCard } from "@/src/components/MapDataCard";
 import { useToast } from "@/src/components/toast";
-import { Badge, Btn, Card, Chip, Empty, ErrorBox, Field, Header, Loading, Section, Stepper, T, space, statusTone } from "@/src/components/ui";
+import { Badge, Btn, Card, Chip, Empty, ErrorBox, Field, Header, Loading, Section, Stepper, T, radius, space, statusTone } from "@/src/components/ui";
 import { inr, useI18n } from "@/src/i18n";
 import { useTheme } from "@/src/theme";
 
@@ -300,7 +300,7 @@ export default function AdminScreen() {
                   </View>
                 ) : null}
                 <View style={{ flexDirection: "row", gap: space.sm }}>
-                  <Btn small variant="outline" label="View Details" onPress={() => router.push(`/users/${u.user_id}`)} />
+                  <Btn small variant="outline" label="View Details" onPress={() => router.push(`/user/${u.user_id}`)} />
                   {u.suspended ? <Btn small variant="danger" label="Unsuspend" onPress={() => act(`/admin/users/${u.user_id}/suspend`, { suspended: false }, "PUT")} /> : <Btn small variant="outline" label="Suspend" onPress={() => act(`/admin/users/${u.user_id}/suspend`, { suspended: true }, "PUT")} />}
                 </View>
               </Card>

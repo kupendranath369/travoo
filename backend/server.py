@@ -219,7 +219,9 @@ async def get_user(request: Request) -> dict:
 async def user_from_token(token: str) -> dict:
     uid = None
     try:
-        uid = jwt.decode(token, JWT_SECRET, algorithms=["HS256"]).get("sub")
+        payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+        if not payload.get("purpose"):
+            uid = payload.get("sub")
     except jwt.InvalidTokenError:
         sess = await db.user_sessions.find_one({"session_token": token}, {"_id": 0})
         if sess:
@@ -307,19 +309,22 @@ async def forgot_password(body: ForgotPasswordIn):
         return {"message": "If the email exists, a reset link will be sent"}
     
     # Generate reset token
-    reset_token = make_token(user["user_id"])
+    reset_token = jwt.encode(
+        {"sub": user["user_id"], "purpose": "reset", "ph": (user.get("password_hash") or "")[-12:],
+         "exp": now() + timedelta(hours=1), "iat": now()},
+        JWT_SECRET, algorithm="HS256")
     reset_link = f"{FRONTEND_URL}/reset-password?token={reset_token}"
     
     # Send email
     subject = "Reset Your Travoo Password"
-    body = f"""Hello {user.get('name', 'User')},
+    text = f"""Hello {user.get('name', 'User')},
 
 We received a request to reset your Travoo password.
 
 Click the link below to reset your password:
 {reset_link}
 
-This link will expire in 24 hours.
+This link will expire in 1 hour.
 
 If you didn't request this, please ignore this email.
 
@@ -327,15 +332,11 @@ Best regards,
 Travoo Team
 """
     
-    email_sent = send_email(body.email, subject, body)
-    
-    if email_sent:
+    if send_email(body.email, subject, text):
         logger.info(f"Password reset email sent to {body.email}")
-        return {"message": "Password reset email sent"}
     else:
-        # Fallback: return token for testing if email fails
-        logger.warning(f"Email send failed, returning token for testing")
-        return {"message": "Password reset email sent (token for testing)", "reset_token": reset_token}
+        logger.warning("Password reset email could not be sent (email not configured)")
+    return {"message": "If the email exists, a reset link will be sent"}
 
 
 class ResetPasswordIn(BaseModel):
@@ -347,13 +348,13 @@ class ResetPasswordIn(BaseModel):
 async def reset_password(body: ResetPasswordIn):
     """Reset password using the token"""
     try:
-        uid = jwt.decode(body.token, JWT_SECRET, algorithms=["HS256"]).get("sub")
+        payload = jwt.decode(body.token, JWT_SECRET, algorithms=["HS256"])
     except jwt.InvalidTokenError:
         raise HTTPException(400, "Invalid or expired reset token")
-    
-    user = await db.users.find_one({"user_id": uid})
-    if not user:
-        raise HTTPException(404, "User not found")
+    uid = payload.get("sub")
+    user = await db.users.find_one({"user_id": uid}) if payload.get("purpose") == "reset" else None
+    if not user or payload.get("ph") != (user.get("password_hash") or "")[-12:]:
+        raise HTTPException(400, "Invalid or expired reset token")
     
     new_hash = hash_pw(body.new_password)
     await db.users.update_one({"user_id": uid}, {"$set": {"password_hash": new_hash}})

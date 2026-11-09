@@ -6,7 +6,12 @@ from datetime import datetime, timedelta, timezone
 import pytest
 import requests
 
-BASE_URL = os.environ.get("EXPO_BACKEND_URL", os.environ.get("EXPO_PUBLIC_BACKEND_URL")).rstrip("/")
+BASE_URL = (os.environ.get("EXPO_BACKEND_URL") or os.environ.get("EXPO_PUBLIC_BACKEND_URL") or "").rstrip("/")
+if not BASE_URL:
+    with open("/app/frontend/.env") as fh:
+        for line in fh:
+            if line.startswith("EXPO_PUBLIC_BACKEND_URL="):
+                BASE_URL = line.split("=", 1)[1].strip().strip('"').rstrip("/")
 API = f"{BASE_URL}/api"
 IST = timezone(timedelta(hours=5, minutes=30))
 S = {}

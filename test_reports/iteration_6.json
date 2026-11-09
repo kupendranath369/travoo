@@ -1,0 +1,71 @@
+{
+  "summary": "Smoke/regression pass after import + 'build and run'. Backend boots with new .env; admin login (admin@travoo.in) works; 112 backend pytest cases passed (existing suites test_travoo_api, test_driver_documents, test_iter3/4/5 + new test_iter6_smoke), 1 skipped, 1 FAILED (forgot-password 500). Expo web bundles, language -> auth -> admin login -> all 5 tabs, search (Bengaluru->Chennai, 7 results), /driver page, AI and Manual verification screens all load. Admin dashboard CRASHED ('radius is not defined') because of a missing import - fixed by tester, now renders. Driver verification is functionally BROKEN for new drivers: the new AI/Manual screens use placeholder upload buttons (set state to 'temp_fid', no picker/upload), so submit always fails with 'Please upload: profile, licence, rc, vehicle photo'; AI OCR throws uncaught tesseract.js errors (red overlay). Since driver.tsx no longer renders DocPhotos for unsubmitted drivers, a new user cannot get verified from the UI and so cannot publish rides. No deprecated packages (expo-av/expo-barcode-scanner/expo-background-fetch) detected.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "POST /api/auth/forgot-password", "issue": "500 Internal Server Error for any EXISTING email. RCA: inside forgot_password() the email text is assigned to a local named `body`, shadowing the request model, then `send_email(body.email, ...)` -> AttributeError: 'str' object has no attribute 'email'. Reference: /app/backend/server.py:315 and :329", "priority": "HIGH"},
+      {"endpoint": "POST /api/auth/forgot-password + /api/auth/reset-password", "issue": "SECURITY: once the shadowing bug is fixed, when SMTP isn't configured (SMTP_USER/SMTP_PASSWORD not in .env -> send_email returns False) the endpoint returns `reset_token` in the response = anyone can reset any account (incl. admin) by knowing the email. Also reset token is make_token(user_id) = the same 7-day session JWT (no purpose claim, not single-use), and reset-password accepts ANY valid session JWT. Reference: /app/backend/server.py:310, :336-338, :350", "priority": "CRITICAL"}
+    ],
+    "minor": [
+      {"endpoint": "POST /api/driver/ocr-verification", "issue": "Accepts empty OCR text and creates/updates a driver_documents record even when nothing was extracted (frontend sends it after tesseract failures)."},
+      {"endpoint": "seed data", "issue": "Search results show leftover 'TEST Silk Board' trips and 'TEST_drv' earnings from earlier test iterations to real users (admin overview + search)."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Admin dashboard (app/admin.tsx)", "issue": "Crashed with 'radius is not defined' (radius used at lines 490/562 but not imported). FIXED by tester by adding radius to the ui import.", "testID": "profile-admin-row", "priority": "CRITICAL (fixed)"},
+      {"component": "AI verification (app/driver/ai-verification.tsx)", "issue": "Same missing `radius` import at line 147 (OCR results card) - FIXED by tester.", "testID": "n/a", "priority": "HIGH (fixed)"},
+      {"component": "Manual verification (app/driver/manual-verification.tsx:62-82)", "issue": "Upload buttons are placeholders: onPress={() => setX('temp_fid')}; no image picker, nothing uploaded to POST /api/driver/documents/{kind}. Submit -> 400 'Please upload: profile, licence, rc, vehicle photo'. New drivers cannot complete verification.", "testID": "none", "priority": "CRITICAL"},
+      {"component": "AI verification (app/driver/ai-verification.tsx:56-100,111-131)", "issue": "Same placeholder uploads; 'Process with AI OCR' runs tesseract.js on the string 'temp_fid' -> 3x uncaught 'Error attempting to read image' (Expo red error overlay), then still POSTs empty text to /driver/ocr-verification and shows 'OCR Results'. Also successive setF({...f, ...}) calls overwrite each other (stale closure) so only the last extracted field is kept.", "testID": "none", "priority": "CRITICAL"},
+      {"component": "Admin users list (app/admin.tsx:303)", "issue": "'View Details' pushes `/users/${id}` but the route is app/user/[id].tsx -> unmatched route.", "testID": "none", "priority": "MEDIUM"},
+      {"component": "Forgot password (app/forgot-password.tsx:47)", "issue": "Ionicons name 'mail-check' does not exist (renders '?'). Use e.g. 'mail-open' / 'checkmark-circle'.", "testID": "none", "priority": "LOW"}
+    ],
+    "integration_issues": [
+      {"flow": "New driver verification -> publish ride", "issue": "driver.tsx only offers AI/Manual buttons for unsubmitted drivers (DocPhotos uploader removed from that state); both sub-screens never upload photos, so /driver/verification always 400s. Offer tab stays at 'Get verified to publish rides' forever for new users (backend flow itself works - verified by pytest).", "affected_testIDs": ["driver-verification-status"]}
+    ],
+    "design_issues": [
+      {"screen": "Home header", "issues": ["Travoo logo is overlapped/clipped by the shield icon button at 390px width."]},
+      {"screen": "Admin dashboard tabs", "issues": ["Untranslated i18n keys shown raw: 'admin.passengers', 'admin.licence_verifications'."]},
+      {"screen": "AI/Manual verification", "issues": ["No testIDs on any upload buttons, fields or submit buttons."]}
+    ],
+    "react_native_issues": [
+      {"component": "tesseract.js OCR", "issue": "tesseract.js 7 is a web-worker/browser library; it will not work in a native React Native/Expo Go runtime. Move OCR to backend (e.g. LLM vision via Emergent key) or a native OCR module. Reference: /app/frontend/src/utils/ocr.ts:1"},
+      {"component": "NativeTabs import", "issue": "`expo-router/unstable-native-tabs` is deprecated (Metro warning) - use `expo-router/native-tabs`. Reference: /app/frontend/app/(tabs)/_layout.tsx:3"}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter6_smoke.py",
+    "/app/backend/tests/test_travoo_api.py",
+    "/app/backend/tests/test_driver_documents.py",
+    "/app/backend/tests/test_iter3_retests.py",
+    "/app/backend/tests/test_iter4_features.py",
+    "/app/backend/tests/test_iter5_geo.py",
+    "/app/test_reports/pytest/pytest_iter6.xml",
+    "/app/test_reports/pytest/pytest_iter6_smoke.xml"
+  ],
+  "action_items": [
+    "CRITICAL: Restore real document upload in app/driver/manual-verification.tsx and ai-verification.tsx (reuse DocPhotos component / POST /api/driver/documents/{kind}) or re-show DocPhotos in driver.tsx for unsubmitted drivers; otherwise no new driver can get verified.",
+    "CRITICAL: Fix AI OCR: don't run tesseract on placeholder strings; catch worker errors; preferably do OCR server-side (tesseract.js won't run on native). Fix stale setF updates (use one merged setF(prev => ({...prev, ...extracted}))).",
+    "HIGH: server.py forgot_password - rename the local email text variable (e.g. email_body) so body.email works; REMOVE the `reset_token` fallback in the response; issue a dedicated short-lived single-use reset token (purpose claim) and make reset-password reject normal session JWTs.",
+    "MEDIUM: admin.tsx:303 route `/users/${id}` -> `/user/${id}`.",
+    "LOW: add i18n keys admin.passengers / admin.licence_verifications; fix 'mail-check' icon; fix home header logo overlap; add testIDs to verification screens; switch to expo-router/native-tabs.",
+    "Create /app/memory/test_credentials.md (file is MISSING) with admin@travoo.in / Admin@12345."
+  ],
+  "critical_code_review_comments": [
+    "server.py is 2272 lines - should be split into routers (auth, driver, trips, bookings, admin, hire).",
+    "admin.tsx is 591 lines; driver.tsx keeps dead code (submit, submitLicenceVerification, licenceFront/Back state) after the UI was removed.",
+    "FRONTEND_URL has a localhost default in server.py:47 (should fail fast per env rules).",
+    "Frontend .env uses EXPO_PUBLIC_BACKEND_URL (no EXPO_BACKEND_URL); old tests needed a fallback."
+  ],
+  "updated_files": [
+    "/app/frontend/app/admin.tsx (added missing `radius` import)",
+    "/app/frontend/app/driver/ai-verification.tsx (added missing `radius` import)",
+    "/app/backend/tests/test_iter5_geo.py (BASE_URL fallback to frontend/.env)",
+    "/app/backend/tests/test_iter6_smoke.py (new)"
+  ],
+  "success_rate": {"backend": "99% (112/113 passed, 1 skipped; forgot-password fails)", "frontend": "~70% (navigation/auth/search/admin OK after fix; driver verification flow broken)"},
+  "seed_data_creation": "Created TEST users test_iter6_drv@example.com, test_iter6_fp@example.com, test_i6_* - deleted by user_id afterwards. pytest suites create TEST_ users/trips/bookings (not auto-cleaned, as in previous iterations). test_travoo_api temporarily toggles instant_driver_approval and restores it.",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Run backend tests with ADMIN_PASSWORD=Admin@12345 env (test_travoo_api's admin fixture defaults to 'change-me'). pytest.ini enables xdist (-n). Admin account has driver_status not_submitted - do NOT submit verification as admin; use TEST users. Driver approval for tests: register -> upload docs via POST /api/driver/documents/{kind} -> /driver/verification -> admin /admin/drivers/{uid}/review.",
+  "rca_of_issue": "Admin crash: `radius` referenced in admin.tsx without import (TS2304) - fixed. forgot-password 500: variable shadowing of `body` in server.py forgot_password(). Driver verification broken: new AI/Manual screens were scaffolded with placeholder 'temp_fid' upload handlers and never call the upload API, while driver.tsx removed the working DocPhotos uploader for the unsubmitted state."
+}

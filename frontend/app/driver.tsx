@@ -1,5 +1,5 @@
 import Ionicons from "@react-native-vector-icons/ionicons";
-import { useFocusEffect } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import React, { useCallback, useState } from "react";
 import { Image, Pressable, Switch, View } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
@@ -127,9 +127,7 @@ export default function DriverScreen() {
             
             <Btn icon="sparkles" label="AI Verification" onPress={() => router.push("/driver/ai-verification")} />
             <Btn variant="outline" icon="person-circle" label="Manual Verification" onPress={() => router.push("/driver/manual-verification")} />
-          </Card>
             {err ? <T testID="verify-error" color={colors.error}>{err}</T> : null}
-            <Btn testID="verify-submit-button" label={t("verify.submit")} onPress={submit} loading={busy === "v"} />
           </Card>
         ) : p.documents?.licence_no ? (
           <Card style={{ gap: 4 }}>

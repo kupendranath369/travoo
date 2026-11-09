@@ -53,3 +53,13 @@ Pan-India intercity paid carpooling app (BlaBlaCar model) called TRAVOO, tagline
 - Central MongoDB location DB (2dsphere) grows from every lookup; geo_cache TTL; pincodes collection; geo_misses (searches with no result); daily sync job (refresh OSM places >30d via Nominatim lookup, mark outdated, verify curated coords, refresh PINs, merge duplicates) + admin "Sync now" + last sync date shown
 - Trips store route_line; along-route passenger matching (direction-aware); route map on offer/trip, route alternatives, nearby pickup chips, OSM Leaflet maps (WebView/iframe) replace react-native-maps pin
 - MongoDB kept instead of PostGIS (2dsphere covers needs; no migration of existing data)
+
+## 2026-06 — Build & run session
+- Created missing backend/.env and frontend/.env; backend + Expo now start.
+- Fixed JSX syntax error and missing `router` import in app/driver.tsx (bundle failed).
+- Fixed admin crash (missing `radius` import), admin "View Details" route, broken forgot-password icon.
+- Forgot-password: fixed 500 error; reset token no longer returned in API; now a separate 1-hour, single-use reset token (login tokens rejected).
+### Open (P0)
+- Driver verification uploads in driver/manual-verification.tsx & ai-verification.tsx are placeholders; drivers cannot submit documents. Client-side OCR (tesseract.js) won't work natively — move to server.
+### P1
+- Raw translation keys (admin.passengers, admin.licence_verifications), header logo overlap at 390px, old TEST data in DB, email (SMTP) not configured so reset emails aren't sent.

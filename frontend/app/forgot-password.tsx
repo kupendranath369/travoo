@@ -44,7 +44,7 @@ export default function ForgotPasswordScreen() {
       <KeyboardAwareScrollView bottomOffset={24} keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: space.lg, gap: space.lg, paddingBottom: insets.bottom + space.xl }}>
         {sent ? (
           <View style={{ gap: space.md, alignItems: "center", paddingVertical: space.xl }}>
-            <Ionicons name="mail-check" size={80} color={colors.success} />
+            <Ionicons name="mail-open-outline" size={80} color={colors.success} />
             <T size={20} weight="700" center>Email Sent</T>
             <T center color={colors.muted}>We've sent a password reset link to {email}. Please check your inbox and follow the instructions.</T>
             {resetToken ? (
