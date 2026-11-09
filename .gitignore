@@ -91,3 +91,6 @@ android-sdk/
 *serviceAccount*.json
 google-services.json
 GoogleService-Info.plist
+*.env
+credentials.json
+.credentials
