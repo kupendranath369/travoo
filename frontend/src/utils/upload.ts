@@ -43,26 +43,13 @@ export async function toFormDataPart(file: LocalFile): Promise<Blob> {
     const type = file.mimeType || blob.type;
     return type && type !== blob.type ? new Blob([blob], { type }) : blob;
   }
-  // Native: use expo-file-system to read the file more reliably on mobile
+  // Native: use expo/fetch directly which handles file:// and content:// URIs
   try {
-    const fileInfo = await FileSystem.getInfoAsync(file.uri);
-    if (!fileInfo.exists) {
-      throw new Error(`File does not exist: ${file.uri}`);
-    }
-    const base64 = await FileSystem.readAsStringAsync(file.uri, { encoding: "base64" });
-    const byteCharacters = atob(base64);
-    const byteNumbers = new Array(byteCharacters.length);
-    for (let i = 0; i < byteCharacters.length; i++) {
-      byteNumbers[i] = byteCharacters.charCodeAt(i);
-    }
-    const byteArray = new Uint8Array(byteNumbers);
-    const blob = new Blob([byteArray], { type: file.mimeType || "image/jpeg" });
-    return blob;
-  } catch (e) {
-    console.error("Error reading file with FileSystem, falling back to expo/fetch:", e);
-    // Fallback to expo/fetch if FileSystem fails
     const blob = await (await expoFetch(file.uri)).blob();
     return file.mimeType && file.mimeType !== blob.type ? new Blob([blob], { type: file.mimeType }) : blob;
+  } catch (e) {
+    console.error("Error reading file with expo/fetch:", e);
+    throw new Error(`Failed to read file: ${file.uri}`);
   }
 }
 

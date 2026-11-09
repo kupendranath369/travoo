@@ -255,6 +255,24 @@ async def login(body: LoginIn):
     return {"token": make_token(user["user_id"]), "user": await db.users.find_one({"user_id": user["user_id"]}, USER_PRIVATE)}
 
 
+class ForgotPasswordIn(BaseModel):
+    email: EmailStr
+
+
+@api.post("/auth/forgot-password")
+async def forgot_password(body: ForgotPasswordIn):
+    """Send password reset email (placeholder - in production, integrate with email service)"""
+    user = await db.users.find_one({"email": body.email.lower()})
+    if not user:
+        # Don't reveal if email exists for security
+        return {"message": "If the email exists, a reset link will be sent"}
+    # TODO: Integrate with email service (SendGrid, AWS SES, etc.)
+    # For now, log the reset token
+    reset_token = make_token(user["user_id"])
+    logger.info(f"Password reset for {body.email}: token={reset_token}")
+    return {"message": "Password reset email sent"}
+
+
 @api.post("/auth/session")
 async def google_session(body: SessionIn):
     async with httpx.AsyncClient(timeout=15) as hc:
@@ -1194,7 +1212,13 @@ async def admin_stats(_: dict = Depends(get_admin)):
 @api.get("/admin/users")
 async def admin_users(q: str = "", _: dict = Depends(get_admin)):
     filt = {"$or": [{"name": {"$regex": re.escape(q), "$options": "i"}}, {"email": {"$regex": re.escape(q), "$options": "i"}}]} if q else {}
-    return await db.users.find(filt, USER_PRIVATE).sort("created_at", -1).to_list(200)
+    users = await db.users.find(filt, USER_PRIVATE).sort("created_at", -1).to_list(200)
+    # Enrich with additional stats
+    for u in users:
+        u["trip_count"] = await db.trips.count_documents({"driver_id": u["user_id"]})
+        u["booking_count"] = await db.bookings.count_documents({"passenger_id": u["user_id"]})
+        u["rating"] = u.get("rating_avg", 0)
+    return users
 
 
 class SuspendIn(BaseModel):
@@ -1217,6 +1241,31 @@ async def admin_drivers(status: str = "under_review", _: dict = Depends(get_admi
     for u in users:
         u["documents"] = await db.driver_documents.find_one({"user_id": u["user_id"]}, {"_id": 0})
         u["vehicles"] = await db.vehicles.find({"owner_id": u["user_id"], "deleted": {"$ne": True}}, {"_id": 0}).to_list(10)
+        u["trip_count"] = await db.trips.count_documents({"driver_id": u["user_id"]})
+        u["booking_count"] = await db.bookings.count_documents({"driver_id": u["user_id"]})
+        u["earnings"] = await db.earnings_ledger.aggregate([
+            {"$match": {"driver_id": u["user_id"]}},
+            {"$group": {"_id": "$driver_id", "total": {"$sum": "$amount"}}}
+        ]).to_list(1)
+        u["total_earnings"] = u["earnings"][0]["total"] if u["earnings"] else 0
+    return users
+
+
+@api.get("/admin/passengers")
+async def admin_passengers(q: str = "", _: dict = Depends(get_admin)):
+    """Get all passengers with their booking history and stats"""
+    filt = {"$or": [{"name": {"$regex": re.escape(q), "$options": "i"}}, {"email": {"$regex": re.escape(q), "$options": "i"}}]} if q else {}
+    users = await db.users.find(filt, USER_PRIVATE).to_list(200)
+    for u in users:
+        u["booking_count"] = await db.bookings.count_documents({"passenger_id": u["user_id"]})
+        u["completed_trips"] = await db.bookings.count_documents({"passenger_id": u["user_id"], "status": "completed"})
+        u["cancelled_trips"] = await db.bookings.count_documents({"passenger_id": u["user_id"], "status": "cancelled"})
+        u["total_spent"] = await db.bookings.aggregate([
+            {"$match": {"passenger_id": u["user_id"], "status": "completed"}},
+            {"$group": {"_id": "$passenger_id", "total": {"$sum": "$fare_total"}}}
+        ]).to_list(1)
+        u["total_spent"] = u["total_spent"][0]["total"] if u["total_spent"] else 0
+        u["recent_bookings"] = await db.bookings.find({"passenger_id": u["user_id"]}, {"_id": 0}).sort("created_at", -1).to_list(5)
     return users
 
 

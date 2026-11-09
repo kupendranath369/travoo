@@ -9,7 +9,7 @@ import { api, fileUrl } from "@/src/api";
 import { useAuth } from "@/src/auth";
 import { DOC_KINDS, DocPhotos } from "@/src/components/DocPhotos";
 import { useToast } from "@/src/components/toast";
-import { Badge, Btn, Card, Chip, Field, Header, Loading, Section, Stepper, T, space, statusTone } from "@/src/components/ui";
+import { Badge, Btn, Card, Chip, Field, Header, Loading, Section, Stepper, T, radius, space, statusTone } from "@/src/components/ui";
 import { useI18n } from "@/src/i18n";
 import { useTheme } from "@/src/theme";
 
@@ -125,6 +125,10 @@ export default function DriverScreen() {
             <T weight="800">{t("verify.photos")}</T>
             <DocPhotos photos={p.documents?.photos ?? {}} editable onUploaded={() => load().catch(() => {})} />
             {DOC_KINDS.some((k) => !p.documents?.photos?.[k]) ? <T testID="verify-photos-required" size={12} color={colors.brandTertiary}>{t("verify.photos_required")}</T> : null}
+            <View style={{ backgroundColor: colors.surfaceTertiary, padding: space.sm, borderRadius: radius.md, flexDirection: "row", alignItems: "center", gap: space.sm }}>
+              <Ionicons name="information-circle" size={14} color={colors.brandPrimary} />
+              <T size={12} color={colors.muted}>Your documents will be reviewed within 24 hours after submission.</T>
+            </View>
             
             <Section title="Driving Licence Verification" right={
               licenceVerification?.status === "verified" ? 
@@ -144,6 +148,15 @@ export default function DriverScreen() {
                 </Pressable>
               </View>
               <Btn label="Submit for Verification" onPress={submitLicenceVerification} loading={busy === "licence"} disabled={!licenceFront || !licenceBack} />
+              <View style={{ backgroundColor: colors.surfaceTertiary, padding: space.sm, borderRadius: radius.md, flexDirection: "row", alignItems: "center", gap: space.sm }}>
+                <Ionicons name="information-circle" size={14} color={colors.brandPrimary} />
+                <T size={12} color={colors.muted}>Your licence will be reviewed within 24 hours after submission.</T>
+              </View>
+            </Section>
+              <View style={{ backgroundColor: colors.surfaceTertiary, padding: space.sm, borderRadius: radius.md, flexDirection: "row", alignItems: "center", gap: space.sm }}>
+                <Ionicons name="information-circle" size={14} color={colors.brandPrimary} />
+                <T size={12} color={colors.muted}>Your licence will be reviewed within 24 hours after submission.</T>
+              </View>
             </Section>
             
             <Field testID="verify-legal-name" label={t("verify.legal_name")} value={f.legal_name} onChangeText={(x) => setF({ ...f, legal_name: x })} />

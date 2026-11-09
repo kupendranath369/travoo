@@ -14,9 +14,9 @@ import { Badge, Btn, Card, Chip, Empty, ErrorBox, Field, Header, Loading, Sectio
 import { inr, useI18n } from "@/src/i18n";
 import { useTheme } from "@/src/theme";
 
-const TABS = ["overview", "drivers", "licence_verifications", "pro", "places", "users", "trips", "bookings", "tickets", "reviews", "routes", "settings"] as const;
+const TABS = ["overview", "drivers", "passengers", "licence_verifications", "pro", "places", "users", "trips", "bookings", "tickets", "reviews", "routes", "settings"] as const;
 type Tab = (typeof TABS)[number];
-const PATH: Record<Tab, string> = { overview: "/admin/stats", drivers: "/admin/drivers", licence_verifications: "/admin/licence-verifications", pro: "/admin/pro-drivers", places: "/admin/locations/missing", users: "/admin/users", trips: "/admin/trips", bookings: "/admin/bookings", tickets: "/admin/tickets", reviews: "/admin/reviews", routes: "/routes/popular", settings: "/admin/settings" };
+const PATH: Record<Tab, string> = { overview: "/admin/stats", drivers: "/admin/drivers", passengers: "/admin/passengers", licence_verifications: "/admin/licence-verifications", pro: "/admin/pro-drivers", places: "/admin/locations/missing", users: "/admin/users", trips: "/admin/trips", bookings: "/admin/bookings", tickets: "/admin/tickets", reviews: "/admin/reviews", routes: "/routes/popular", settings: "/admin/settings" };
 
 export default function AdminScreen() {
   const insets = useSafeAreaInsets();
@@ -238,6 +238,39 @@ export default function AdminScreen() {
                   <Btn small label="Verify" onPress={() => act(`/admin/licence-verifications/${v.verification_id}/review`, { decision: "verified", reason: note, verification_method: "manual", official_verified: false })} />
                   <Btn small variant="danger" label="Reject" onPress={() => act(`/admin/licence-verifications/${v.verification_id}/review`, { decision: "rejected", reason: note, verification_method: "manual", official_verified: false })} />
                   <Btn small variant="outline" label="Resubmit" onPress={() => act(`/admin/licence-verifications/${v.verification_id}/review`, { decision: "resubmit_required", reason: note, verification_method: "manual", official_verified: false })} />
+                </View>
+              </Card>
+            ))}
+          </>
+        );
+      case "passengers":
+        return (
+          <>
+            <Field placeholder="Search passengers..." value={note} onChangeText={setNote} />
+            {data.length === 0 ? <Empty title={t("admin.empty")} /> : null}
+            {data.map((u: any) => (
+              <Card key={u.user_id} style={{ gap: space.sm }}>
+                <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                  <T weight="800">{u.name} · {u.email}</T>
+                  <Badge label={u.driver_status} tone={statusTone(u.driver_status)} />
+                </View>
+                <View style={{ flexDirection: "row", gap: space.md, flexWrap: "wrap" }}>
+                  <T size={12}>Bookings: {u.booking_count}</T>
+                  <T size={12}>Completed: {u.completed_trips}</T>
+                  <T size={12}>Cancelled: {u.cancelled_trips}</T>
+                  <T size={12}>Total Spent: ₹{u.total_spent}</T>
+                </View>
+                {u.recent_bookings?.length > 0 ? (
+                  <View style={{ gap: space.xs }}>
+                    <T size={12} weight="700">Recent Bookings:</T>
+                    {u.recent_bookings.slice(0, 3).map((b: any) => (
+                      <T key={b.booking_id} size={11} color={colors.muted}>{b.route} · ₹{b.fare_total} · {b.status}</T>
+                    ))}
+                  </View>
+                ) : null}
+                <View style={{ flexDirection: "row", gap: space.sm }}>
+                  <Btn small variant="outline" label="View Details" onPress={() => router.push(`/users/${u.user_id}`)} />
+                  {u.suspended ? <Btn small variant="danger" label="Unsuspend" onPress={() => act(`/admin/users/${u.user_id}/suspend`, { suspended: false }, "PUT")} /> : <Btn small variant="outline" label="Suspend" onPress={() => act(`/admin/users/${u.user_id}/suspend`, { suspended: true }, "PUT")} />}
                 </View>
               </Card>
             ))}

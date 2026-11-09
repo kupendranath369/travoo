@@ -81,6 +81,11 @@ export default function AuthScreen() {
           ) : null}
           {err ? <T testID="auth-error" color={colors.error} weight="600">{err}</T> : null}
           <Btn testID="auth-submit-button" label={mode === "login" ? t("auth.login") : t("auth.register")} onPress={submit} loading={busy} />
+          {mode === "login" ? (
+            <Pressable onPress={() => router.push("/forgot-password")} style={{ padding: space.md }}>
+              <T center weight="700" color={colors.brandPrimary}>Forgot Password?</T>
+            </Pressable>
+          ) : null}
           <View style={{ flexDirection: "row", alignItems: "center", gap: space.md }}>
             <View style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
             <T color={colors.muted}>{t("auth.or")}</T>

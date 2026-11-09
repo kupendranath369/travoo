@@ -125,9 +125,9 @@ export function DocPhotos({ photos, editable, onUploaded }: { photos: Record<str
         return (
           <Pressable key={k} testID={`doc-photo-${k}`} disabled={!editable || busy === k} onPress={() => setKind(k)} style={{ width: Platform.OS === "web" ? "47%" : "48%", flexGrow: 1, aspectRatio: 1.2, borderRadius: radius.md, borderWidth: 1, borderStyle: fid ? "solid" : "dashed", borderColor: fid ? colors.success : colors.borderStrong, backgroundColor: colors.surfaceTertiary, overflow: "hidden", alignItems: "center", justifyContent: "center" }}>
             {fid ? <Image source={{ uri: fileUrl(fid) }} style={{ position: "absolute", width: "100%", height: "100%" }} contentFit="cover" /> : <Ionicons name={ICONS[k]} size={30} color={colors.brandPrimary} />}
-            <View style={{ position: "absolute", left: 0, right: 0, bottom: 0, padding: space.xs, backgroundColor: fid ? colors.brand : "transparent", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4, paddingHorizontal: space.sm }}>
+            <View style={{ position: "absolute", left: 0, right: 0, bottom: 0, paddingVertical: space.sm, paddingHorizontal: space.xs, backgroundColor: fid ? colors.brand : "transparent", alignItems: "center", justifyContent: "center", gap: 4 }}>
               {busy === k ? <ActivityIndicator size="small" color={fid ? colors.onBrand : colors.brandPrimary} /> : fid ? <Ionicons name="checkmark-circle" size={14} color={colors.onBrand} /> : null}
-              <T size={11} weight="700" color={fid ? colors.onBrand : colors.onSurface} numberOfLines={2} center style={{ flex: 1 }}>{t(`verify.photo.${k}`)}</T>
+              <T size={10} weight="700" color={fid ? colors.onBrand : colors.onSurface} numberOfLines={2} center textAlign="center">{t(`verify.photo.${k}`)}</T>
             </View>
           </Pressable>
         );
