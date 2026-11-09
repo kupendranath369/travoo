@@ -37,6 +37,14 @@ export default function AdminScreen() {
   const [note, setNote] = useState("");
   const [preview, setPreview] = useState<string | null>(null);
   const [fuel, setFuel] = useState<Record<string, string>>({});
+  const [reviewDriver, setReviewDriver] = useState<any | null>(null);
+  const [validationChecks, setValidationChecks] = useState<Record<string, boolean>>({
+    licence_expiry_valid: false,
+    rc_matches_vehicle: false,
+    profile_matches_licence: false,
+    documents_clear: false,
+    vehicle_verified: false,
+  });
   useEffect(() => {
     if (tab === "settings") api("/fuel-prices").then((r) => setFuel(Object.fromEntries(Object.entries(r.prices).map(([k, v]: any) => [k, String(v.price)])))).catch(() => {});
   }, [tab]);
@@ -62,6 +70,38 @@ export default function AdminScreen() {
     } catch (e: any) {
       toast(e.message, "error");
     }
+  };
+
+  const validateDriverDocuments = (driver: any) => {
+    const docs = driver.documents || {};
+    const checks = { ...validationChecks };
+    
+    // Validate licence expiry
+    if (docs.licence_expiry) {
+      const expiryDate = new Date(docs.licence_expiry);
+      const today = new Date();
+      checks.licence_expiry_valid = expiryDate > today;
+    }
+    
+    // Validate RC matches vehicle (basic check - if vehicle name exists and RC exists)
+    checks.rc_matches_vehicle = !!(docs.vehicle_name && docs.rc_no);
+    
+    // Profile matches licence (basic check - if both exist)
+    checks.profile_matches_licence = !!(docs.photos?.profile && docs.photos?.licence);
+    
+    // All documents uploaded
+    checks.documents_clear = !!(docs.photos?.profile && docs.photos?.licence && docs.photos?.rc && docs.photos?.vehicle);
+    
+    // Vehicle verified
+    checks.vehicle_verified = driver.vehicles && driver.vehicles.length > 0;
+    
+    setValidationChecks(checks);
+    return checks;
+  };
+
+  const openDriverReview = (driver: any) => {
+    setReviewDriver(driver);
+    validateDriverDocuments(driver);
   };
 
   if (user?.role !== "admin") return <View style={{ flex: 1 }}><Header title={t("admin.title")} /><Empty icon="lock-closed" title="Admin access required" /></View>;
@@ -137,7 +177,10 @@ export default function AdminScreen() {
             {data.length === 0 ? <Empty title={t("admin.empty")} /> : null}
             {data.map((u: any) => (
               <Card key={u.user_id} testID={`admin-driver-${u.user_id}`} style={{ gap: space.sm }}>
-                <T weight="800">{u.name} · {u.email}</T>
+                <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                  <T weight="800">{u.name} · {u.email}</T>
+                  <Btn small variant="outline" icon="document-text-outline" label="Legal Review" onPress={() => openDriverReview(u)} />
+                </View>
                 <View style={{ flexDirection: "row", gap: space.sm }}>
                   {["profile", "licence", "rc", "vehicle"].map((k) => (
                     <Pressable key={k} testID={`admin-doc-${k}-${u.user_id}`} onPress={() => u.documents?.photos?.[k] && setPreview(fileUrl(u.documents.photos[k]))} style={{ flex: 1, aspectRatio: 1, borderRadius: 8, overflow: "hidden", backgroundColor: colors.surfaceTertiary, alignItems: "center", justifyContent: "center" }}>
@@ -339,6 +382,71 @@ export default function AdminScreen() {
           {preview ? <Image source={{ uri: preview }} style={{ width: "100%", height: "80%" }} contentFit="contain" /> : null}
           <T color={colors.onSurfaceInverse} weight="700">{t("common.close")}</T>
         </Pressable>
+      </Modal>
+      <Modal visible={!!reviewDriver} transparent animationType="slide" onRequestClose={() => setReviewDriver(null)}>
+        <Pressable style={{ flex: 1, backgroundColor: colors.scrim }} onPress={() => setReviewDriver(null)} />
+        <View style={{ backgroundColor: colors.surfaceSecondary, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, padding: space.lg, paddingBottom: insets.bottom + space.lg, gap: space.md, maxHeight: "90%" }}>
+          <ScrollView>
+            <T size={20} weight="800" center>Legal Document Review</T>
+            <T size={12} color={colors.muted} center>Driver: {reviewDriver?.name} ({reviewDriver?.email})</T>
+            
+            <Card style={{ gap: space.md }}>
+              <T weight="700">Document Validation Checklist</T>
+              
+              <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
+                <Switch value={validationChecks.licence_expiry_valid} onValueChange={(v) => setValidationChecks({ ...validationChecks, licence_expiry_valid: v })} trackColor={{ true: colors.success, false: colors.border }} />
+                <T>Licence expiry valid (till {reviewDriver?.documents?.licence_expiry})</T>
+              </View>
+              
+              <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
+                <Switch value={validationChecks.rc_matches_vehicle} onValueChange={(v) => setValidationChecks({ ...validationChecks, rc_matches_vehicle: v })} trackColor={{ true: colors.success, false: colors.border }} />
+                <T>RC matches vehicle ({reviewDriver?.documents?.vehicle_name})</T>
+              </View>
+              
+              <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
+                <Switch value={validationChecks.profile_matches_licence} onValueChange={(v) => setValidationChecks({ ...validationChecks, profile_matches_licence: v })} trackColor={{ true: colors.success, false: colors.border }} />
+                <T>Profile photo matches licence</T>
+              </View>
+              
+              <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
+                <Switch value={validationChecks.documents_clear} onValueChange={(v) => setValidationChecks({ ...validationChecks, documents_clear: v })} trackColor={{ true: colors.success, false: colors.border }} />
+                <T>All documents clear and readable</T>
+              </View>
+              
+              <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
+                <Switch value={validationChecks.vehicle_verified} onValueChange={(v) => setValidationChecks({ ...validationChecks, vehicle_verified: v })} trackColor={{ true: colors.success, false: colors.border }} />
+                <T>Vehicle details verified</T>
+              </View>
+            </Card>
+            
+            <Card style={{ gap: space.sm }}>
+              <T weight="700">Document Details</T>
+              <T size={12}>Legal Name: {reviewDriver?.documents?.legal_name}</T>
+              <T size={12}>Licence No: {reviewDriver?.documents?.licence_no}</T>
+              <T size={12}>Licence Expiry: {reviewDriver?.documents?.licence_expiry}</T>
+              <T size={12}>RC No: {reviewDriver?.documents?.rc_no}</T>
+              <T size={12}>Vehicle: {reviewDriver?.documents?.vehicle_name}</T>
+              <T size={12}>Phone: {reviewDriver?.documents?.phone}</T>
+            </Card>
+            
+            <Card style={{ gap: space.sm }}>
+              <T weight="700">Vehicles</T>
+              {reviewDriver?.vehicles?.map((v: any) => (
+                <T key={v.vehicle_id} size={12}>{v.make} {v.model} ({v.reg_no}) - {v.vtype}</T>
+              ))}
+            </Card>
+            
+            <Field placeholder="Additional review notes" value={note} onChangeText={setNote} multiline numberOfLines={3} />
+            
+            <View style={{ flexDirection: "row", gap: space.sm }}>
+              <Btn style={{ flex: 1 }} label="Approve" onPress={() => { act(`/admin/drivers/${reviewDriver.user_id}/review`, { decision: "approved", note }); setReviewDriver(null); }} />
+              <Btn style={{ flex: 1 }} variant="danger" label="Reject" onPress={() => { act(`/admin/drivers/${reviewDriver.user_id}/review`, { decision: "rejected", note }); setReviewDriver(null); }} />
+              <Btn style={{ flex: 1 }} variant="outline" label="Resubmit" onPress={() => { act(`/admin/drivers/${reviewDriver.user_id}/review`, { decision: "resubmit", note }); setReviewDriver(null); }} />
+            </View>
+            
+            <Btn variant="ghost" label="Cancel" onPress={() => setReviewDriver(null)} />
+          </ScrollView>
+        </View>
       </Modal>
     </View>
   );
