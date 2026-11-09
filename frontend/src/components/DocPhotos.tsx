@@ -34,23 +34,36 @@ export function DocPhotos({ photos, editable, onUploaded }: { photos: Record<str
   const upload = async (k: string, asset: ImagePicker.ImagePickerAsset) => {
     setBusy(k);
     try {
-      console.log(`Uploading ${k}:`, { uri: asset.uri, fileName: asset.fileName, mimeType: asset.mimeType });
+      console.log(`Uploading ${k}:`, { uri: asset.uri, fileName: asset.fileName, mimeType: asset.mimeType, fileSize: asset.fileSize });
       
-      // Handle mobile file URI
+      // Handle mobile file URI - ensure we have a valid URI
       const fileUri = asset.uri;
+      if (!fileUri) {
+        throw new Error("No file URI provided");
+      }
+      
+      // Generate a proper filename
       const fileName = asset.fileName || `${k}_${Date.now()}.jpg`;
       const mimeType = asset.mimeType || "image/jpeg";
+      
+      console.log(`Starting upload to ${API_BASE}/driver/documents/${k}`);
       
       const res = await uploadForm(`${API_BASE}/driver/documents/${k}`, {
         headers: { Authorization: `Bearer ${getApiToken()}` },
         files: { file: { uri: fileUri, name: fileName, mimeType } },
       });
-      console.log(`Upload response for ${k}:`, res.status);
+      
+      console.log(`Upload response for ${k}:`, res.status, res.statusText);
+      
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
         console.error(`Upload failed for ${k}:`, d);
-        throw new Error((d as any).detail || "Upload failed");
+        throw new Error((d as any).detail || `Upload failed with status ${res.status}`);
       }
+      
+      const result = await res.json();
+      console.log(`Upload success for ${k}:`, result);
+      
       toast(`${t(`verify.photo.${k}`)} · ${t("verify.uploaded")}`);
       onUploaded();
     } catch (e: any) {
@@ -65,16 +78,21 @@ export function DocPhotos({ photos, editable, onUploaded }: { photos: Record<str
     const opts: ImagePicker.ImagePickerOptions = { 
       mediaTypes: ["images"], 
       quality: 0.8, 
-      allowsEditing: true,
+      allowsEditing: Platform.OS === "web", // Only allow editing on web, not mobile
       exif: false,
+      aspect: [4, 3], // Set aspect ratio for better mobile experience
     };
     try {
+      console.log(`Launching ${s} for ${k}`);
       const r = s === "camera" ? await ImagePicker.launchCameraAsync(opts) : await ImagePicker.launchImageLibraryAsync(opts);
       setKind(null);
       setPerm(null);
+      
       if (!r.canceled && r.assets && r.assets[0]) {
         console.log(`Selected ${k} from ${s}:`, r.assets[0]);
         upload(k, r.assets[0]);
+      } else {
+        console.log(`User canceled ${s} for ${k}`);
       }
     } catch (e: any) {
       console.error(`Error launching ${s} for ${k}:`, e);
