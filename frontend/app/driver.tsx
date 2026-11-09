@@ -91,6 +91,7 @@ export default function DriverScreen() {
             {DOC_KINDS.some((k) => !p.documents?.photos?.[k]) ? <T testID="verify-photos-required" size={12} color={colors.brandTertiary}>{t("verify.photos_required")}</T> : null}
             <Field testID="verify-legal-name" label={t("verify.legal_name")} value={f.legal_name} onChangeText={(x) => setF({ ...f, legal_name: x })} />
             <Field testID="verify-vehicle-name" label={t("verify.vehicle_name")} value={f.vehicle_name} onChangeText={(x) => setF({ ...f, vehicle_name: x })} placeholder="Maruti Suzuki Dzire" />
+            {f.vehicle_name ? <T size={12} color={colors.brandPrimary} weight="600">{f.vehicle_name}</T> : null}
             <Field testID="verify-phone" label={t("verify.phone")} value={f.phone} onChangeText={(x) => setF({ ...f, phone: x.replace(/\D/g, "") })} keyboardType="phone-pad" maxLength={10} />
             <Field testID="verify-licence" label={t("verify.licence")} value={f.licence_no} onChangeText={(x) => setF({ ...f, licence_no: x.toUpperCase() })} autoCapitalize="characters" placeholder="KA0120200001234" />
             <Field testID="verify-licence-expiry" label={t("verify.licence_exp")} value={f.licence_expiry} onChangeText={(x) => setF({ ...f, licence_expiry: x })} placeholder="31-12-2035" maxLength={10} />

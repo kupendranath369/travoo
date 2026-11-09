@@ -23,8 +23,8 @@ export default function HireScreen() {
   const router = useRouter();
   const p = useLocalSearchParams<{ city?: string; service?: string }>();
   const [city, setCity] = useState<Loc | null>(p.city ? JSON.parse(p.city) : null);
-  const [pickup, setPickup] = useState("");
-  const [dest, setDest] = useState("");
+  const [pickup, setPickup] = useState<Loc | null>(null);
+  const [dest, setDest] = useState<Loc | null>(null);
   const [date, setDate] = useState<string | null>(isoDate(new Date(Date.now() + 86400000)));
   const [time, setTime] = useState("09:00");
   const [service, setService] = useState(p.service || "hourly");
@@ -41,7 +41,7 @@ export default function HireScreen() {
 
   const find = async () => {
     if (!city || !date) return setErr(`${t("v2.city")} *`);
-    if (!pickup.trim() || !vdesc.trim()) return setErr(`${t("v2.pickup_loc")} / ${t("v2.your_vehicle")} *`);
+    if (!pickup || !vdesc.trim()) return setErr(`${t("v2.pickup_loc")} / ${t("v2.your_vehicle")} *`);
     setErr("");
     setBusy(true);
     try {
@@ -55,7 +55,7 @@ export default function HireScreen() {
     setBusy(false);
   };
 
-  const request = (d: any) => router.push({ pathname: "/user/[id]", params: { id: d.user_id, hire: JSON.stringify({ driver_id: d.user_id, service_type: service, date, time, hours, city: locPayload(city!), pickup: pickup.trim(), destination: dest.trim(), vehicle_type: vtype, vehicle_desc: vdesc.trim(), estimate: d.estimate }) } });
+  const request = (d: any) => router.push({ pathname: "/user/[id]", params: { id: d.user_id, hire: JSON.stringify({ driver_id: d.user_id, service_type: service, date, time, hours, city: locPayload(city!), pickup: locPayload(pickup!), destination: dest ? locPayload(dest) : null, vehicle_type: vtype, vehicle_desc: vdesc.trim(), estimate: d.estimate }) } });
 
   const form = (
     <View style={{ gap: space.md }}>
@@ -63,8 +63,8 @@ export default function HireScreen() {
         <LocationField testID="hire-city-field" label={t("v2.city")} value={city} onChange={setCity} icon="business-outline" />
         <DateField testID="hire-date" label={t("search.date")} value={date} onChange={setDate} />
       </Card>
-      <Field testID="hire-pickup-input" label={t("v2.pickup_loc")} value={pickup} onChangeText={setPickup} />
-      <Field testID="hire-destination-input" label={t("v2.destination_opt")} value={dest} onChangeText={setDest} />
+      <LocationField testID="hire-pickup-field" label={t("v2.pickup_loc")} value={pickup} onChange={setPickup} icon="location-outline" />
+      <LocationField testID="hire-destination-field" label={t("v2.destination_opt")} value={dest} onChange={setDest} icon="navigate-outline" />
       <T size={13} weight="600" color={colors.muted}>{t("v2.service")}</T>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: space.sm }}>
         {SERVICES.map((s) => <Chip key={s} testID={`hire-service-${s}`} label={t(`v2.svc.${s}`)} active={service === s} onPress={() => setService(s)} />)}

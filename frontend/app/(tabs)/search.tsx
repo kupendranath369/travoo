@@ -99,7 +99,7 @@ export default function SearchScreen() {
           </Pressable>
         )}
         {!editing ? (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ height: 56, flexGrow: 0 }} contentContainerStyle={{ gap: space.sm, paddingHorizontal: space.lg, alignItems: "center" }}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ height: 56, flexGrow: 0 }} contentContainerStyle={{ gap: space.sm, paddingHorizontal: space.lg, alignItems: "center", justifyContent: "center" }}>
             <Chip testID="sort-early" icon="time-outline" label={t("sort.early")} active={sort === "early"} onPress={() => setSort("early")} />
             <Chip testID="sort-price" icon="pricetag-outline" label={t("sort.price")} active={sort === "price"} onPress={() => setSort("price")} />
             <Chip testID="sort-rating" icon="star-outline" label={t("sort.rating")} active={sort === "rating"} onPress={() => setSort("rating")} />

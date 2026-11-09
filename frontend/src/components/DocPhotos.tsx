@@ -2,7 +2,7 @@ import Ionicons from "@react-native-vector-icons/ionicons";
 import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
 import React, { useState } from "react";
-import { ActivityIndicator, Linking, Modal, Pressable, View } from "react-native";
+import { ActivityIndicator, Linking, Modal, Platform, Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { API_BASE, fileUrl, getApiToken } from "@/src/api";
@@ -77,11 +77,11 @@ export function DocPhotos({ photos, editable, onUploaded }: { photos: Record<str
       {DOC_KINDS.map((k) => {
         const fid = photos?.[k];
         return (
-          <Pressable key={k} testID={`doc-photo-${k}`} disabled={!editable || busy === k} onPress={() => setKind(k)} style={{ width: "47%", flexGrow: 1, aspectRatio: 1.2, borderRadius: radius.md, borderWidth: 1, borderStyle: fid ? "solid" : "dashed", borderColor: fid ? colors.success : colors.borderStrong, backgroundColor: colors.surfaceTertiary, overflow: "hidden", alignItems: "center", justifyContent: "center" }}>
+          <Pressable key={k} testID={`doc-photo-${k}`} disabled={!editable || busy === k} onPress={() => setKind(k)} style={{ width: Platform.OS === "web" ? "47%" : "48%", flexGrow: 1, aspectRatio: 1.2, borderRadius: radius.md, borderWidth: 1, borderStyle: fid ? "solid" : "dashed", borderColor: fid ? colors.success : colors.borderStrong, backgroundColor: colors.surfaceTertiary, overflow: "hidden", alignItems: "center", justifyContent: "center" }}>
             {fid ? <Image source={{ uri: fileUrl(fid) }} style={{ position: "absolute", width: "100%", height: "100%" }} contentFit="cover" /> : <Ionicons name={ICONS[k]} size={30} color={colors.brandPrimary} />}
             <View style={{ position: "absolute", left: 0, right: 0, bottom: 0, padding: space.xs, backgroundColor: fid ? colors.brand : "transparent", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4 }}>
               {busy === k ? <ActivityIndicator size="small" color={fid ? colors.onBrand : colors.brandPrimary} /> : fid ? <Ionicons name="checkmark-circle" size={14} color={colors.onBrand} /> : null}
-              <T size={12} weight="700" color={fid ? colors.onBrand : colors.onSurface} numberOfLines={1}>{t(`verify.photo.${k}`)}</T>
+              <T size={12} weight="700" color={fid ? colors.onBrand : colors.onSurface} numberOfLines={1} textAlign="center">{t(`verify.photo.${k}`)}</T>
             </View>
           </Pressable>
         );
@@ -89,10 +89,10 @@ export function DocPhotos({ photos, editable, onUploaded }: { photos: Record<str
       <Modal visible={!!kind} transparent animationType="slide" onRequestClose={() => { setKind(null); setPerm(null); }}>
         <Pressable style={{ flex: 1, backgroundColor: colors.scrim }} onPress={() => { setKind(null); setPerm(null); }} />
         <View testID="doc-photo-sheet" style={{ backgroundColor: colors.surfaceSecondary, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, padding: space.lg, paddingBottom: insets.bottom + space.lg, gap: space.md }}>
-          <T size={18} weight="800">{kind ? t(`verify.photo.${kind}`) : ""}</T>
+          <T size={18} weight="800" textAlign="center">{kind ? t(`verify.photo.${kind}`) : ""}</T>
           {perm ? (
             <>
-              <T color={colors.muted}>{t(perm.source === "camera" ? "verify.perm_camera" : "verify.perm_gallery")}</T>
+              <T color={colors.muted} textAlign="center">{t(perm.source === "camera" ? "verify.perm_camera" : "verify.perm_gallery")}</T>
               {perm.blocked ? (
                 <Btn testID="doc-open-settings-button" icon="settings-outline" label={t("loc.settings")} onPress={() => Linking.openSettings()} />
               ) : (
