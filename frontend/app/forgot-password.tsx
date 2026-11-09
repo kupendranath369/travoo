@@ -21,17 +21,15 @@ export default function ForgotPasswordScreen() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [sent, setSent] = useState(false);
-  const [resetToken, setResetToken] = useState("");
 
   const submit = async () => {
     if (!email || !email.includes("@")) return setErr("Please enter a valid email");
     setBusy(true);
     setErr("");
     try {
-      const res = await api("/auth/forgot-password", { body: { email } });
+      await api("/auth/forgot-password", { body: { email: email.trim() } });
       setSent(true);
-      setResetToken(res.reset_token || "");
-      toast("Password reset email sent");
+      toast("Check your inbox for the reset link");
     } catch (e: any) {
       setErr(e.message);
     }
@@ -45,23 +43,18 @@ export default function ForgotPasswordScreen() {
         {sent ? (
           <View style={{ gap: space.md, alignItems: "center", paddingVertical: space.xl }}>
             <Ionicons name="mail-open-outline" size={80} color={colors.success} />
-            <T size={20} weight="700" center>Email Sent</T>
-            <T center color={colors.muted}>We've sent a password reset link to {email}. Please check your inbox and follow the instructions.</T>
-            {resetToken ? (
-              <View style={{ gap: space.sm, alignItems: "center" }}>
-                <T size={12} color={colors.brandTertiary} center>For testing: Click below to reset password</T>
-                <Btn label="Reset Password" onPress={() => router.push({ pathname: "/reset-password", params: { token: resetToken } })} />
-              </View>
-            ) : null}
-            <Btn variant="ghost" label="Back to Login" onPress={() => router.back()} />
+            <T testID="forgot-sent-title" size={20} weight="700" center>Check your email</T>
+            <T center color={colors.muted}>If an account exists for {email}, we&apos;ve sent a link to reset your password. It expires in 1 hour. Check your spam folder too.</T>
+            <Btn testID="forgot-resend-button" variant="outline" label="Send again" onPress={submit} loading={busy} />
+            <Btn testID="forgot-back-button" variant="ghost" label="Back to Login" onPress={() => router.back()} />
           </View>
         ) : (
           <>
-            <T center color={colors.muted}>Enter your email address and we'll send you a link to reset your password.</T>
-            <Field label="Email" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" />
-            {err ? <T color={colors.error} weight="600">{err}</T> : null}
-            <Btn label="Send Reset Link" onPress={submit} loading={busy} />
-            <Btn variant="ghost" label="Back to Login" onPress={() => router.back()} />
+            <T center color={colors.muted}>Enter your email address and we&apos;ll send you a link to reset your password.</T>
+            <Field testID="forgot-email-input" label="Email" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" />
+            {err ? <T testID="forgot-error" color={colors.error} weight="600">{err}</T> : null}
+            <Btn testID="forgot-submit-button" label="Send Reset Link" onPress={submit} loading={busy} />
+            <Btn testID="forgot-cancel-button" variant="ghost" label="Back to Login" onPress={() => router.back()} />
           </>
         )}
       </KeyboardAwareScrollView>

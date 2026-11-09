@@ -63,3 +63,11 @@ Pan-India intercity paid carpooling app (BlaBlaCar model) called TRAVOO, tagline
 - Driver verification uploads in driver/manual-verification.tsx & ai-verification.tsx are placeholders; drivers cannot submit documents. Client-side OCR (tesseract.js) won't work natively — move to server.
 ### P1
 - Raw translation keys (admin.passengers, admin.licence_verifications), header logo overlap at 390px, old TEST data in DB, email (SMTP) not configured so reset emails aren't sent.
+
+## 2026-06 — Reset emails + driver uploads
+- Password-reset emails now really sent (Emergent managed email, sender "TRAVOO"), 1h single-use link, 60s throttle per account, sent in background.
+- Driver verification: AI + Manual screens use the real photo uploader (profile, licence, RC, vehicle) via private object storage; AI screen reads licence + RC server-side (GPT-5.4 vision, /api/driver/ai-extract) and pre-fills details.
+- Fixed: logged-out users could not open forgot/reset password pages (testing agent fix in _layout.tsx).
+### Backlog
+- P1: sign out other devices after password reset; remove old tesseract OCR code + unused endpoints.
+- P2: split server.py; translate new verification screen text.

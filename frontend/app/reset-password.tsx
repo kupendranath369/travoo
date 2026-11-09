@@ -44,18 +44,18 @@ export default function ResetPasswordScreen() {
         {success ? (
           <View style={{ gap: space.md, alignItems: "center", paddingVertical: space.xl }}>
             <Ionicons name="checkmark-circle" size={80} color={colors.success} />
-            <T size={20} weight="700" center>Password Reset Successful</T>
+            <T testID="reset-success-title" size={20} weight="700" center>Password Reset Successful</T>
             <T center color={colors.muted}>Your password has been reset successfully. You can now log in with your new password.</T>
-            <Btn label="Go to Login" onPress={() => router.replace("/auth")} />
+            <Btn testID="reset-go-login-button" label="Go to Login" onPress={() => router.replace("/auth")} />
           </View>
         ) : (
           <>
             <T center color={colors.muted}>Enter your new password below.</T>
-            <Field label="New Password" value={password} onChangeText={setPassword} secureTextEntry />
-            <Field label="Confirm Password" value={confirmPassword} onChangeText={setConfirmPassword} secureTextEntry />
-            {err ? <T color={colors.error} weight="700">{err}</T> : null}
-            <Btn label="Reset Password" onPress={submit} loading={busy} />
-            <Btn variant="ghost" label="Back to Login" onPress={() => router.replace("/auth")} />
+            <Field testID="reset-password-input" label="New Password" value={password} onChangeText={setPassword} secureTextEntry />
+            <Field testID="reset-confirm-input" label="Confirm Password" value={confirmPassword} onChangeText={setConfirmPassword} secureTextEntry />
+            {err ? <T testID="reset-error" color={colors.error} weight="700">{err}</T> : null}
+            <Btn testID="reset-submit-button" label="Reset Password" onPress={submit} loading={busy} />
+            <Btn testID="reset-back-button" variant="ghost" label="Back to Login" onPress={() => router.replace("/auth")} />
           </>
         )}
       </KeyboardAwareScrollView>

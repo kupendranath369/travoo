@@ -22,10 +22,13 @@ from pydantic import BaseModel, EmailStr, Field
 from pymongo import ASCENDING, DESCENDING, GEOSPHERE, IndexModel, ReturnDocument
 from pymongo.errors import DuplicateKeyError
 from starlette.middleware.cors import CORSMiddleware
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
 
+from html import escape as html_escape
+import base64
+import json as jsonlib
+
+from email_service import send_email
+from emergentintegrations.llm.chat import ImageContent, LlmChat, StreamDone, TextDelta, UserMessage
 from geo import GEO_INDEXES, LOC_OUT, circle, get_router, haversine, loc_doc
 from seed_data import PLACES, POPULAR_ROUTES, STATES
 
@@ -39,11 +42,6 @@ IST = timezone(timedelta(hours=5, minutes=30))
 EMERGENT_SESSION_URL = "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data"
 
 # Email configuration
-SMTP_HOST = os.environ.get("SMTP_HOST", "smtp.gmail.com")
-SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))
-SMTP_USER = os.environ.get("SMTP_USER", "")
-SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "")
-EMAIL_FROM = os.environ.get("EMAIL_FROM", "noreply@travoo.in")
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:19006")
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
@@ -152,34 +150,6 @@ PUBLIC_FIELDS = {"_id": 0, "user_id": 1, "name": 1, "picture": 1, "rating_avg": 
 
 async def public_user(uid: str) -> dict:
     return await db.users.find_one({"user_id": uid}, PUBLIC_FIELDS) or {"user_id": uid, "name": "Unknown"}
-
-
-def send_email(to: str, subject: str, body: str, html: str = "") -> bool:
-    """Send email using SMTP"""
-    if not SMTP_USER or not SMTP_PASSWORD:
-        logger.warning("SMTP credentials not configured, skipping email send")
-        return False
-    
-    try:
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = subject
-        msg["From"] = EMAIL_FROM
-        msg["To"] = to
-        
-        msg.attach(MIMEText(body, "plain"))
-        if html:
-            msg.attach(MIMEText(html, "html"))
-        
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
-            server.starttls()
-            server.login(SMTP_USER, SMTP_PASSWORD)
-            server.send_message(msg)
-        
-        logger.info(f"Email sent to {to}: {subject}")
-        return True
-    except Exception as e:
-        logger.error(f"Failed to send email to {to}: {e}")
-        return False
 
 
 async def audit(actor: str, action: str, target: str, extra: Optional[dict] = None):
@@ -304,10 +274,16 @@ class ForgotPasswordIn(BaseModel):
 async def forgot_password(body: ForgotPasswordIn):
     """Send password reset email"""
     user = await db.users.find_one({"email": body.email.lower()})
+    generic = {"message": "If the email exists, a reset link will be sent"}
     if not user:
         # Don't reveal if email exists for security
-        return {"message": "If the email exists, a reset link will be sent"}
-    
+        return generic
+    # Throttle: at most one reset email per account per minute
+    last = user.get("reset_requested_at")
+    if last and (last.replace(tzinfo=timezone.utc) if last.tzinfo is None else last) > now() - timedelta(seconds=60):
+        return generic
+    await db.users.update_one({"user_id": user["user_id"]}, {"$set": {"reset_requested_at": now()}})
+
     # Generate reset token
     reset_token = jwt.encode(
         {"sub": user["user_id"], "purpose": "reset", "ph": (user.get("password_hash") or "")[-12:],
@@ -316,27 +292,32 @@ async def forgot_password(body: ForgotPasswordIn):
     reset_link = f"{FRONTEND_URL}/reset-password?token={reset_token}"
     
     # Send email
-    subject = "Reset Your Travoo Password"
-    text = f"""Hello {user.get('name', 'User')},
+    subject = "Reset your TRAVOO password"
+    name = html_escape(user.get("name") or "there")
+    link = html_escape(reset_link, quote=True)
+    html = (
+        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f6fb;padding:24px 0">'
+        '<tr><td align="center"><table role="presentation" width="480" cellpadding="0" cellspacing="0" '
+        'style="background:#ffffff;border-radius:12px;padding:32px;font-family:Arial,sans-serif;color:#1a1f36">'
+        '<tr><td style="font-size:22px;font-weight:bold;color:#1565d8;padding-bottom:16px">TRAVOO</td></tr>'
+        f'<tr><td style="font-size:16px;padding-bottom:12px">Hi {name},</td></tr>'
+        '<tr><td style="font-size:15px;line-height:22px;padding-bottom:24px">We received a request to reset your TRAVOO password. '
+        'Tap the button below to choose a new one. This link expires in 1 hour and can be used once.</td></tr>'
+        f'<tr><td style="padding-bottom:24px"><a href="{link}" style="background:#1565d8;color:#ffffff;text-decoration:none;'
+        'padding:12px 24px;border-radius:8px;font-weight:bold;display:inline-block">Reset password</a></td></tr>'
+        '<tr><td style="font-size:13px;color:#6b7280;line-height:20px">If you didn\'t ask for this, you can ignore this email — your password stays the same.</td></tr>'
+        '<tr><td style="font-size:12px;color:#9ca3af;padding-top:24px">Sent by TRAVOO. We never ask for your password by email.</td></tr>'
+        '</table></td></tr></table>'
+    )
+    async def _send(to: str):
+        if await send_email(to=to, subject=subject, html=html):
+            logger.info("Password reset email sent to %s", to)
+        else:
+            logger.warning("Password reset email could not be sent to %s", to)
 
-We received a request to reset your Travoo password.
-
-Click the link below to reset your password:
-{reset_link}
-
-This link will expire in 1 hour.
-
-If you didn't request this, please ignore this email.
-
-Best regards,
-Travoo Team
-"""
-    
-    if send_email(body.email, subject, text):
-        logger.info(f"Password reset email sent to {body.email}")
-    else:
-        logger.warning("Password reset email could not be sent (email not configured)")
-    return {"message": "If the email exists, a reset link will be sent"}
+    # Send in the background so response time doesn't reveal whether the account exists
+    asyncio.create_task(_send(user["email"]))
+    return generic
 
 
 class ResetPasswordIn(BaseModel):
@@ -775,6 +756,60 @@ async def submit_verification(body: VerificationIn, user: dict = Depends(get_use
         await notify(user["user_id"], "driver_approved", {})
     await audit(user["user_id"], "driver.submit", user["user_id"], {"status": status})
     return {"status": status}
+
+
+AI_EXTRACT_PROMPT = (
+    "You read Indian driving documents. Image 1 is a driving licence, image 2 is a vehicle Registration Certificate (RC). "
+    "Return ONLY a JSON object with keys: legal_name (licence holder's full name), licence_no (no spaces), "
+    "licence_expiry (DD-MM-YYYY, the non-transport validity date), rc_no (vehicle registration number, no spaces), "
+    "vehicle_name (maker and model from RC). Use an empty string for anything you cannot read clearly. No extra text."
+)
+
+
+@api.post("/driver/ai-extract")
+async def ai_extract(user: dict = Depends(get_user)):
+    """Read the uploaded licence + RC photos with an AI vision model and return the fields to pre-fill."""
+    if user.get("driver_status") in ("under_review", "approved"):
+        raise HTTPException(400, "Verification already submitted")
+    doc = await db.driver_documents.find_one({"user_id": user["user_id"]}, {"_id": 0, "photos": 1}) or {}
+    photos = doc.get("photos") or {}
+    missing = [k for k in ("licence", "rc") if not photos.get(k)]
+    if missing:
+        raise HTTPException(400, f"Please upload: {', '.join(missing)} photo")
+    images = []
+    for k in ("licence", "rc"):
+        f = await db.files.find_one({"file_id": photos[k], "owner_id": user["user_id"]}, {"_id": 0})
+        if not f:
+            raise HTTPException(400, f"Please upload: {k} photo")
+        if f.get("content_type") == "image/heic":
+            raise HTTPException(400, "AI reading needs JPEG or PNG photos. Please retake the photo.")
+        data, _ = await run_in_threadpool(get_object, f["path"])
+        images.append(ImageContent(image_base64=base64.b64encode(data).decode()))
+    chat = LlmChat(api_key=os.environ["EMERGENT_LLM_KEY"], session_id=f"ai-extract-{user['user_id']}-{uuid.uuid4().hex[:8]}",
+                   system_message="You extract fields from document photos and answer with strict JSON.").with_model("openai", "gpt-5.4")
+    out = ""
+    try:
+        async for ev in chat.stream_message(UserMessage(text=AI_EXTRACT_PROMPT, file_contents=images)):
+            if isinstance(ev, TextDelta):
+                out += ev.content
+            elif isinstance(ev, StreamDone):
+                break
+    except Exception as exc:
+        logger.error("AI extract failed: %s", exc)
+        raise HTTPException(502, "AI could not read the photos right now. Please fill the details yourself.")
+    m = re.search(r"\{.*\}", out, re.S)
+    try:
+        parsed = jsonlib.loads(m.group(0)) if m else {}
+    except ValueError:
+        parsed = {}
+    keys = ("legal_name", "licence_no", "licence_expiry", "rc_no", "vehicle_name")
+    res = {k: str(parsed.get(k) or "").strip() for k in keys}
+    res["licence_no"] = res["licence_no"].replace(" ", "").upper()
+    res["rc_no"] = res["rc_no"].replace(" ", "").upper()
+    if not re.fullmatch(r"\d{2}-\d{2}-\d{4}", res["licence_expiry"]):
+        res["licence_expiry"] = ""
+    await audit(user["user_id"], "driver.ai_extract", user["user_id"], {"found": [k for k in keys if res[k]]})
+    return res
 
 
 class VehicleIn(BaseModel):

@@ -1,0 +1,54 @@
+{
+  "summary": "Tested password-reset emails (forgot/reset) and driver document uploads + AI extract, both backend and frontend. Backend: 17/17 pytest pass. Forgot-password returns only a generic message with no token, sends a real Resend email to delivered@resend.dev (log line confirmed), and returns 422 for a bad email. Reset-password rejects login, garbage, expired and wrong-ph tokens and short passwords. A valid reset token works only once, the old password stops working and the new one logs in. Reset tokens cannot authenticate /auth/me. Uploads: all 4 kinds accepted (JPEG/PNG); non-images, unknown kinds and uploads after submit are rejected. Files are visible to the owner and admin, return 404 for other users and 401 for anonymous requests. AI extract (gpt-5.4) correctly read name, licence no, expiry, RC no and vehicle from synthetic licence/RC images in about 3-5s. It returns 400 when photos are missing. Verification returns 400 when photos are missing and under_review once all 4 are uploaded. FRONTEND CRITICAL BUG FOUND & FIXED: /forgot-password and /reset-password were missing from the PUBLIC route set in app/_layout.tsx, so logged-out users (the only people who need reset) were redirected to /auth. Both screens and the email reset link were unusable. After the fix, the full UI flow works: forgot screen -> 'Check your email' with no test-token button; reset screen with an invalid token shows an error; a mismatched confirm shows an error; a valid token shows success -> Go to Login -> login with the new password works. Driver AI Verification UI: photo grid, sheet, gallery upload via file chooser, progress (0->4 of 4), and the AI button stays disabled until licence+RC are uploaded. AI fill populated all 5 fields and showed the verify-ai-note; submit -> /driver shows 'Under review'. Manual Verification: has no AI button. The missing-photos error lists only the missing photos, field validation works, licence/RC are uppercased, and submit persisted under_review in the DB. No deprecated expo packages detected.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/auth/forgot-password", "issue": "No rate limiting: anyone can trigger unlimited reset emails to any registered address (email bombing and Resend quota burn)."},
+      {"endpoint": "POST /api/auth/forgot-password", "issue": "Timing-based account enumeration: the email is sent inline (await send_email), so existing emails respond in ~0.5s vs ~0.13s for unknown ones. Send in a background task (asyncio.create_task / BackgroundTasks)."},
+      {"endpoint": "POST /api/auth/reset-password", "issue": "Existing sessions/JWT login tokens are not invalidated after a password reset (user_sessions not cleared; stateless JWTs remain valid until expiry)."},
+      {"endpoint": "server.py:45", "issue": "FRONTEND_URL has a hardcoded default 'http://localhost:19006'. It should fail fast via os.environ['FRONTEND_URL']."},
+      {"endpoint": "POST /api/driver/ocr-verification, POST /api/driver/licence-verification", "issue": "Legacy endpoints are now dead code (the frontend no longer calls them). Remove them to reduce attack surface and file size."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "app/_layout.tsx PUBLIC routes", "issue": "forgot-password and reset-password were not in the PUBLIC set, so logged-out users were redirected to /auth. Tapping 'Forgot Password?' and opening the emailed reset link both bounced to login. FIXED by tester (added both to PUBLIC).", "testID": "auth-forgot-password-link", "priority": "CRITICAL (fixed)"},
+      {"component": "DriverVerificationForm submit", "issue": "After a successful submit, router.back() does nothing when the form was opened by deep link or web refresh (no history), so the user stays on the form with no status change. Use router.canGoBack() ? router.back() : router.replace('/driver').", "testID": "verify-submit-button", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Driver Verification form", "issues": ["Placeholders like 'KA0120200001234', 'KA01AB1234' and 'Maruti Suzuki Dzire' look like pre-filled real values; consider an 'e.g.' prefix or lighter placeholder color."]},
+      {"screen": "reset-password.tsx", "issues": ["If opened with no ?token param, the form still renders and only fails on submit. Show an 'invalid link, request a new one' state with a link to /forgot-password."]}
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/test_iter7_reset_uploads.py", "/app/test_reports/pytest/iter7_results.xml"],
+  "action_items": [
+    "Keep the PUBLIC route fix in app/_layout.tsx (forgot-password, reset-password). Verify any other unauthenticated deep links are also whitelisted.",
+    "Add rate limiting to /api/auth/forgot-password (e.g. max 3 per email per hour + per-IP) and send the email in a background task to remove the timing-based enumeration.",
+    "Invalidate existing sessions on password reset (delete user_sessions for the uid; optionally add a token_version claim checked in user_from_token).",
+    "DriverVerificationForm: after submit use router.canGoBack() ? router.back() : router.replace('/driver').",
+    "Remove dead code: /driver/ocr-verification, /driver/licence-verification, frontend/src/utils/ocr.ts and the unused tesseract.js dependency.",
+    "Remove verbose console.log calls in DocPhotos.tsx upload/launch (they log asset metadata).",
+    "server.py is 2298 lines; split it into routers (auth, driver, admin, trips)."
+  ],
+  "critical_code_review_comments": [
+    "The reset token design is sound: purpose=reset, 1h exp, and the ph claim (last 12 chars of the bcrypt hash) makes it single-use. user_from_token correctly ignores tokens that carry a purpose claim.",
+    "Uploads sniff magic bytes and ignore the client content-type. There is an 8 MB limit, previous files of the same kind are soft-deleted, and documents are locked once under_review/approved.",
+    "ai-extract validates the date format and normalises licence/RC numbers. HEIC is rejected for AI with a clear message.",
+    "email_service.py has good safety checks (https-only links, no forms) and handles paused/credit errors gracefully."
+  ],
+  "updated_files": [
+    "/app/frontend/app/_layout.tsx (added forgot-password, reset-password to PUBLIC routes - bug fix)",
+    "/app/frontend/app/reset-password.tsx (added testIDs: reset-password-input, reset-confirm-input, reset-submit-button, reset-error, reset-success-title, reset-go-login-button, reset-back-button)",
+    "/app/frontend/app/driver.tsx (added testIDs driver-ai-verification-button, driver-manual-verification-button)",
+    "/app/frontend/app/auth.tsx (added testID auth-forgot-password-link)",
+    "/app/backend/tests/test_iter7_reset_uploads.py (new)"
+  ],
+  "success_rate": {"backend": "100% (17/17)", "frontend": "100% after the PUBLIC-route fix (forgot/reset flows were 0% before the fix)"},
+  "seed_data_creation": "Created TEST_iter7* users (pytest + 3 UI users) and deleted them all by user_id afterwards (users, driver_documents, files). Object-storage blobs for those files remain. Sent 3 reset emails, only to delivered@resend.dev. The admin password was not changed.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "On web, the app first shows /language (tap language-continue-button). Mint reset tokens with PyJWT (JWT_SECRET from backend/.env; claims sub, purpose='reset', ph=password_hash[-12:], exp). On web, uploads use the file chooser: tap doc-photo-{kind} -> wait ~600ms for the sheet slide animation -> page.expect_file_chooser + click doc-gallery-button. test_iter7_reset_uploads.doc_image() generates realistic licence/RC images that GPT reads correctly.",
+  "rca_of_issue": "Forgot-password unreachable: the RootLayout auth guard (app/_layout.tsx:34) calls router.replace('/auth') for any top segment not in PUBLIC when there is no user. The new forgot-password/reset-password routes were never added to PUBLIC. Mitigation: add both to PUBLIC (done)."
+}
