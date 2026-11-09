@@ -1,6 +1,7 @@
 import Ionicons from "@react-native-vector-icons/ionicons";
 import { Image } from "expo-image";
 import { useRouter } from "expo-router";
+import * as WebBrowser from "expo-web-browser";
 import React, { useCallback, useEffect, useState } from "react";
 import { Modal, Pressable, ScrollView, Switch, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -47,6 +48,8 @@ export default function AdminScreen() {
   });
   const [parivahanEnabled, setParivahanEnabled] = useState(false);
   const [digilockerEnabled, setDigilockerEnabled] = useState(false);
+  const [parivahanUrl, setParivahanUrl] = useState<string | null>(null);
+  const [digilockerStatus, setDigilockerStatus] = useState<any>(null);
   useEffect(() => {
     if (tab === "settings") api("/fuel-prices").then((r) => setFuel(Object.fromEntries(Object.entries(r.prices).map(([k, v]: any) => [k, String(v.price)])))).catch(() => {});
   }, [tab]);
@@ -104,6 +107,34 @@ export default function AdminScreen() {
   const openDriverReview = (driver: any) => {
     setReviewDriver(driver);
     validateDriverDocuments(driver);
+  };
+
+  const checkParivahan = async (licenceNo: string) => {
+    try {
+      const res = await api(`/admin/parivahan/check/${licenceNo}`);
+      setParivahanUrl(res.parivahan_url);
+      toast("Parivahan link generated");
+      // Open the URL in browser
+      await WebBrowser.openBrowserAsync(res.parivahan_url);
+    } catch (e: any) {
+      toast(e.message, "error");
+    }
+  };
+
+  const checkDigilocker = async () => {
+    try {
+      const res = await api("/admin/digilocker/status");
+      setDigilockerStatus(res);
+      toast("DigiLocker status checked");
+    } catch (e: any) {
+      toast(e.message, "error");
+    }
+  };
+
+  const openParivahan = async () => {
+    if (parivahanUrl) {
+      await WebBrowser.openBrowserAsync(parivahanUrl);
+    }
   };
 
   if (user?.role !== "admin") return <View style={{ flex: 1 }}><Header title={t("admin.title")} /><Empty icon="lock-closed" title="Admin access required" /></View>;
@@ -498,6 +529,42 @@ export default function AdminScreen() {
               <T size={12}>RC No: {reviewDriver?.documents?.rc_no}</T>
               <T size={12}>Vehicle: {reviewDriver?.documents?.vehicle_name}</T>
               <T size={12}>Phone: {reviewDriver?.documents?.phone}</T>
+            </Card>
+            
+            <Card style={{ gap: space.md }}>
+              <T weight="700">Government Source Verification</T>
+              <T size={12} color={colors.muted}>Verify documents through official government sources</T>
+              
+              <View style={{ gap: space.sm }}>
+                <T size={13} weight="700">Parivahan (Official Government Portal)</T>
+                <T size={12} color={colors.muted}>Manually verify licence details on the official Parivahan portal</T>
+                {reviewDriver?.documents?.licence_no ? (
+                  <Btn variant="outline" icon="globe-outline" label="Open Parivahan Portal" onPress={() => checkParivahan(reviewDriver.documents.licence_no)} />
+                ) : (
+                  <T size={12} color={colors.brandTertiary}>Licence number required</T>
+                )}
+              </View>
+              
+              <View style={{ gap: space.sm }}>
+                <T size={13} weight="700">DigiLocker Integration</T>
+                <T size={12} color={colors.muted}>Official digital document locker (requires government approval)</T>
+                <Btn variant="outline" icon="lock-closed-outline" label="Check DigiLocker Status" onPress={checkDigilocker} />
+                {digilockerStatus && (
+                  <View style={{ gap: space.xs }}>
+                    <T size={11} color={digilockerStatus.enabled ? colors.success : colors.brandTertiary}>
+                      Status: {digilockerStatus.enabled ? "Enabled" : "Disabled"}
+                    </T>
+                    <T size={11} color={colors.muted}>{digilockerStatus.message}</T>
+                  </View>
+                )}
+              </View>
+              
+              <View style={{ backgroundColor: colors.surfaceTertiary, padding: space.sm, borderRadius: radius.md }}>
+                <T size={11} color={colors.muted} center>
+                  <Ionicons name="information-circle" size={12} color={colors.brandPrimary} /> 
+                  Government verification requires manual review on official portals. Do not scrape or bypass authentication.
+                </T>
+              </View>
             </Card>
             
             <Card style={{ gap: space.sm }}>

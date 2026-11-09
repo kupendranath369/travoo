@@ -122,51 +122,12 @@ export default function DriverScreen() {
 
         {canSubmit ? (
           <Card style={{ gap: space.md }}>
-            <T weight="800">{t("verify.photos")}</T>
-            <DocPhotos photos={p.documents?.photos ?? {}} editable onUploaded={() => load().catch(() => {})} />
-            {DOC_KINDS.some((k) => !p.documents?.photos?.[k]) ? <T testID="verify-photos-required" size={12} color={colors.brandTertiary}>{t("verify.photos_required")}</T> : null}
-            <View style={{ backgroundColor: colors.surfaceTertiary, padding: space.sm, borderRadius: radius.md, flexDirection: "row", alignItems: "center", gap: space.sm }}>
-              <Ionicons name="information-circle" size={14} color={colors.brandPrimary} />
-              <T size={12} color={colors.muted}>Your documents will be reviewed within 24 hours after submission.</T>
-            </View>
+            <T weight="800">Choose Verification Method</T>
+            <T size={12} color={colors.muted}>Select how you want to verify your driving documents</T>
             
-            <Section title="Driving Licence Verification" right={
-              licenceVerification?.status === "verified" ? 
-              <Badge label="Verified" tone="success" /> : 
-              licenceVerification?.status === "pending" ? 
-              <Badge label="Pending" tone="muted" /> : null
-            }>
-              <T size={12} color={colors.muted}>Upload front and back of your Indian driving licence for government verification</T>
-              <View style={{ flexDirection: "row", gap: space.md }}>
-                <Pressable style={{ flex: 1, aspectRatio: 1.6, borderRadius: radius.md, borderWidth: 1, borderStyle: "dashed", borderColor: colors.borderStrong, backgroundColor: colors.surfaceTertiary, alignItems: "center", justifyContent: "center" }} onPress={() => setLicenceFront("temp_fid")}>
-                  <Ionicons name="card-outline" size={30} color={colors.brandPrimary} />
-                  <T size={12} weight="700" color={colors.onSurface} center>Licence Front</T>
-                </Pressable>
-                <Pressable style={{ flex: 1, aspectRatio: 1.6, borderRadius: radius.md, borderWidth: 1, borderStyle: "dashed", borderColor: colors.borderStrong, backgroundColor: colors.surfaceTertiary, alignItems: "center", justifyContent: "center" }} onPress={() => setLicenceBack("temp_fid")}>
-                  <Ionicons name="card-outline" size={30} color={colors.brandPrimary} />
-                  <T size={12} weight="700" color={colors.onSurface} center>Licence Back</T>
-                </Pressable>
-              </View>
-              <Btn label="Submit for Verification" onPress={submitLicenceVerification} loading={busy === "licence"} disabled={!licenceFront || !licenceBack} />
-              <View style={{ backgroundColor: colors.surfaceTertiary, padding: space.sm, borderRadius: radius.md, flexDirection: "row", alignItems: "center", gap: space.sm }}>
-                <Ionicons name="information-circle" size={14} color={colors.brandPrimary} />
-                <T size={12} color={colors.muted}>Your licence will be reviewed within 24 hours after submission.</T>
-              </View>
-            </Section>
-              <View style={{ backgroundColor: colors.surfaceTertiary, padding: space.sm, borderRadius: radius.md, flexDirection: "row", alignItems: "center", gap: space.sm }}>
-                <Ionicons name="information-circle" size={14} color={colors.brandPrimary} />
-                <T size={12} color={colors.muted}>Your licence will be reviewed within 24 hours after submission.</T>
-              </View>
-            </Section>
-            
-            <Field testID="verify-legal-name" label={t("verify.legal_name")} value={f.legal_name} onChangeText={(x) => setF({ ...f, legal_name: x })} />
-            <Field testID="verify-vehicle-name" label={t("verify.vehicle_name")} value={f.vehicle_name} onChangeText={(x) => setF({ ...f, vehicle_name: x })} placeholder="Maruti Suzuki Dzire" />
-            {f.vehicle_name ? <T size={12} color={colors.brandPrimary} weight="600">{f.vehicle_name}</T> : null}
-            <Field testID="verify-phone" label={t("verify.phone")} value={f.phone} onChangeText={(x) => setF({ ...f, phone: x.replace(/\D/g, "") })} keyboardType="phone-pad" maxLength={10} />
-            <Field testID="verify-licence" label={t("verify.licence")} value={f.licence_no} onChangeText={(x) => setF({ ...f, licence_no: x.toUpperCase() })} autoCapitalize="characters" placeholder="KA0120200001234" />
-            <Field testID="verify-licence-expiry" label={t("verify.licence_exp")} value={f.licence_expiry} onChangeText={(x) => setF({ ...f, licence_expiry: x })} placeholder="31-12-2035" maxLength={10} />
-            <Field testID="verify-rc" label={t("verify.rc")} value={f.rc_no} onChangeText={(x) => setF({ ...f, rc_no: x.toUpperCase() })} autoCapitalize="characters" placeholder="KA01AB1234" />
-            <T size={12} color={colors.muted}>{t("verify.docs_note")}</T>
+            <Btn icon="sparkles" label="AI Verification" onPress={() => router.push("/driver/ai-verification")} />
+            <Btn variant="outline" icon="person-circle" label="Manual Verification" onPress={() => router.push("/driver/manual-verification")} />
+          </Card>
             {err ? <T testID="verify-error" color={colors.error}>{err}</T> : null}
             <Btn testID="verify-submit-button" label={t("verify.submit")} onPress={submit} loading={busy === "v"} />
           </Card>

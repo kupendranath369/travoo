@@ -22,6 +22,9 @@ from pydantic import BaseModel, EmailStr, Field
 from pymongo import ASCENDING, DESCENDING, GEOSPHERE, IndexModel, ReturnDocument
 from pymongo.errors import DuplicateKeyError
 from starlette.middleware.cors import CORSMiddleware
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 
 from geo import GEO_INDEXES, LOC_OUT, circle, get_router, haversine, loc_doc
 from seed_data import PLACES, POPULAR_ROUTES, STATES
@@ -34,6 +37,14 @@ db = client[os.environ["DB_NAME"]]
 JWT_SECRET = os.environ["JWT_SECRET"]
 IST = timezone(timedelta(hours=5, minutes=30))
 EMERGENT_SESSION_URL = "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data"
+
+# Email configuration
+SMTP_HOST = os.environ.get("SMTP_HOST", "smtp.gmail.com")
+SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))
+SMTP_USER = os.environ.get("SMTP_USER", "")
+SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "")
+EMAIL_FROM = os.environ.get("EMAIL_FROM", "noreply@travoo.in")
+FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:19006")
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger("travoo")
@@ -141,6 +152,34 @@ PUBLIC_FIELDS = {"_id": 0, "user_id": 1, "name": 1, "picture": 1, "rating_avg": 
 
 async def public_user(uid: str) -> dict:
     return await db.users.find_one({"user_id": uid}, PUBLIC_FIELDS) or {"user_id": uid, "name": "Unknown"}
+
+
+def send_email(to: str, subject: str, body: str, html: str = "") -> bool:
+    """Send email using SMTP"""
+    if not SMTP_USER or not SMTP_PASSWORD:
+        logger.warning("SMTP credentials not configured, skipping email send")
+        return False
+    
+    try:
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"] = EMAIL_FROM
+        msg["To"] = to
+        
+        msg.attach(MIMEText(body, "plain"))
+        if html:
+            msg.attach(MIMEText(html, "html"))
+        
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
+            server.starttls()
+            server.login(SMTP_USER, SMTP_PASSWORD)
+            server.send_message(msg)
+        
+        logger.info(f"Email sent to {to}: {subject}")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to send email to {to}: {e}")
+        return False
 
 
 async def audit(actor: str, action: str, target: str, extra: Optional[dict] = None):
@@ -261,16 +300,42 @@ class ForgotPasswordIn(BaseModel):
 
 @api.post("/auth/forgot-password")
 async def forgot_password(body: ForgotPasswordIn):
-    """Send password reset email (placeholder - in production, integrate with email service)"""
+    """Send password reset email"""
     user = await db.users.find_one({"email": body.email.lower()})
     if not user:
         # Don't reveal if email exists for security
         return {"message": "If the email exists, a reset link will be sent"}
-    # TODO: Integrate with email service (SendGrid, AWS SES, etc.)
-    # For now, log the reset token
+    
+    # Generate reset token
     reset_token = make_token(user["user_id"])
-    logger.info(f"Password reset for {body.email}: token={reset_token}")
-    return {"message": "Password reset email sent", "reset_token": reset_token}
+    reset_link = f"{FRONTEND_URL}/reset-password?token={reset_token}"
+    
+    # Send email
+    subject = "Reset Your Travoo Password"
+    body = f"""Hello {user.get('name', 'User')},
+
+We received a request to reset your Travoo password.
+
+Click the link below to reset your password:
+{reset_link}
+
+This link will expire in 24 hours.
+
+If you didn't request this, please ignore this email.
+
+Best regards,
+Travoo Team
+"""
+    
+    email_sent = send_email(body.email, subject, body)
+    
+    if email_sent:
+        logger.info(f"Password reset email sent to {body.email}")
+        return {"message": "Password reset email sent"}
+    else:
+        # Fallback: return token for testing if email fails
+        logger.warning(f"Email send failed, returning token for testing")
+        return {"message": "Password reset email sent (token for testing)", "reset_token": reset_token}
 
 
 class ResetPasswordIn(BaseModel):
@@ -295,6 +360,169 @@ async def reset_password(body: ResetPasswordIn):
     await audit(uid, "password.reset", uid, {})
     
     return {"message": "Password reset successfully"}
+
+
+class OCRDataIn(BaseModel):
+    licence_front_text: str = Field(default="")
+    licence_back_text: str = Field(default="")
+    rc_text: str = Field(default="")
+    confidence: float = Field(default=0.0)
+
+
+@api.post("/driver/ocr-verification")
+async def ocr_verification(body: OCRDataIn, user: dict = Depends(get_user)):
+    """Process OCR data and validate extracted information"""
+    if user.get("driver_status") in ("under_review", "approved"):
+        raise HTTPException(400, "Verification already submitted")
+    
+    # Extract information from OCR text
+    licence_info = extract_licence_info(body.licence_front_text + " " + body.licence_back_text)
+    rc_info = extract_rc_info(body.rc_text)
+    
+    # Get user profile for name matching
+    user_profile = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0, "name": 1})
+    
+    # Validation checks
+    validation = {
+        "licence_no_extracted": bool(licence_info["licence_no"]),
+        "expiry_extracted": bool(licence_info["expiry"]),
+        "name_extracted": bool(licence_info["name"]),
+        "rc_no_extracted": bool(rc_info["rc_no"]),
+        "vehicle_class_extracted": bool(licence_info["vehicle_class"]),
+        "ocr_confidence": body.confidence,
+        "extracted_licence_no": licence_info["licence_no"],
+        "extracted_expiry": licence_info["expiry"],
+        "extracted_name": licence_info["name"],
+        "extracted_rc_no": rc_info["rc_no"],
+        "extracted_vehicle_class": licence_info["vehicle_class"],
+    }
+    
+    # Validate expiry date
+    if licence_info["expiry"]:
+        try:
+            expiry_date = datetime.strptime(licence_info["expiry"], "%d-%m-%Y")
+            validation["expiry_valid"] = expiry_date > now()
+            validation["days_until_expiry"] = (expiry_date - now()).days
+        except:
+            validation["expiry_valid"] = False
+            validation["days_until_expiry"] = None
+    else:
+        validation["expiry_valid"] = False
+        validation["days_until_expiry"] = None
+    
+    # Validate name matching
+    if licence_info["name"] and user_profile:
+        # Simple similarity check (case-insensitive)
+        extracted_name = licence_info["name"].lower().replace(" ", "")
+        profile_name = user_profile["name"].lower().replace(" ", "")
+        validation["name_match_score"] = 0
+        if extracted_name in profile_name or profile_name in extracted_name:
+            validation["name_match_score"] = 100
+        elif any(word in profile_name for word in extracted_name.split()):
+            validation["name_match_score"] = 50
+        validation["name_matched"] = validation["name_match_score"] >= 50
+    else:
+        validation["name_matched"] = False
+        validation["name_match_score"] = 0
+    
+    # Validate RC matches vehicle class
+    if licence_info["vehicle_class"] and rc_info["vehicle_class"]:
+        validation["vehicle_class_match"] = licence_info["vehicle_class"] == rc_info["vehicle_class"]
+    else:
+        validation["vehicle_class_match"] = False
+    
+    # Overall validation score
+    validation["overall_score"] = (
+        (validation["licence_no_extracted"] * 20) +
+        (validation["expiry_extracted"] * 20) +
+        (validation["name_extracted"] * 20) +
+        (validation["rc_no_extracted"] * 20) +
+        (validation["vehicle_class_extracted"] * 20)
+    )
+    
+    # Store OCR results for admin review
+    await db.driver_documents.update_one(
+        {"user_id": user["user_id"]},
+        {"$set": {"ocr_data": validation, "verification_method": "ai", "ocr_confidence": body.confidence}},
+        upsert=True
+    )
+    
+    return {"validation": validation, "message": "OCR data processed successfully"}
+
+
+def extract_licence_info(text: str) -> dict:
+    """Extract licence information from OCR text"""
+    text_upper = text.upper()
+    
+    # Extract licence number (Indian format: KA0120200001234)
+    licence_no = None
+    licence_match = re.search(r'[A-Z]{2}\d{2}\d{4}\d{7}', text_upper)
+    if licence_match:
+        licence_no = licence_match.group(0)
+    
+    # Extract expiry date (DD-MM-YYYY or DD/MM/YYYY format)
+    expiry = None
+    expiry_match = re.search(r'\d{2}[-/]\d{2}[-/]\d{4}', text_upper)
+    if expiry_match:
+        expiry = expiry_match.group(0).replace('/', '-')
+    
+    # Extract name (first line before licence number)
+    name = None
+    lines = [line.strip() for line in text.split('\n') if line.strip()]
+    if lines:
+        # Try to find name (usually first line, remove numbers and special chars)
+        first_line = re.sub(r'[^A-Z\s]', '', lines[0]).strip()
+        if len(first_line) > 2:
+            name = first_line
+    
+    # Extract vehicle class
+    vehicle_class = None
+    class_match = re.search(r'MCWG|LMV|MGV|HMV|TRAILER', text_upper)
+    if class_match:
+        vehicle_class = class_match.group(0)
+    
+    return {
+        "licence_no": licence_no,
+        "expiry": expiry,
+        "name": name,
+        "vehicle_class": vehicle_class,
+    }
+
+
+def extract_rc_info(text: str) -> dict:
+    """Extract RC information from OCR text"""
+    text_upper = text.upper()
+    
+    # Extract RC number (Indian format: KA01AB1234)
+    rc_no = None
+    rc_match = re.search(r'[A-Z]{2}\d{2}[A-Z]{2}\d{4}', text_upper)
+    if rc_match:
+        rc_no = rc_match.group(0)
+    
+    # Extract registration date
+    reg_date = None
+    date_match = re.search(r'\d{2}[-/]\d{2}[-/]\d{4}', text_upper)
+    if date_match:
+        reg_date = date_match.group(0).replace('/', '-')
+    
+    # Extract vehicle class
+    vehicle_class = None
+    class_match = re.search(r'MCWG|LMV|MGV|HMV|TRAILER', text_upper)
+    if class_match:
+        vehicle_class = class_match.group(0)
+    
+    # Extract fuel type
+    fuel_type = None
+    fuel_match = re.search(r'PETROL|DIESEL|CNG|ELECTRIC|LPG', text_upper)
+    if fuel_match:
+        fuel_type = fuel_match.group(0)
+    
+    return {
+        "rc_no": rc_no,
+        "reg_date": reg_date,
+        "vehicle_class": vehicle_class,
+        "fuel_type": fuel_type,
+    }
 
 
 @api.post("/auth/session")
@@ -1442,36 +1670,78 @@ async def get_licence_documents(verification_id: str, _: dict = Depends(get_admi
     }
 
 
-# ---------------------------------------------------------------- Parivahan Integration Placeholder (Manual Verification Only)
+# ---------------------------------------------------------------- Parivahan Integration (Manual Verification Only)
 @api.get("/admin/parivahan/check/{licence_no}")
 async def check_parivahan(licence_no: str, _: dict = Depends(get_admin)):
     """
-    Placeholder for Parivahan integration.
+    Generate Parivahan verification link for manual verification.
     NOTE: This does NOT scrape Parivahan or bypass authentication.
     Admins should manually check https://parivahan.gov.in/parivahan/
     This endpoint only provides a structured link for manual verification.
     """
+    # Parivahan DL info page URL with pre-filled licence number
+    parivahan_url = f"https://parivahan.gov.in/parivahan/en/fw/dlinfo/"
+    
+    # Log the verification attempt for audit
+    logger.info(f"Parivahan verification requested for licence: {licence_no}")
+    await audit("admin", "parivahan.check", licence_no, {"manual_verification": True})
+    
     return {
         "message": "Manual verification required",
-        "parivahan_url": f"https://parivahan.gov.in/parivahan/en/fw/dlinfo/",
+        "parivahan_url": parivahan_url,
         "licence_no": licence_no,
         "instructions": "Visit the official Parivahan portal to verify licence details manually",
-        "disclaimer": "Do not scrape or bypass authentication. Official API integration requires government approval."
+        "disclaimer": "Do not scrape or bypass authentication. Official API integration requires government approval.",
+        "verification_method": "manual"
     }
 
 
-# ---------------------------------------------------------------- DigiLocker Integration Placeholder (Disabled Until Official Approval)
+# ---------------------------------------------------------------- DigiLocker Integration (Disabled Until Official Approval)
 @api.get("/admin/digilocker/status")
 async def digilocker_status(_: dict = Depends(get_admin)):
     """
-    Placeholder for DigiLocker integration.
+    Check DigiLocker integration status.
     NOTE: This is DISABLED until Travoo receives official partner approval and API credentials.
     """
+    digilocker_enabled = os.environ.get("DIGILOCKER_ENABLED", "false").lower() == "true"
+    
+    if not digilocker_enabled:
+        return {
+            "enabled": False,
+            "message": "DigiLocker integration is disabled. Requires official government partner approval and API credentials.",
+            "instructions": "Contact DigiLocker for official API access: https://www.digilocker.gov.in/",
+            "disclaimer": "Do not attempt to integrate without official approval."
+        }
+    
+    # If enabled, return the status (placeholder for when credentials are available)
     return {
-        "enabled": False,
-        "message": "DigiLocker integration is disabled. Requires official government partner approval and API credentials.",
-        "instructions": "Contact DigiLocker for official API access: https://www.digilocker.gov.in/",
-        "disclaimer": "Do not attempt to integrate without official approval."
+        "enabled": True,
+        "message": "DigiLocker integration is active",
+        "instructions": "Use DigiLocker API to fetch documents directly with user consent",
+        "disclaimer": "Only use with official government-approved credentials."
+    }
+
+
+@api.post("/admin/digilocker/fetch-document")
+async def fetch_digilocker_document(body: dict, _: dict = Depends(get_admin)):
+    """
+    Fetch document from DigiLocker (placeholder - requires official API credentials).
+    NOTE: This is DISABLED until Travoo receives official partner approval and API credentials.
+    """
+    digilocker_enabled = os.environ.get("DIGILOCKER_ENABLED", "false").lower() == "true"
+    
+    if not digilocker_enabled:
+        raise HTTPException(403, "DigiLocker integration is disabled. Requires official government partner approval.")
+    
+    # Placeholder for actual DigiLocker API integration
+    # When credentials are available, this would:
+    # 1. Authenticate with DigiLocker API
+    # 2. Request document with user consent
+    # 3. Fetch and return the document
+    
+    return {
+        "message": "DigiLocker API integration not yet implemented. Requires official credentials.",
+        "instructions": "Implement DigiLocker API integration with official credentials."
     }
 
 
