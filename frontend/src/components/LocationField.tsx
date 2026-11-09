@@ -128,8 +128,9 @@ export function LocationSearchModal({ visible, title, onClose, onSelect }: { vis
   );
 
   return (
-    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
-      <View style={{ flex: 1, backgroundColor: colors.surface, paddingTop: insets.top + space.sm }}>
+    <Modal visible={visible} animationType="slide" onRequestClose={onClose} transparent>
+      <Pressable style={{ flex: 1, backgroundColor: colors.scrim }} onPress={onClose} />
+      <View style={{ backgroundColor: colors.surface, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, paddingTop: insets.top + space.sm, paddingBottom: insets.bottom + space.xl, maxHeight: "90%" }}>
         <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: space.lg, gap: space.md }}>
           <Pressable testID="location-modal-close" onPress={onClose} hitSlop={12}>
             <Ionicons name="close" size={26} color={colors.onSurface} />
