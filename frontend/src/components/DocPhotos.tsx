@@ -78,9 +78,7 @@ export function DocPhotos({ photos, editable, onUploaded }: { photos: Record<str
     const opts: ImagePicker.ImagePickerOptions = { 
       mediaTypes: ["images"], 
       quality: 0.8, 
-      allowsEditing: Platform.OS === "web", // Only allow editing on web, not mobile
-      exif: false,
-      aspect: [4, 3], // Set aspect ratio for better mobile experience
+      allowsEditing: false, // Disable editing completely to avoid issues
     };
     try {
       console.log(`Launching ${s} for ${k}`);
@@ -127,9 +125,9 @@ export function DocPhotos({ photos, editable, onUploaded }: { photos: Record<str
         return (
           <Pressable key={k} testID={`doc-photo-${k}`} disabled={!editable || busy === k} onPress={() => setKind(k)} style={{ width: Platform.OS === "web" ? "47%" : "48%", flexGrow: 1, aspectRatio: 1.2, borderRadius: radius.md, borderWidth: 1, borderStyle: fid ? "solid" : "dashed", borderColor: fid ? colors.success : colors.borderStrong, backgroundColor: colors.surfaceTertiary, overflow: "hidden", alignItems: "center", justifyContent: "center" }}>
             {fid ? <Image source={{ uri: fileUrl(fid) }} style={{ position: "absolute", width: "100%", height: "100%" }} contentFit="cover" /> : <Ionicons name={ICONS[k]} size={30} color={colors.brandPrimary} />}
-            <View style={{ position: "absolute", left: 0, right: 0, bottom: 0, padding: space.xs, backgroundColor: fid ? colors.brand : "transparent", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4 }}>
+            <View style={{ position: "absolute", left: 0, right: 0, bottom: 0, padding: space.xs, backgroundColor: fid ? colors.brand : "transparent", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4, paddingHorizontal: space.sm }}>
               {busy === k ? <ActivityIndicator size="small" color={fid ? colors.onBrand : colors.brandPrimary} /> : fid ? <Ionicons name="checkmark-circle" size={14} color={colors.onBrand} /> : null}
-              <T size={12} weight="700" color={fid ? colors.onBrand : colors.onSurface} numberOfLines={1} center>{t(`verify.photo.${k}`)}</T>
+              <T size={11} weight="700" color={fid ? colors.onBrand : colors.onSurface} numberOfLines={2} center style={{ flex: 1 }}>{t(`verify.photo.${k}`)}</T>
             </View>
           </Pressable>
         );
