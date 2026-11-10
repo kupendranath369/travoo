@@ -71,3 +71,7 @@ Pan-India intercity paid carpooling app (BlaBlaCar model) called TRAVOO, tagline
 ### Backlog
 - P1: sign out other devices after password reset; remove old tesseract OCR code + unused endpoints.
 - P2: split server.py; translate new verification screen text.
+
+
+## 2026-06 - Build & Run
+- Backend failed to start (missing Python packages e.g. resend). Installed requirements (skipped conflicting emergentintegrations/litellm pins, not imported by app). Backend + Expo restarted and verified.
