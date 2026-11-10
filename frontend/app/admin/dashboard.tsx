@@ -569,6 +569,10 @@ export default function AdminScreen() {
               <Stepper testID="admin-maint" min={0} max={20} value={Math.round(data.maintenance_per_km ?? 2)} onChange={(v) => act("/admin/settings", { maintenance_per_km: v }, "PUT")} />
             </View>
             <View style={{ gap: space.sm }}>
+              <T weight="800">Admin account</T>
+              <Btn small variant="outline" icon="key-outline" testID="admin-change-password-button" label="Change admin password" onPress={() => router.push("/admin/change-password")} />
+            </View>
+            <View style={{ gap: space.sm }}>
               <T weight="800">Featured rides</T>
               <T size={12} color={colors.muted}>Price for 7 days on the home screen, and the UPI ID drivers pay. Featuring stays closed until a UPI ID is set.</T>
               <Field testID="admin-featured-price" label="Price (₹)" value={featPrice} onChangeText={(v) => setFeatPrice(v.replace(/\D/g, ""))} keyboardType="number-pad" />

@@ -82,3 +82,8 @@ Pan-India intercity paid carpooling app (BlaBlaCar model) called TRAVOO, tagline
 - Tested iteration_9: 15/15 backend, UI flows pass.
 ### Backlog
 - Translate new strings into 22 languages; confirm dialog + custom reject note in admin; auto-mark expired spots; Razorpay option for instant activation.
+
+## 2026-06 — Admin portal access
+- Admin portal confirmed at /admin/login → /admin/dashboard (separate server-side admin sessions, rate-limited login, audit log, forced first password change).
+- Fixed: /admin links were redirected to the language picker for first-time visitors; admin pages now skip that gate.
+- Added "Change admin password" button in Admin → Settings and "Back to dashboard" on the change-password page.

@@ -30,7 +30,7 @@ function Gate() {
 
   useEffect(() => {
     if (loading || !ready) return;
-    if (!chosen && top !== "language") router.replace("/language");
+    if (!chosen && top !== "language" && top !== "admin") router.replace("/language");
     else if (chosen && !user && !PUBLIC.has(top ?? "")) router.replace("/auth");
     else if (user && top === "auth") router.replace("/");
   }, [loading, ready, chosen, user, top, router]);

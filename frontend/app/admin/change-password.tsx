@@ -39,12 +39,13 @@ export default function AdminChangePassword() {
         contentContainerStyle={{ flexGrow: 1, justifyContent: "center", alignItems: "center", padding: space.lg, paddingTop: insets.top + space.xl, paddingBottom: insets.bottom + space.xl }}>
         <Card style={{ width: "100%", maxWidth: 440, padding: space.xl, gap: space.md }}>
           <T testID="admin-change-password-title" size={20} weight="800">Set your admin password</T>
-          <T size={13} color={colors.muted}>For security, replace the initial setup password before using the Admin Portal.</T>
+          <T size={13} color={colors.muted}>Choose a new password for the Admin Portal. Other signed-in admin devices will be signed out.</T>
           <Field testID="admin-cp-current" label="Current password" value={cur} onChangeText={setCur} secureTextEntry autoCapitalize="none" />
           <Field testID="admin-cp-new" label="New password" value={p1} onChangeText={setP1} secureTextEntry autoCapitalize="none" />
           <Field testID="admin-cp-confirm" label="Confirm new password" value={p2} onChangeText={setP2} secureTextEntry autoCapitalize="none" />
           {err ? <T testID="admin-cp-error" color={colors.error} weight="600">{err}</T> : null}
           <Btn testID="admin-cp-submit" label="Save password" onPress={submit} loading={busy} />
+          <Btn testID="admin-cp-back" variant="ghost" label="Back to dashboard" onPress={() => router.replace("/admin/dashboard")} />
           <Btn testID="admin-cp-logout" variant="ghost" label="Log out" onPress={async () => { await adminLogout(); router.replace("/admin/login"); }} />
         </Card>
       </KeyboardAwareScrollView>
