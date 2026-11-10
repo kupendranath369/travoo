@@ -491,5 +491,6 @@
   "geo.type.pin_area": "PIN code area",
   "geo.type.post_office": "Post office",
   "geo.type.pin": "Pinned point",
-  "geo.type.place": "Place"
+  "geo.type.place": "Place",
+  "notif.driver_resubmit": "Please re-upload your driver documents"
 }

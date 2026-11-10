@@ -6,8 +6,8 @@ import React, { useCallback, useEffect, useState } from "react";
 import { Modal, Pressable, ScrollView, Switch, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { api, fileUrl, Loc, locPayload } from "@/src/api";
-import { useAuth } from "@/src/auth";
+import { Loc, locPayload } from "@/src/api";
+import { adminApi as api, adminFileUrl as fileUrl, adminLogout } from "@/src/adminApi";
 import { LocationField } from "@/src/components/LocationField";
 import { MapDataCard } from "@/src/components/MapDataCard";
 import { useToast } from "@/src/components/toast";
@@ -15,15 +15,17 @@ import { Badge, Btn, Card, Chip, Empty, ErrorBox, Field, Header, Loading, Sectio
 import { inr, useI18n } from "@/src/i18n";
 import { useTheme } from "@/src/theme";
 
-const TABS = ["overview", "drivers", "passengers", "licence_verifications", "pro", "places", "users", "trips", "bookings", "tickets", "reviews", "routes", "settings"] as const;
+const TABS = ["overview", "notifications", "drivers", "passengers", "rides", "activity", "licence_verifications", "pro", "places", "users", "trips", "bookings", "tickets", "reviews", "routes", "settings"] as const;
 type Tab = (typeof TABS)[number];
-const PATH: Record<Tab, string> = { overview: "/admin/stats", drivers: "/admin/drivers", passengers: "/admin/passengers", licence_verifications: "/admin/licence-verifications", pro: "/admin/pro-drivers", places: "/admin/locations/missing", users: "/admin/users", trips: "/admin/trips", bookings: "/admin/bookings", tickets: "/admin/tickets", reviews: "/admin/reviews", routes: "/routes/popular", settings: "/admin/settings" };
+const PATH: Record<Tab, string> = { overview: "/admin/stats", notifications: "/admin/notifications", rides: "/admin/rides", activity: "/admin/activity", drivers: "/admin/drivers", passengers: "/admin/passengers", licence_verifications: "/admin/licence-verifications", pro: "/admin/pro-drivers", places: "/admin/locations/missing", users: "/admin/users", trips: "/admin/trips", bookings: "/admin/bookings", tickets: "/admin/tickets", reviews: "/admin/reviews", routes: "/routes/popular", settings: "/admin/settings" };
+
+const TAB_LABEL: Partial<Record<string, string>> = { notifications: "Alerts", rides: "Rides", activity: "Activity log", passengers: "Passengers", licence_verifications: "Licence checks" };
+const RIDE_TONE: Record<string, any> = { scheduled: "info", started: "warning", completed: "success", cancelled: "error" };
 
 export default function AdminScreen() {
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
   const { t, fmtDate } = useI18n();
-  const { user } = useAuth();
   const router = useRouter();
   const toast = useToast();
   const [tab, setTab] = useState<Tab>("overview");
@@ -32,6 +34,7 @@ export default function AdminScreen() {
   const [err, setErr] = useState("");
   const [dStatus, setDStatus] = useState("under_review");
   const [q, setQ] = useState("");
+  const [rStatus, setRStatus] = useState("active");
   const [rFrom, setRFrom] = useState<Loc | null>(null);
   const [rTo, setRTo] = useState<Loc | null>(null);
   const [rPrice, setRPrice] = useState("");
@@ -57,14 +60,14 @@ export default function AdminScreen() {
   const load = useCallback(async () => {
     setErr("");
     try {
-      const path = tab === "drivers" || tab === "pro" ? `${PATH[tab]}?status=${dStatus}` : tab === "users" ? `${PATH.users}?q=${encodeURIComponent(q)}` : PATH[tab];
+      const path = tab === "drivers" ? `${PATH.drivers}?status=${dStatus}&q=${encodeURIComponent(q)}` : tab === "pro" ? `${PATH[tab]}?status=${dStatus}` : tab === "rides" ? `${PATH.rides}?status=${rStatus}&q=${encodeURIComponent(q)}` : tab === "users" || tab === "passengers" ? `${PATH[tab]}?q=${encodeURIComponent(q)}` : PATH[tab];
       const res = await api(path);
       setData(res);
       setDataTab(tab);
     } catch (e: any) {
       setErr(e.message);
     }
-  }, [tab, dStatus, q]);
+  }, [tab, dStatus, rStatus, q]);
   useEffect(() => { setData(null); load(); }, [load]);
 
   const act = async (path: string, body: any = {}, method = "POST") => {
@@ -137,7 +140,6 @@ export default function AdminScreen() {
     }
   };
 
-  if (user?.role !== "admin") return <View style={{ flex: 1 }}><Header title={t("admin.title")} /><Empty icon="lock-closed" title="Admin access required" /></View>;
 
   const stat = (k: string, v: any, id: string) => (
     <Card key={k} style={{ width: "47%", flexGrow: 1, padding: space.md, gap: 2 }}>
@@ -166,6 +168,15 @@ export default function AdminScreen() {
               {stat("admin.stat.cancelled", data.cancelled, "admin-stat-cancelled")}
               {stat("admin.stat.value", inr(data.value), "admin-stat-value")}
               {stat("admin.stat.earnings", inr(data.earnings), "admin-stat-earnings")}
+              {stat("Registered passengers", data.passengers_registered, "admin-stat-passengers-registered")}
+              {stat("Rejected drivers", data.rejected, "admin-stat-rejected")}
+              {stat("Resubmission requested", data.resubmit, "admin-stat-resubmit")}
+              {stat("Active rides", data.rides_active, "admin-stat-rides-active")}
+              {stat("Completed rides", data.rides_completed, "admin-stat-rides-completed")}
+              {stat("Cancelled rides", data.rides_cancelled, "admin-stat-rides-cancelled")}
+              {stat("Open complaints", `${data.complaints_open} / ${data.complaints_total}`, "admin-stat-complaints")}
+              {stat("New registrations (7 days)", data.new_7d, "admin-stat-new-7d")}
+              {stat("Unread alerts", data.unread_alerts, "admin-stat-unread-alerts")}
             </View>
             <T size={12} color={colors.muted}>{t("admin.not_revenue")}</T>
             <Section title={t("admin.monthly")}>
@@ -200,19 +211,78 @@ export default function AdminScreen() {
             </Section>
           </>
         );
+      case "notifications":
+        return (
+          <>
+            <Btn small testID="admin-alerts-read-button" variant="outline" icon="checkmark-done" label={`Mark all read (${data.unread})`} onPress={() => act("/admin/notifications/read")} />
+            {data.items.length === 0 ? <Empty title="No alerts yet" /> : null}
+            {data.items.map((n: any) => (
+              <Card key={n.notif_id} testID={`admin-alert-${n.notif_id}`} style={{ gap: 2, padding: space.md, borderLeftWidth: 3, borderLeftColor: n.read ? colors.border : colors.brandPrimary }}
+                onPress={() => n.ref && (["verification_submitted", "resubmission"].includes(n.kind) ? router.push(`/admin/driver/${n.ref}`) : n.kind === "registration" ? router.push(`/admin/passenger/${n.ref}`) : null)}>
+                <T size={11} weight="700" color={n.kind === "system_error" ? colors.error : colors.muted}>{String(n.kind).replace(/_/g, " ").toUpperCase()}</T>
+                <T weight="700">{n.title}</T>
+                {n.extra?.error ? <T size={12} color={colors.error}>{n.extra.error}</T> : null}
+                <T size={11} color={colors.muted}>{fmtDate(n.created_at)} {String(n.created_at).slice(11, 16)}</T>
+              </Card>
+            ))}
+          </>
+        );
+      case "rides":
+        return (
+          <>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: space.sm }}>
+              {["active", "completed", "cancelled", "all"].map((s) => <Chip key={s} testID={`admin-rides-filter-${s}`} label={s[0].toUpperCase() + s.slice(1)} active={rStatus === s} onPress={() => setRStatus(s)} />)}
+            </ScrollView>
+            <Field testID="admin-rides-search" placeholder="Search city or ride ID" value={q} onChangeText={setQ} autoCapitalize="none" />
+            {data.length === 0 ? <Empty title="No rides" /> : null}
+            {data.map((r: any) => (
+              <Card key={r.trip_id} testID={`admin-ride-${r.trip_id}`} style={{ gap: 4, padding: space.md }}>
+                <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                  <T weight="800" style={{ flex: 1 }}>{r.origin?.name} → {r.destination?.name}</T>
+                  <Badge label={r.status} tone={RIDE_TONE[r.status] ?? "info"} />
+                </View>
+                <T size={12} color={colors.muted}>Pickup: {r.pickup_point} · Drop: {r.drop_point}</T>
+                <T size={12}>{r.date} {r.time} · {inr(r.price)}/seat · {r.seats_total - r.seats_available}/{r.seats_total} seats booked · booked value {inr(r.booked_value)}</T>
+                <T size={12}>Driver: {r.driver?.name ?? "—"} {r.driver?.phone ? `· ${r.driver.phone}` : ""}</T>
+                {r.bookings.map((b: any) => (
+                  <T key={b.booking_id} size={12} color={colors.muted}>• {b.booking_id} · {b.passenger?.name} · {b.seats} seat · {inr(b.fare_total)} · {b.status} · booked {fmtDate(b.created_at)}</T>
+                ))}
+                {r.cancel_reason ? <T size={12} color={colors.error}>Cancelled: {r.cancel_reason}</T> : null}
+              </Card>
+            ))}
+          </>
+        );
+      case "activity":
+        return (
+          <>
+            {data.length === 0 ? <Empty title="No admin activity yet" /> : null}
+            {data.map((a: any, i: number) => (
+              <View key={i} testID={`admin-activity-${i}`} style={{ paddingVertical: space.sm, borderBottomWidth: 1, borderBottomColor: colors.border, gap: 2 }}>
+                <T size={13} weight="700">{a.action}</T>
+                <T size={12} color={colors.muted}>{a.actor_name} ({a.actor}) → {a.target}</T>
+                {a.extra?.note ? <T size={12}>Note: {a.extra.note}</T> : null}
+                <T size={11} color={colors.muted}>{new Date(a.created_at + (String(a.created_at).endsWith("Z") ? "" : "Z")).toLocaleString()}</T>
+              </View>
+            ))}
+          </>
+        );
       case "drivers":
         return (
           <>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: space.sm }}>
-              {["under_review", "approved", "rejected", "resubmit"].map((s) => <Chip key={s} testID={`admin-driver-filter-${s}`} label={t(`verify.status.${s}`)} active={dStatus === s} onPress={() => setDStatus(s)} />)}
+              {["under_review", "approved", "rejected", "resubmit", "all"].map((s) => <Chip key={s} testID={`admin-driver-filter-${s}`} label={s === "all" ? "All drivers" : t(`verify.status.${s}`)} active={dStatus === s} onPress={() => setDStatus(s)} />)}
             </ScrollView>
+            <Field testID="admin-driver-search" placeholder="Search by name, phone, email or ID" value={q} onChangeText={setQ} autoCapitalize="none" />
             <Field testID="admin-review-note" placeholder={t("verify.admin_note")} value={note} onChangeText={setNote} />
             {data.length === 0 ? <Empty title={t("admin.empty")} /> : null}
             {data.map((u: any) => (
               <Card key={u.user_id} testID={`admin-driver-${u.user_id}`} style={{ gap: space.sm }}>
                 <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
                   <T weight="800">{u.name} · {u.email}</T>
-                  <Btn small variant="outline" icon="document-text-outline" label="Legal Review" onPress={() => openDriverReview(u)} />
+                  <View style={{ flexDirection: "row", gap: space.xs }}>
+                    <Btn small testID={`admin-driver-open-${u.user_id}`} icon="folder-open-outline" label="Review" onPress={() => router.push(`/admin/driver/${u.user_id}`)} />
+                    <Btn small variant="outline" icon="document-text-outline" label="Checklist" onPress={() => openDriverReview(u)} />
+                  </View>
                 </View>
                 <View style={{ flexDirection: "row", gap: space.sm }}>
                   {["profile", "licence", "rc", "vehicle"].map((k) => (
@@ -300,7 +370,7 @@ export default function AdminScreen() {
                   </View>
                 ) : null}
                 <View style={{ flexDirection: "row", gap: space.sm }}>
-                  <Btn small variant="outline" label="View Details" onPress={() => router.push(`/user/${u.user_id}`)} />
+                  <Btn small variant="outline" label="View Details" onPress={() => router.push(`/admin/passenger/${u.user_id}`)} />
                   {u.suspended ? <Btn small variant="danger" label="Unsuspend" onPress={() => act(`/admin/users/${u.user_id}/suspend`, { suspended: false }, "PUT")} /> : <Btn small variant="outline" label="Suspend" onPress={() => act(`/admin/users/${u.user_id}/suspend`, { suspended: true }, "PUT")} />}
                 </View>
               </Card>
@@ -472,10 +542,10 @@ export default function AdminScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.surface }}>
-      <Header title={t("admin.title")} />
+      <Header title="Travoo Admin Portal" back={false} right={<Btn small testID="admin-logout-button" variant="outline" icon="log-out-outline" label="Log out" onPress={async () => { await adminLogout(); router.replace("/admin/login"); }} />} />
       <View style={{ height: 56, backgroundColor: colors.surfaceSecondary, borderBottomWidth: 1, borderBottomColor: colors.border }}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: space.sm, paddingHorizontal: space.lg, alignItems: "center" }}>
-          {TABS.map((k) => <Chip key={k} testID={`admin-tab-${k}`} label={t(`admin.${k}`)} active={tab === k} onPress={() => setTab(k)} />)}
+          {TABS.map((k) => <Chip key={k} testID={`admin-tab-${k}`} label={TAB_LABEL[k] ?? t(`admin.${k}`)} active={tab === k} onPress={() => setTab(k)} />)}
         </ScrollView>
       </View>
       <ScrollView testID="admin-content" contentContainerStyle={{ padding: space.lg, gap: space.md, paddingBottom: insets.bottom + space.xl }}>{body()}</ScrollView>

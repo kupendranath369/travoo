@@ -18,7 +18,7 @@ import { useTheme } from "@/src/theme";
 
 LogBox.ignoreAllLogs(true);
 
-const PUBLIC = new Set(["auth", "language", "legal", "forgot-password", "reset-password"]);
+const PUBLIC = new Set(["auth", "language", "legal", "forgot-password", "reset-password", "admin"]);
 
 function Gate() {
   const { user, loading } = useAuth();

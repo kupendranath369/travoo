@@ -1,5 +1,5 @@
 import Ionicons from "@react-native-vector-icons/ionicons";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useState } from "react";
 import { View } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
@@ -16,6 +16,8 @@ export default function ForgotPasswordScreen() {
   const { colors } = useTheme();
   const { t } = useI18n();
   const router = useRouter();
+  const { portal } = useLocalSearchParams<{ portal?: string }>();
+  const back = () => (router.canGoBack() ? router.back() : router.replace(portal === "admin" ? "/admin/login" : "/auth"));
   const toast = useToast();
   const [email, setEmail] = useState("");
   const [busy, setBusy] = useState(false);
@@ -27,7 +29,7 @@ export default function ForgotPasswordScreen() {
     setBusy(true);
     setErr("");
     try {
-      await api("/auth/forgot-password", { body: { email: email.trim() } });
+      await api("/auth/forgot-password", { body: { email: email.trim().toLowerCase(), portal: portal === "admin" ? "admin" : "app" } });
       setSent(true);
       toast("Check your inbox for the reset link");
     } catch (e: any) {
@@ -44,9 +46,9 @@ export default function ForgotPasswordScreen() {
           <View style={{ gap: space.md, alignItems: "center", paddingVertical: space.xl }}>
             <Ionicons name="mail-open-outline" size={80} color={colors.success} />
             <T testID="forgot-sent-title" size={20} weight="700" center>Check your email</T>
-            <T center color={colors.muted}>If an account exists for {email}, we&apos;ve sent a link to reset your password. It expires in 1 hour. Check your spam folder too.</T>
+            <T center color={colors.muted}>If an account exists for {email}, we&apos;ve sent a link to reset your password. It expires in 30 minutes. Check your spam folder too.</T>
             <Btn testID="forgot-resend-button" variant="outline" label="Send again" onPress={submit} loading={busy} />
-            <Btn testID="forgot-back-button" variant="ghost" label="Back to Login" onPress={() => router.back()} />
+            <Btn testID="forgot-back-button" variant="ghost" label="Back to Login" onPress={back} />
           </View>
         ) : (
           <>
@@ -54,7 +56,7 @@ export default function ForgotPasswordScreen() {
             <Field testID="forgot-email-input" label="Email" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" />
             {err ? <T testID="forgot-error" color={colors.error} weight="600">{err}</T> : null}
             <Btn testID="forgot-submit-button" label="Send Reset Link" onPress={submit} loading={busy} />
-            <Btn testID="forgot-cancel-button" variant="ghost" label="Back to Login" onPress={() => router.back()} />
+            <Btn testID="forgot-cancel-button" variant="ghost" label="Back to Login" onPress={back} />
           </>
         )}
       </KeyboardAwareScrollView>

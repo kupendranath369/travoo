@@ -7,7 +7,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { api, fileUrl } from "@/src/api";
 import { useAuth } from "@/src/auth";
-import { DOC_KINDS, DocPhotos } from "@/src/components/DocPhotos";
+import { DocPhotos } from "@/src/components/DocPhotos";
 import { useToast } from "@/src/components/toast";
 import { Badge, Btn, Card, Chip, Field, Header, Loading, Section, Stepper, T, radius, space, statusTone } from "@/src/components/ui";
 import { useI18n } from "@/src/i18n";
@@ -131,7 +131,7 @@ export default function DriverScreen() {
           </Card>
         ) : p.documents?.licence_no ? (
           <Card style={{ gap: 4 }}>
-            <DocPhotos photos={p.documents?.photos ?? {}} editable={false} onUploaded={() => {}} />
+            <DocPhotos files={p.files ?? []} kinds={p.kinds ?? []} editable={false} onChanged={() => {}} />
             <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
               <T size={13} color={colors.muted}>{t("verify.legal_name")}:</T>
               <T size={13} weight="700">{p.documents.legal_name}</T>

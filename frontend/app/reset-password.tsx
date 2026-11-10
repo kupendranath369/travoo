@@ -21,14 +21,17 @@ export default function ResetPasswordScreen() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [success, setSuccess] = useState(false);
+  const [loginPath, setLoginPath] = useState<"/auth" | "/admin/login">("/auth");
 
   const submit = async () => {
-    if (password.length < 8) return setErr("Password must be at least 8 characters");
+    if (!token) return setErr("This reset link is incomplete. Please open the link from your email again or request a new one.");
+    if (password.length < 8 || !/[A-Za-z]/.test(password) || !/\d/.test(password)) return setErr("Use at least 8 characters with letters and numbers");
     if (password !== confirmPassword) return setErr("Passwords do not match");
     setBusy(true);
     setErr("");
     try {
-      await api("/auth/reset-password", { body: { token: token as string, new_password: password } });
+      const r = await api("/auth/reset-password", { body: { token: token as string, new_password: password } });
+      setLoginPath(r.role === "admin" ? "/admin/login" : "/auth");
       setSuccess(true);
       toast("Password reset successfully");
     } catch (e: any) {
@@ -46,7 +49,7 @@ export default function ResetPasswordScreen() {
             <Ionicons name="checkmark-circle" size={80} color={colors.success} />
             <T testID="reset-success-title" size={20} weight="700" center>Password Reset Successful</T>
             <T center color={colors.muted}>Your password has been reset successfully. You can now log in with your new password.</T>
-            <Btn testID="reset-go-login-button" label="Go to Login" onPress={() => router.replace("/auth")} />
+            <Btn testID="reset-go-login-button" label="Go to Login" onPress={() => router.replace(loginPath)} />
           </View>
         ) : (
           <>

@@ -61,7 +61,7 @@ export default function Home() {
     <View style={{ flex: 1, backgroundColor: colors.surface }}>
       <View style={{ paddingTop: insets.top + space.sm, paddingHorizontal: space.lg, paddingBottom: space.sm, flexDirection: "row", alignItems: "center", backgroundColor: colors.surfaceSecondary, borderBottomWidth: 1, borderBottomColor: colors.border, gap: space.sm }}>
         <View style={{ flex: 1 }}><Logo size={34} /></View>
-        {user?.role === "admin" && icon("shield-checkmark-outline", () => router.push("/admin"), "home-admin-button")}
+        {user?.role === "admin" && icon("shield-checkmark-outline", () => router.push("/admin/login"), "home-admin-button")}
         {icon("language-outline", () => router.push("/language?from=profile"), "home-language-button")}
         {icon("notifications-outline", () => router.push("/notifications"), "home-notifications-button", !!unread)}
         {icon("person-circle-outline", () => router.push("/profile"), "home-profile-button")}

@@ -5,7 +5,7 @@ import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { api } from "@/src/api";
-import { DOC_KINDS, DocPhotos } from "@/src/components/DocPhotos";
+import { DocFile, DocKind, DocPhotos } from "@/src/components/DocPhotos";
 import { useToast } from "@/src/components/toast";
 import { Btn, Card, Field, Header, Loading, T, radius, space } from "@/src/components/ui";
 import { useI18n } from "@/src/i18n";
@@ -20,7 +20,7 @@ export function DriverVerificationForm({ ai }: { ai: boolean }) {
   const { t } = useI18n();
   const router = useRouter();
   const toast = useToast();
-  const [photos, setPhotos] = useState<Record<string, string> | null>(null);
+  const [prof, setProf] = useState<{ files: DocFile[]; kinds: DocKind[]; missing: string[] } | null>(null);
   const [f, setF] = useState(EMPTY);
   const [busy, setBusy] = useState("");
   const [err, setErr] = useState("");
@@ -28,13 +28,16 @@ export function DriverVerificationForm({ ai }: { ai: boolean }) {
 
   const load = useCallback(async () => {
     const r = await api("/driver/profile");
-    setPhotos(r.documents?.photos ?? {});
+    setProf({ files: r.files ?? [], kinds: r.kinds ?? [], missing: r.missing ?? [] });
   }, []);
   useFocusEffect(useCallback(() => { load().catch((e) => setErr(e.message)); }, [load]));
 
-  if (!photos) return <View style={{ flex: 1, backgroundColor: colors.surface }}><Header title={ai ? "AI Verification" : "Manual Verification"} /><Loading /></View>;
-  const missing = DOC_KINDS.filter((k) => !photos[k]);
-  const canRead = !!photos.licence && !!photos.rc;
+  if (!prof) return <View style={{ flex: 1, backgroundColor: colors.surface }}><Header title={ai ? "AI Verification" : "Manual Verification"} /><Loading /></View>;
+  const missing = prof.missing;
+  const labelOf = (k: string) => prof.kinds.find((x) => x.kind === k)?.label ?? k;
+  const has = (k: string) => prof.files.some((f) => f.kind === k);
+  const canRead = (has("licence_front") || has("licence")) && has("rc");
+  const required = prof.kinds.filter((k) => k.required).length;
 
   const readWithAi = async () => {
     setBusy("ai");
@@ -58,7 +61,7 @@ export function DriverVerificationForm({ ai }: { ai: boolean }) {
   };
 
   const submit = async () => {
-    if (missing.length) return setErr(`Please upload: ${missing.map((k) => t(`verify.photo.${k}`)).join(", ")}`);
+    if (missing.length) return setErr(`Please upload: ${missing.map(labelOf).join(", ")}`);
     if (f.legal_name.trim().length < 3) return setErr("Legal name required");
     if (f.vehicle_name.trim().length < 2) return setErr("Vehicle name required");
     if (!/^[6-9]\d{9}$/.test(f.phone)) return setErr("Valid 10-digit phone number required");
@@ -87,9 +90,9 @@ export function DriverVerificationForm({ ai }: { ai: boolean }) {
           <T size={12} color={colors.muted}>
             {ai ? "Add clear photos. AI then reads your licence and RC to fill the details for you." : "Add clear photos. Our team reviews them before approving you."}
           </T>
-          <DocPhotos photos={photos} editable onUploaded={() => load().catch(() => {})} />
+          <DocPhotos files={prof.files} kinds={prof.kinds} editable onChanged={() => load().catch(() => {})} />
           <T testID="verify-photos-progress" size={12} weight="700" color={missing.length ? colors.muted : colors.success}>
-            {DOC_KINDS.length - missing.length} of {DOC_KINDS.length} photos uploaded
+            {required - missing.length} of {required} required documents uploaded
           </T>
           {ai ? (
             <Btn testID="verify-ai-read-button" icon="sparkles" label={aiDone ? "Read again with AI" : "Fill details with AI"} onPress={readWithAi} loading={busy === "ai"} disabled={!canRead || !!busy} />

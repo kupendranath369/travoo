@@ -1,30 +1,23 @@
 // Multipart upload that works in BOTH runtimes. Use this for every file upload; never
 // build the FormData part yourself.
 //
-//   import { uploadForm } from "@/src/utils/upload";
-//   const res = await uploadForm(`${BACKEND_URL}/api/photos`, {
-//     fields: { caption },
-//     files: { image: { uri: asset.uri, name: "photo.jpg", mimeType: asset.mimeType } },
-//   });
-//
-// Why: on a phone the global fetch is `expo/fetch` (SDK 54+), which rejects the old RN
-// `{ uri, name, type }` part with "Unsupported FormDataPart implementation". The web
-// preview accepts that shape, so the bug only shows on a device. Never set Content-Type:
-// the runtime adds the multipart boundary. No extra dependency: `expo/fetch` reads
-// `file://` on iOS and Android itself (React Native's own fetch cannot on Android).
+// Native (iOS/Android): files are read with the expo-file-system `File` class, which expo/fetch
+// and native upload tasks understand directly. (Wrapping a fetched blob in `new Blob([...])`
+// fails on real phones; that was the cause of driver uploads breaking outside the web preview.)
+// Web: the browser picker returns blob:/data: URLs that the browser fetch can read.
 
-import * as FileSystem from "expo-file-system";
-import { Platform } from "react-native";
+import { File, UploadType } from "expo-file-system";
 import { fetch as expoFetch } from "expo/fetch";
+import { Platform } from "react-native";
 
 export type LocalFile = {
-  uri: string; // asset.uri from expo-image-picker / expo-document-picker / expo-audio
-  name?: string; // "photo.jpg"; last path segment of uri when omitted
-  mimeType?: string; // asset.mimeType, e.g. "image/jpeg"
+  uri: string; // asset.uri from expo-image-picker / expo-document-picker / expo-image-manipulator
+  name?: string;
+  mimeType?: string;
 };
 
 export type UploadOptions = {
-  files: Record<string, LocalFile>; // form field name -> file
+  files: Record<string, LocalFile>;
   fields?: Record<string, string>;
   method?: "POST" | "PUT";
   headers?: Record<string, string>; // auth only; never Content-Type
@@ -35,36 +28,56 @@ export function fileNameFor(file: LocalFile): string {
   return file.name || file.uri.split("?")[0].split("/").pop() || "file";
 }
 
-// Turn a local file into a part that the current runtime's fetch can serialise.
-export async function toFormDataPart(file: LocalFile): Promise<Blob> {
-  if (Platform.OS === "web") {
-    // blob:/data: URL from the browser picker; the browser fetch reads it fine.
-    const blob = await (await fetch(file.uri)).blob();
-    const type = file.mimeType || blob.type;
-    return type && type !== blob.type ? new Blob([blob], { type }) : blob;
-  }
-  // Native: use expo/fetch directly which handles file:// and content:// URIs
-  try {
-    const blob = await (await expoFetch(file.uri)).blob();
-    return file.mimeType && file.mimeType !== blob.type ? new Blob([blob], { type: file.mimeType }) : blob;
-  } catch (e) {
-    console.error("Error reading file with expo/fetch:", e);
-    throw new Error(`Failed to read file: ${file.uri}`);
-  }
-}
-
 export async function uploadForm(url: string, opts: UploadOptions): Promise<Response> {
   const form = new FormData();
   for (const [k, v] of Object.entries(opts.fields ?? {})) form.append(k, v);
   for (const [field, file] of Object.entries(opts.files)) {
-    form.append(field, await toFormDataPart(file), fileNameFor(file));
+    if (Platform.OS === "web") {
+      const blob = await (await fetch(file.uri)).blob();
+      form.append(field, file.mimeType && file.mimeType !== blob.type ? new Blob([blob], { type: file.mimeType }) : blob, fileNameFor(file));
+    } else {
+      form.append(field, new File(file.uri) as any);
+    }
   }
-  const init = {
-    method: opts.method ?? "POST",
-    body: form,
-    headers: opts.headers, // the runtime adds the multipart boundary
-    signal: opts.signal,
-  };
-  // Branch the call, not the function reference: the two fetches have different RequestInit types.
-  return Platform.OS === "web" ? fetch(url, init) : expoFetch(url, init);
+  const init = { method: opts.method ?? "POST", body: form, headers: opts.headers, signal: opts.signal };
+  return Platform.OS === "web" ? fetch(url, init) : (expoFetch(url, init as any) as unknown as Promise<Response>);
+}
+
+export type UploadResult = { status: number; body: string };
+
+/** Single-file multipart upload with byte progress (0..1). Native uses a native upload task; web uses XHR. */
+export async function uploadWithProgress(
+  url: string,
+  file: LocalFile,
+  opts: { headers?: Record<string, string>; fieldName?: string; onProgress?: (p: number) => void },
+): Promise<UploadResult> {
+  const field = opts.fieldName ?? "file";
+  if (Platform.OS !== "web") {
+    const task = new File(file.uri).createUploadTask(url, {
+      httpMethod: "POST",
+      uploadType: UploadType.MULTIPART,
+      fieldName: field,
+      mimeType: file.mimeType,
+      headers: opts.headers,
+      onProgress: ({ bytesSent, totalBytes }) => totalBytes > 0 && opts.onProgress?.(Math.min(1, bytesSent / totalBytes)),
+    });
+    const r = await task.uploadAsync();
+    if (!r) throw new Error("Upload was cancelled");
+    return { status: r.status, body: r.body };
+  }
+  const blob = await (await fetch(file.uri)).blob();
+  const part = file.mimeType && file.mimeType !== blob.type ? new Blob([blob], { type: file.mimeType }) : blob;
+  const form = new FormData();
+  form.append(field, part, fileNameFor(file));
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", url);
+    for (const [k, v] of Object.entries(opts.headers ?? {})) xhr.setRequestHeader(k, v);
+    xhr.upload.onprogress = (e) => e.lengthComputable && opts.onProgress?.(e.loaded / e.total);
+    xhr.onload = () => resolve({ status: xhr.status, body: xhr.responseText });
+    xhr.onerror = () => reject(new Error("Network error. Check your connection and try again."));
+    xhr.ontimeout = () => reject(new Error("The upload timed out. Please try again."));
+    xhr.timeout = 120000;
+    xhr.send(form);
+  });
 }

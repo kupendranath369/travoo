@@ -26,7 +26,7 @@ export default function MoreScreen() {
   
   // Add admin section if user is admin
   if (user?.role === "admin") {
-    groups.unshift([t("admin.title"), [["shield-checkmark-outline", t("admin.title"), "/admin"]]]);
+    groups.unshift([t("admin.title"), [["shield-checkmark-outline", t("admin.title"), "/admin/login"]]]);
   }
   return (
     <View style={{ flex: 1, backgroundColor: colors.surface }}>

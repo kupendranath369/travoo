@@ -1,0 +1,52 @@
+{
+  "summary": "Iteration 8: tested the new driver documents (8 kinds), verification submit/lock, file ACL, admin portal sessions/RBAC/lockout, admin APIs, forgot/reset password (Resend not configured, so 503 is expected) and the related UI at 390px and 1280px. Backend: all 24 pytest tests pass. Frontend: admin login (validation, show/hide, login, tabs, logout, guard), driver DocPhotos (gallery and PDF pick, preview, progress, upload, replace, delete, network error and retry), admin driver review (docs grid, doc preview, required-reason validation, resubmit, suspend/reactivate, history) and the forgot-password 'not configured' error all work. Bugs found: (1) the admin 'Forgot password?' link bounces straight back to /admin/login; (2) on a fresh browser every /admin/* URL first redirects to /language; (3) successful admin logins count toward the 5-attempt lockout. Deprecated API detected: expo-image-manipulator manipulateAsync.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/admin/auth/login", "issue": "rate_limit('adminlogin:email:..', 5, 900) runs before the password check and records every attempt, successful ones included. An admin who signs in correctly 5 times in 15 min (several devices or tabs) is locked out with 429 'account is locked'. The lockout should count only failed attempts, or clear the counter on success. Confirmed in db.rate_limits: 4 entries for admin@travoo.in = 2 successful + 1 failed + 1 UI success."},
+      {"endpoint": "GET /api/files/{fid}?token=", "issue": "Accepts the bearer/admin session token as a URL query param, which can leak into proxy/access logs and browser history. Prefer short-lived signed file URLs."},
+      {"endpoint": "POST /api/admin/notifications/read", "issue": "Marks ALL admin alerts read globally (shared across admins). Not called during testing to avoid changing real data; needs a manual check."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "app/admin/_layout.tsx guard", "issue": "Tapping admin-login-forgot pushes /forgot-password?portal=admin, then the page immediately bounces back to /admin/login, so admins can never reach forgot-password. RCA: AdminLayout stays mounted after router.push. useSegments() becomes ['forgot-password'], so segments[1] is undefined and sub='index', which is not in OPEN. With no token it calls router.replace('/admin/login'). Fix: at the top of the effect add `if (segments[0] !== 'admin') return;` (and check `alive` before the no-token replace).", "testID": "admin-login-forgot", "priority": "HIGH"},
+      {"component": "app/_layout.tsx language gate", "issue": "On a fresh browser (no travoo_lang), /admin/login and /admin/dashboard redirect to /language (line 33: `if (!chosen && top !== 'language')`). Admin portal routes should skip the language picker, e.g. `top !== 'admin'`.", "testID": "admin-login-email", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [
+      {"flow": "Admin dashboard > Drivers tab list", "issue": "Inline thumbnails still use the legacy 4 kinds (admin-doc-profile/licence/rc/vehicle-{uid}). New drivers upload licence_front/back, id_proof and insurance, so the 'licence' thumbnail is empty or legacy and the new kinds are not shown. The full review screen /admin/driver/[id] is correct.", "affected_testIDs": ["admin-doc-licence-{uid}"]}
+    ],
+    "design_issues": [
+      {"screen": "Manual/AI verification DocPhotos (390px)", "issues": ["Each single-file kind is wrapped in its own flexDirection:'row' View (DocPhotos.tsx:159), so every tile stretches to full width (~324x258). The 8 tiles make a very long scroll instead of the intended 2-column grid. Put all single kinds in one flexWrap row container.", "Upload error + Retry row (doc-error-*) renders at the bottom of the grid, far from the failed tile, so users may not see it. Show it inline under the tile.", "Redundant ternary `editable ? tile(k) : tile(k)` at DocPhotos.tsx:159."]},
+      {"screen": "Admin login", "issues": ["Touch targets below 44px: admin-login-toggle-password 20x23 (hitSlop helps on native only), admin-login-remember switch 40x20, admin-login-forgot 116x18."]},
+      {"screen": "Admin overview", "issues": ["Duplicate or confusing stat cards: 'Active rides 13' appears twice; 'Passengers 7' and 'Registered passengers 31' sit side by side with no explanation.", "At 1280px, cards are 2 very wide columns with large empty space. Use a 3-4 column grid on desktop."]},
+      {"screen": "Forgot password (1280px)", "issues": ["Form, input and button stretch to the full 1248px width. Add maxWidth (~440) and center it, like the admin login card."]}
+    ],
+    "react_native_issues": [
+      {"component": "expo-image-manipulator manipulateAsync", "issue": "manipulateAsync is the deprecated legacy API. SDK 52+ provides ImageManipulator.manipulate(uri).resize().renderAsync() → saveAsync(). Reference: /app/frontend/src/components/DocPhotos.tsx:4,30"},
+      {"component": "Native upload path (expo-file-system File.createUploadTask)", "issue": "Native-only and NOT verifiable on web. Web uses XHR, which was verified. Verify in Expo Go or a dev build that createUploadTask/UploadType.MULTIPART exists in expo-file-system ~58 and reports progress. Reference: /app/frontend/src/utils/upload.ts:56"}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_iter8_admin_docs_reset.py", "/app/test_reports/pytest/pytest_iter8.xml"],
+  "action_items": [
+    "Fix app/admin/_layout.tsx guard: return early when segments[0] !== 'admin' so admin-login-forgot reaches /forgot-password?portal=admin.",
+    "Exempt /admin/* from the /language gate in app/_layout.tsx.",
+    "admin_login: count only FAILED attempts toward the 5/15min email lockout, or reset on success.",
+    "DocPhotos: render single-file kinds in a shared 2-column wrap grid; show the upload error inline under the failed tile.",
+    "Admin Drivers tab inline thumbnails: use the new kinds (licence_front/back, id_proof, insurance) instead of legacy 'licence'.",
+    "Migrate manipulateAsync to the new ImageManipulator.manipulate contextual API.",
+    "Cap the forgot-password form width on desktop; enlarge admin-login touch targets to 44px; dedupe the 'Active rides' stat card."
+  ],
+  "critical_code_review_comments": [
+    "server.py is 2515 lines; split into routers (auth, admin, driver_docs, trips/bookings).",
+    "get_file accepts ?token= query (token leakage risk).",
+    "rate_limit() records an entry before the check passes for every call, so legitimate traffic consumes the lockout budget (admin login)."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter8_admin_docs_reset.py (new)"],
+  "success_rate": {"backend": "100% (24/24)", "frontend": "~88% (admin forgot link broken; admin URLs gated by language picker on fresh browser)"},
+  "seed_data_creation": "Created TEST_ users (drivers, passengers, reset users) and one temporary admin_sessions record (test_marker TEST_iter8). All were deleted by id after the run: users, files, driver_documents, notifications, events, password_resets, admin_notifications refs. Uploaded objects remain in object storage (no delete API). Audit_logs and rate_limit entries remain.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Admin login with admin@travoo.in counts toward a 5-per-15-min lockout even on success. Log in once per run, or insert a temporary admin_sessions doc {token_hash: sha256('adm_...'), user_id, expires_at} and put the token in localStorage 'travoo_admin_session' (JSON string). For UI, set localStorage travoo_lang='\"en\"' first, otherwise every route redirects to /language. User JWT is localStorage 'travoo_token' (JSON string). Pytest runs under xdist (2 workers), so module fixtures run per worker. Gallery and file pickers work on web via page.expect_file_chooser.",
+  "rca_of_issue": "Admin forgot-password bounce: AdminLayout effect depends on `sub = segments[1] ?? 'index'`. After router.push('/forgot-password'), the admin stack stays mounted and segments = ['forgot-password'], so sub='index', which is not in OPEN. loadAdminToken() returns null, so router.replace('/admin/login') runs. Repro: /admin/login → tap Forgot password? → URL briefly /forgot-password?portal=admin then /admin/login. Mitigation: guard on segments[0] === 'admin'."
+}

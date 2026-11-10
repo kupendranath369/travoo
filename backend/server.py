@@ -27,7 +27,9 @@ from html import escape as html_escape
 import base64
 import json as jsonlib
 
-from email_service import send_email
+import hashlib
+
+from email_service import EmailNotConfigured, EmailSendFailed, email_configured, send_email, send_email_quietly
 from emergentintegrations.llm.chat import ImageContent, LlmChat, StreamDone, TextDelta, UserMessage
 from geo import GEO_INDEXES, LOC_OUT, circle, get_router, haversine, loc_doc
 from seed_data import PLACES, POPULAR_ROUTES, STATES
@@ -42,7 +44,11 @@ IST = timezone(timedelta(hours=5, minutes=30))
 EMERGENT_SESSION_URL = "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data"
 
 # Email configuration
-FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:19006")
+FRONTEND_URL = os.environ["FRONTEND_URL"].rstrip("/")
+APP_SCHEME = "travoo"
+RESET_TTL_MIN = 30
+ADMIN_SESSION_HOURS = 8
+ADMIN_REMEMBER_DAYS = 7
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger("travoo")
@@ -88,7 +94,18 @@ INDEXES: dict[str, list[IndexModel]] = {
     "contact_access": [IndexModel([("viewer_id", ASCENDING), ("owner_id", ASCENDING), ("booking_id", ASCENDING)], name="uniq", unique=True)],
     "fuel_prices": [IndexModel([("state", ASCENDING), ("fuel_type", ASCENDING)], name="uniq", unique=True)],
     "popular_routes": [IndexModel([("route_id", ASCENDING)], name="rid", unique=True)],
-    "audit_logs": [IndexModel([("created_at", DESCENDING)], name="time")],
+    "audit_logs": [IndexModel([("created_at", DESCENDING)], name="time"), IndexModel([("actor", ASCENDING)], name="actor")],
+    "rate_limits": [IndexModel([("key", ASCENDING), ("at", DESCENDING)], name="key_at"),
+                    IndexModel([("expires_at", ASCENDING)], name="ttl", expireAfterSeconds=0)],
+    "password_resets": [IndexModel([("token_hash", ASCENDING)], name="token_hash", unique=True),
+                        IndexModel([("user_id", ASCENDING)], name="user"),
+                        IndexModel([("expires_at", ASCENDING)], name="ttl", expireAfterSeconds=86400)],
+    "admin_sessions": [IndexModel([("token_hash", ASCENDING)], name="token_hash", unique=True),
+                       IndexModel([("user_id", ASCENDING)], name="user"),
+                       IndexModel([("expires_at", ASCENDING)], name="ttl", expireAfterSeconds=0)],
+    "admin_notifications": [IndexModel([("created_at", DESCENDING)], name="time"), IndexModel([("read", ASCENDING)], name="read")],
+    "driver_verification_events": [IndexModel([("user_id", ASCENDING), ("at", DESCENDING)], name="user_time")],
+    "driver_documents": [IndexModel([("user_id", ASCENDING)], name="uid")],
 }
 for _c, _m in GEO_INDEXES.items():
     INDEXES[_c] = INDEXES.get(_c, []) + _m
@@ -178,6 +195,58 @@ async def get_settings() -> dict:
     return s or {}
 
 
+def sha256(s: str) -> str:
+    return hashlib.sha256(s.encode()).hexdigest()
+
+
+def client_ip(request: Request) -> str:
+    fwd = request.headers.get("x-forwarded-for", "")
+    return fwd.split(",")[0].strip() or (request.client.host if request.client else "unknown")
+
+
+async def rate_limit(key: str, limit: int, window_s: int, msg: str = "Too many attempts. Please wait a few minutes and try again."):
+    """Sliding-window limiter backed by MongoDB (works across workers, entries expire via TTL)."""
+    since = now() - timedelta(seconds=window_s)
+    if await db.rate_limits.count_documents({"key": key, "at": {"$gt": since}}) >= limit:
+        raise HTTPException(429, msg)
+    await db.rate_limits.insert_one({"key": key, "at": now(), "expires_at": now() + timedelta(seconds=window_s)})
+
+
+async def admin_alert(kind: str, title: str, ref: Optional[str] = None, extra: Optional[dict] = None):
+    with suppress(Exception):
+        await db.admin_notifications.insert_one({"notif_id": nid("anf"), "kind": kind, "title": title, "ref": ref,
+                                                 "extra": extra or {}, "read": False, "created_at": now()})
+
+
+def email_shell(title: str, body_html: str) -> str:
+    return (
+        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f6fb;padding:24px 12px">'
+        '<tr><td align="center"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
+        'style="max-width:480px;background:#ffffff;border-radius:14px;padding:28px;font-family:Arial,Helvetica,sans-serif;color:#1a1f36">'
+        '<tr><td style="font-size:26px;font-weight:800;color:#1565d8;letter-spacing:0.5px;padding-bottom:4px">travoo</td></tr>'
+        '<tr><td style="font-size:12px;color:#f28c28;font-weight:bold;padding-bottom:20px">Enjoy Your Ride</td></tr>'
+        f'<tr><td style="font-size:20px;font-weight:bold;padding-bottom:12px">{title}</td></tr>'
+        f'{body_html}'
+        '<tr><td style="font-size:12px;color:#9ca3af;padding-top:24px;border-top:1px solid #eef0f4">'
+        'Sent by Travoo. We will never ask for your password by email.</td></tr>'
+        '</table></td></tr></table>'
+    )
+
+
+async def notify_driver_status_email(uid: str, decision: str, note: str):
+    u = await db.users.find_one({"user_id": uid}, {"_id": 0, "email": 1, "name": 1})
+    if not u or not email_configured():
+        return
+    msgs = {"approved": ("You're verified on Travoo", "Your documents were approved. You can now publish rides."),
+            "rejected": ("Your Travoo verification was rejected", "Your documents could not be approved."),
+            "resubmit": ("Please resubmit your Travoo documents", "Some documents need to be uploaded again.")}
+    subject, line = msgs[decision]
+    reason = f'<tr><td style="font-size:14px;padding-bottom:12px"><b>Reason:</b> {html_escape(note)}</td></tr>' if note else ""
+    html = email_shell(html_escape(subject), f'<tr><td style="font-size:15px;line-height:22px;padding-bottom:12px">Hi {html_escape(u.get("name") or "there")}, {line}</td></tr>{reason}'
+                       '<tr><td style="font-size:14px;color:#6b7280">Open the Travoo app → Driver verification to see details.</td></tr>')
+    await send_email_quietly(to=u["email"], subject=subject, html=html)
+
+
 # ---------------------------------------------------------------- auth
 async def get_user(request: Request) -> dict:
     auth = request.headers.get("Authorization", "")
@@ -187,12 +256,21 @@ async def get_user(request: Request) -> dict:
 
 
 async def user_from_token(token: str) -> dict:
-    uid = None
-    try:
-        payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
-        if not payload.get("purpose"):
-            uid = payload.get("sub")
-    except jwt.InvalidTokenError:
+    uid, iat, admin_session = None, None, False
+    if token.startswith("adm_"):
+        sess = await db.admin_sessions.find_one({"token_hash": sha256(token)}, {"_id": 0})
+        if not sess or sess["expires_at"].replace(tzinfo=timezone.utc) <= now():
+            raise HTTPException(401, "Admin session expired. Please sign in again.")
+        uid, admin_session = sess["user_id"], True
+        await db.admin_sessions.update_one({"token_hash": sha256(token)}, {"$set": {"last_seen": now()}})
+    else:
+        try:
+            payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+            if not payload.get("purpose"):
+                uid, iat = payload.get("sub"), payload.get("iat")
+        except jwt.InvalidTokenError:
+            pass
+    if not uid and not admin_session:
         sess = await db.user_sessions.find_one({"session_token": token}, {"_id": 0})
         if sess:
             exp = sess["expires_at"]
@@ -207,12 +285,26 @@ async def user_from_token(token: str) -> dict:
         raise HTTPException(401, "User not found")
     if user.get("suspended"):
         raise HTTPException(403, "Account suspended. Contact support.")
+    changed = user.get("password_changed_at")
+    if iat is not None and changed and int(changed.replace(tzinfo=timezone.utc).timestamp()) > int(iat):
+        raise HTTPException(401, "Your password was changed. Please sign in again.")
+    if admin_session:
+        if user.get("role") != "admin":
+            raise HTTPException(401, "Invalid admin session")
+        user["_admin_session"] = True
     return user
 
 
-async def get_admin(user: dict = Depends(get_user)) -> dict:
-    if user.get("role") != "admin":
+async def get_admin_any(user: dict = Depends(get_user)) -> dict:
+    """Admin signed in through the Admin Portal (server-side session); may still need to set a password."""
+    if user.get("role") != "admin" or not user.get("_admin_session"):
         raise HTTPException(403, "Admin access required")
+    return user
+
+
+async def get_admin(user: dict = Depends(get_admin_any)) -> dict:
+    if user.get("must_change_password"):
+        raise HTTPException(403, "Please set a new password before using the admin portal")
     return user
 
 
@@ -253,258 +345,179 @@ async def register(body: RegisterIn):
     except DuplicateKeyError:
         raise HTTPException(409, "Email already registered")
     user = await db.users.find_one({"user_id": doc["user_id"]}, USER_PRIVATE)
+    await admin_alert("registration", f"New registration: {doc['name']}", doc["user_id"])
     return {"token": make_token(doc["user_id"]), "user": user}
 
 
 @api.post("/auth/login")
-async def login(body: LoginIn):
-    user = await db.users.find_one({"email": body.email.lower()})
+async def login(body: LoginIn, request: Request):
+    email = body.email.lower()
+    await rate_limit(f"login:ip:{client_ip(request)}", 30, 900)
+    await rate_limit(f"login:email:{email}", 10, 900)
+    user = await db.users.find_one({"email": email})
     if not user or not user.get("password_hash") or not check_pw(body.password, user["password_hash"]):
         raise HTTPException(401, "Incorrect email or password")
     if user.get("suspended"):
         raise HTTPException(403, "Account suspended. Contact support.")
+    if user.get("role") == "admin":
+        raise HTTPException(403, "Administrators must sign in through the Travoo Admin Portal.")
     return {"token": make_token(user["user_id"]), "user": await db.users.find_one({"user_id": user["user_id"]}, USER_PRIVATE)}
 
 
 class ForgotPasswordIn(BaseModel):
     email: EmailStr
+    portal: Literal["app", "admin"] = "app"
+
+
+GENERIC_RESET = {"status": "accepted", "message": "If an account exists for this email, we've sent a password reset link. It expires in 30 minutes."}
+
+
+def reset_email_html(name: str, web_link: str, app_link: str) -> str:
+    web, app_ = html_escape(web_link, quote=True), html_escape(app_link, quote=True)
+    return email_shell("Reset your password", (
+        f'<tr><td style="font-size:15px;line-height:22px;padding-bottom:20px">Hi {html_escape(name)}, we received a request to reset the password '
+        'for your Travoo account. Tap the button below to choose a new password.</td></tr>'
+        f'<tr><td style="padding-bottom:16px"><a href="{web}" style="background:#1565d8;color:#ffffff;text-decoration:none;'
+        'padding:14px 28px;border-radius:10px;font-weight:bold;font-size:16px;display:inline-block">Reset Password</a></td></tr>'
+        f'<tr><td style="font-size:13px;padding-bottom:16px"><a href="{app_}" style="color:#1565d8">Open in the Travoo app instead</a></td></tr>'
+        f'<tr><td style="font-size:14px;color:#1a1f36;padding-bottom:12px"><b>This link expires in {RESET_TTL_MIN} minutes</b> and can be used only once.</td></tr>'
+        '<tr><td style="font-size:13px;line-height:20px;color:#6b7280;background:#fff7ed;border-radius:8px;padding:12px">'
+        '<b>Didn\'t request this?</b> You can safely ignore this email — your password will not change. '
+        'If you keep receiving these emails, contact Travoo support.</td></tr>'))
 
 
 @api.post("/auth/forgot-password")
-async def forgot_password(body: ForgotPasswordIn):
-    """Send password reset email"""
-    user = await db.users.find_one({"email": body.email.lower()})
-    generic = {"message": "If the email exists, a reset link will be sent"}
-    if not user:
-        # Don't reveal if email exists for security
-        return generic
-    # Throttle: at most one reset email per account per minute
-    last = user.get("reset_requested_at")
-    if last and (last.replace(tzinfo=timezone.utc) if last.tzinfo is None else last) > now() - timedelta(seconds=60):
-        return generic
-    await db.users.update_one({"user_id": user["user_id"]}, {"$set": {"reset_requested_at": now()}})
+async def forgot_password(body: ForgotPasswordIn, request: Request):
+    email = body.email.lower()
+    await rate_limit(f"forgot:ip:{client_ip(request)}", 10, 900)
+    await rate_limit(f"forgot:email:{email}", 3, 900, "Too many reset requests for this email. Please wait 15 minutes.")
+    if not email_configured():
+        logger.error("forgot-password requested but email service is not configured (RESEND_API_KEY / RESEND_FROM)")
+        raise HTTPException(503, "Password reset email is not available right now because the email service is not configured. Please contact support.")
+    user = await db.users.find_one({"email": email}, {"_id": 0, "user_id": 1, "name": 1, "email": 1, "role": 1, "suspended": 1})
+    if not user or user.get("suspended"):
+        return GENERIC_RESET
+    raw = secrets.token_urlsafe(32)
+    rid = nid("rst")
+    await db.password_resets.update_many({"user_id": user["user_id"], "used_at": None}, {"$set": {"used_at": now(), "superseded": True}})
+    await db.password_resets.insert_one({"request_id": rid, "user_id": user["user_id"], "token_hash": sha256(raw), "created_at": now(),
+                                         "expires_at": now() + timedelta(minutes=RESET_TTL_MIN), "used_at": None,
+                                         "ip": client_ip(request), "provider_status": "pending"})
+    path = "reset-password"
+    web_link, app_link = f"{FRONTEND_URL}/{path}?token={raw}", f"{APP_SCHEME}://{path}?token={raw}"
+    try:
+        email_id = await send_email(to=user["email"], subject="Reset Your Travoo Password",
+                                    html=reset_email_html(user.get("name") or "there", web_link, app_link),
+                                    text=f"Reset your Travoo password: {web_link}\nThis link expires in {RESET_TTL_MIN} minutes. If you did not request this, ignore this email.",
+                                    idempotency_key=f"password-reset/{rid}")
+    except (EmailNotConfigured, EmailSendFailed):
+        await db.password_resets.update_one({"request_id": rid}, {"$set": {"provider_status": "failed", "used_at": now()}})
+        raise HTTPException(502, "We couldn't send the reset email right now. Please try again in a few minutes.")
+    await db.password_resets.update_one({"request_id": rid}, {"$set": {"provider_status": "accepted", "provider_email_id": email_id}})
+    await audit(user["user_id"], "password.reset_requested", user["user_id"], {"request_id": rid})
+    return GENERIC_RESET
 
-    # Generate reset token
-    reset_token = jwt.encode(
-        {"sub": user["user_id"], "purpose": "reset", "ph": (user.get("password_hash") or "")[-12:],
-         "exp": now() + timedelta(hours=1), "iat": now()},
-        JWT_SECRET, algorithm="HS256")
-    reset_link = f"{FRONTEND_URL}/reset-password?token={reset_token}"
-    
-    # Send email
-    subject = "Reset your TRAVOO password"
-    name = html_escape(user.get("name") or "there")
-    link = html_escape(reset_link, quote=True)
-    html = (
-        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f6fb;padding:24px 0">'
-        '<tr><td align="center"><table role="presentation" width="480" cellpadding="0" cellspacing="0" '
-        'style="background:#ffffff;border-radius:12px;padding:32px;font-family:Arial,sans-serif;color:#1a1f36">'
-        '<tr><td style="font-size:22px;font-weight:bold;color:#1565d8;padding-bottom:16px">TRAVOO</td></tr>'
-        f'<tr><td style="font-size:16px;padding-bottom:12px">Hi {name},</td></tr>'
-        '<tr><td style="font-size:15px;line-height:22px;padding-bottom:24px">We received a request to reset your TRAVOO password. '
-        'Tap the button below to choose a new one. This link expires in 1 hour and can be used once.</td></tr>'
-        f'<tr><td style="padding-bottom:24px"><a href="{link}" style="background:#1565d8;color:#ffffff;text-decoration:none;'
-        'padding:12px 24px;border-radius:8px;font-weight:bold;display:inline-block">Reset password</a></td></tr>'
-        '<tr><td style="font-size:13px;color:#6b7280;line-height:20px">If you didn\'t ask for this, you can ignore this email — your password stays the same.</td></tr>'
-        '<tr><td style="font-size:12px;color:#9ca3af;padding-top:24px">Sent by TRAVOO. We never ask for your password by email.</td></tr>'
-        '</table></td></tr></table>'
-    )
-    async def _send(to: str):
-        if await send_email(to=to, subject=subject, html=html):
-            logger.info("Password reset email sent to %s", to)
-        else:
-            logger.warning("Password reset email could not be sent to %s", to)
 
-    # Send in the background so response time doesn't reveal whether the account exists
-    asyncio.create_task(_send(user["email"]))
-    return generic
+def check_password_strength(p: str):
+    if len(p) < 8 or not re.search(r"[A-Za-z]", p) or not re.search(r"\d", p):
+        raise HTTPException(400, "Password must be at least 8 characters and include letters and numbers")
 
 
 class ResetPasswordIn(BaseModel):
-    token: str
+    token: str = Field(min_length=20, max_length=200)
     new_password: str = Field(min_length=8, max_length=128)
 
 
 @api.post("/auth/reset-password")
-async def reset_password(body: ResetPasswordIn):
-    """Reset password using the token"""
-    try:
-        payload = jwt.decode(body.token, JWT_SECRET, algorithms=["HS256"])
-    except jwt.InvalidTokenError:
-        raise HTTPException(400, "Invalid or expired reset token")
-    uid = payload.get("sub")
-    user = await db.users.find_one({"user_id": uid}) if payload.get("purpose") == "reset" else None
-    if not user or payload.get("ph") != (user.get("password_hash") or "")[-12:]:
-        raise HTTPException(400, "Invalid or expired reset token")
-    
-    new_hash = hash_pw(body.new_password)
-    await db.users.update_one({"user_id": uid}, {"$set": {"password_hash": new_hash}})
+async def reset_password(body: ResetPasswordIn, request: Request):
+    await rate_limit(f"reset:ip:{client_ip(request)}", 20, 900)
+    check_password_strength(body.new_password)
+    rec = await db.password_resets.find_one_and_update(
+        {"token_hash": sha256(body.token), "used_at": None, "expires_at": {"$gt": now()}, "provider_status": "accepted"},
+        {"$set": {"used_at": now()}})
+    if not rec:
+        raise HTTPException(400, "This reset link is invalid, expired or has already been used. Please request a new one.")
+    uid = rec["user_id"]
+    user = await db.users.find_one({"user_id": uid}, {"_id": 0, "role": 1})
+    if not user:
+        raise HTTPException(400, "This reset link is invalid, expired or has already been used. Please request a new one.")
+    upd = {"password_hash": hash_pw(body.new_password), "password_changed_at": now()}
+    if user.get("role") == "admin":
+        upd["must_change_password"] = False
+    await db.users.update_one({"user_id": uid}, {"$set": upd})
+    await db.password_resets.update_many({"user_id": uid, "used_at": None}, {"$set": {"used_at": now(), "superseded": True}})
+    await db.user_sessions.delete_many({"user_id": uid})
+    await db.admin_sessions.delete_many({"user_id": uid})
     await audit(uid, "password.reset", uid, {})
-    
-    return {"message": "Password reset successfully"}
+    return {"status": "password_changed", "role": "admin" if user.get("role") == "admin" else "user",
+            "message": "Your password has been changed. Please sign in with your new password."}
 
 
-class OCRDataIn(BaseModel):
-    licence_front_text: str = Field(default="")
-    licence_back_text: str = Field(default="")
-    rc_text: str = Field(default="")
-    confidence: float = Field(default=0.0)
+# ---------------------------------------------------------------- admin portal authentication
+class AdminLoginIn(BaseModel):
+    email: EmailStr
+    password: str = Field(min_length=1, max_length=128)
+    remember: bool = False
 
 
-@api.post("/driver/ocr-verification")
-async def ocr_verification(body: OCRDataIn, user: dict = Depends(get_user)):
-    """Process OCR data and validate extracted information"""
-    if user.get("driver_status") in ("under_review", "approved"):
-        raise HTTPException(400, "Verification already submitted")
-    
-    # Extract information from OCR text
-    licence_info = extract_licence_info(body.licence_front_text + " " + body.licence_back_text)
-    rc_info = extract_rc_info(body.rc_text)
-    
-    # Get user profile for name matching
-    user_profile = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0, "name": 1})
-    
-    # Validation checks
-    validation = {
-        "licence_no_extracted": bool(licence_info["licence_no"]),
-        "expiry_extracted": bool(licence_info["expiry"]),
-        "name_extracted": bool(licence_info["name"]),
-        "rc_no_extracted": bool(rc_info["rc_no"]),
-        "vehicle_class_extracted": bool(licence_info["vehicle_class"]),
-        "ocr_confidence": body.confidence,
-        "extracted_licence_no": licence_info["licence_no"],
-        "extracted_expiry": licence_info["expiry"],
-        "extracted_name": licence_info["name"],
-        "extracted_rc_no": rc_info["rc_no"],
-        "extracted_vehicle_class": licence_info["vehicle_class"],
-    }
-    
-    # Validate expiry date
-    if licence_info["expiry"]:
-        try:
-            expiry_date = datetime.strptime(licence_info["expiry"], "%d-%m-%Y")
-            validation["expiry_valid"] = expiry_date > now()
-            validation["days_until_expiry"] = (expiry_date - now()).days
-        except:
-            validation["expiry_valid"] = False
-            validation["days_until_expiry"] = None
-    else:
-        validation["expiry_valid"] = False
-        validation["days_until_expiry"] = None
-    
-    # Validate name matching
-    if licence_info["name"] and user_profile:
-        # Simple similarity check (case-insensitive)
-        extracted_name = licence_info["name"].lower().replace(" ", "")
-        profile_name = user_profile["name"].lower().replace(" ", "")
-        validation["name_match_score"] = 0
-        if extracted_name in profile_name or profile_name in extracted_name:
-            validation["name_match_score"] = 100
-        elif any(word in profile_name for word in extracted_name.split()):
-            validation["name_match_score"] = 50
-        validation["name_matched"] = validation["name_match_score"] >= 50
-    else:
-        validation["name_matched"] = False
-        validation["name_match_score"] = 0
-    
-    # Validate RC matches vehicle class
-    if licence_info["vehicle_class"] and rc_info["vehicle_class"]:
-        validation["vehicle_class_match"] = licence_info["vehicle_class"] == rc_info["vehicle_class"]
-    else:
-        validation["vehicle_class_match"] = False
-    
-    # Overall validation score
-    validation["overall_score"] = (
-        (validation["licence_no_extracted"] * 20) +
-        (validation["expiry_extracted"] * 20) +
-        (validation["name_extracted"] * 20) +
-        (validation["rc_no_extracted"] * 20) +
-        (validation["vehicle_class_extracted"] * 20)
-    )
-    
-    # Store OCR results for admin review
-    await db.driver_documents.update_one(
-        {"user_id": user["user_id"]},
-        {"$set": {"ocr_data": validation, "verification_method": "ai", "ocr_confidence": body.confidence}},
-        upsert=True
-    )
-    
-    return {"validation": validation, "message": "OCR data processed successfully"}
+async def admin_out(uid: str) -> dict:
+    u = await db.users.find_one({"user_id": uid}, {"_id": 0, "user_id": 1, "email": 1, "name": 1, "role": 1, "must_change_password": 1, "last_admin_login": 1})
+    u["must_change_password"] = bool(u.get("must_change_password"))
+    return u
 
 
-def extract_licence_info(text: str) -> dict:
-    """Extract licence information from OCR text"""
-    text_upper = text.upper()
-    
-    # Extract licence number (Indian format: KA0120200001234)
-    licence_no = None
-    licence_match = re.search(r'[A-Z]{2}\d{2}\d{4}\d{7}', text_upper)
-    if licence_match:
-        licence_no = licence_match.group(0)
-    
-    # Extract expiry date (DD-MM-YYYY or DD/MM/YYYY format)
-    expiry = None
-    expiry_match = re.search(r'\d{2}[-/]\d{2}[-/]\d{4}', text_upper)
-    if expiry_match:
-        expiry = expiry_match.group(0).replace('/', '-')
-    
-    # Extract name (first line before licence number)
-    name = None
-    lines = [line.strip() for line in text.split('\n') if line.strip()]
-    if lines:
-        # Try to find name (usually first line, remove numbers and special chars)
-        first_line = re.sub(r'[^A-Z\s]', '', lines[0]).strip()
-        if len(first_line) > 2:
-            name = first_line
-    
-    # Extract vehicle class
-    vehicle_class = None
-    class_match = re.search(r'MCWG|LMV|MGV|HMV|TRAILER', text_upper)
-    if class_match:
-        vehicle_class = class_match.group(0)
-    
-    return {
-        "licence_no": licence_no,
-        "expiry": expiry,
-        "name": name,
-        "vehicle_class": vehicle_class,
-    }
+@api.post("/admin/auth/login")
+async def admin_login(body: AdminLoginIn, request: Request):
+    email, ip = body.email.lower(), client_ip(request)
+    await rate_limit(f"adminlogin:ip:{ip}", 20, 900)
+    await rate_limit(f"adminlogin:email:{email}", 5, 900, "Too many sign-in attempts. This account is locked for 15 minutes.")
+    user = await db.users.find_one({"email": email})
+    if not user or user.get("role") != "admin" or not user.get("password_hash") or not check_pw(body.password, user["password_hash"]):
+        await audit(user["user_id"] if user else "anonymous", "admin.login_failed", email, {"ip": ip})
+        raise HTTPException(401, "Incorrect email or password")
+    if user.get("suspended"):
+        raise HTTPException(403, "Account suspended")
+    raw = "adm_" + secrets.token_urlsafe(40)
+    exp = now() + (timedelta(days=ADMIN_REMEMBER_DAYS) if body.remember else timedelta(hours=ADMIN_SESSION_HOURS))
+    await db.admin_sessions.insert_one({"token_hash": sha256(raw), "user_id": user["user_id"], "created_at": now(), "expires_at": exp,
+                                        "remember": body.remember, "ip": ip, "user_agent": request.headers.get("user-agent", "")[:200]})
+    await db.users.update_one({"user_id": user["user_id"]}, {"$set": {"last_admin_login": now()}})
+    await audit(user["user_id"], "admin.login", user["user_id"], {"ip": ip, "remember": body.remember})
+    return {"token": raw, "expires_at": exp, "admin": await admin_out(user["user_id"])}
 
 
-def extract_rc_info(text: str) -> dict:
-    """Extract RC information from OCR text"""
-    text_upper = text.upper()
-    
-    # Extract RC number (Indian format: KA01AB1234)
-    rc_no = None
-    rc_match = re.search(r'[A-Z]{2}\d{2}[A-Z]{2}\d{4}', text_upper)
-    if rc_match:
-        rc_no = rc_match.group(0)
-    
-    # Extract registration date
-    reg_date = None
-    date_match = re.search(r'\d{2}[-/]\d{2}[-/]\d{4}', text_upper)
-    if date_match:
-        reg_date = date_match.group(0).replace('/', '-')
-    
-    # Extract vehicle class
-    vehicle_class = None
-    class_match = re.search(r'MCWG|LMV|MGV|HMV|TRAILER', text_upper)
-    if class_match:
-        vehicle_class = class_match.group(0)
-    
-    # Extract fuel type
-    fuel_type = None
-    fuel_match = re.search(r'PETROL|DIESEL|CNG|ELECTRIC|LPG', text_upper)
-    if fuel_match:
-        fuel_type = fuel_match.group(0)
-    
-    return {
-        "rc_no": rc_no,
-        "reg_date": reg_date,
-        "vehicle_class": vehicle_class,
-        "fuel_type": fuel_type,
-    }
+@api.get("/admin/auth/me")
+async def admin_me(admin: dict = Depends(get_admin_any)):
+    return await admin_out(admin["user_id"])
+
+
+@api.post("/admin/auth/logout")
+async def admin_logout(request: Request, admin: dict = Depends(get_admin_any)):
+    token = request.headers.get("Authorization", "")[7:]
+    await db.admin_sessions.delete_one({"token_hash": sha256(token)})
+    await audit(admin["user_id"], "admin.logout", admin["user_id"])
+    return {"ok": True}
+
+
+class AdminPasswordIn(BaseModel):
+    current_password: str = Field(min_length=1, max_length=128)
+    new_password: str = Field(min_length=10, max_length=128)
+
+
+@api.post("/admin/auth/change-password")
+async def admin_change_password(body: AdminPasswordIn, request: Request, admin: dict = Depends(get_admin_any)):
+    await rate_limit(f"adminpw:{admin['user_id']}", 10, 900)
+    full = await db.users.find_one({"user_id": admin["user_id"]})
+    if not check_pw(body.current_password, full.get("password_hash", "")):
+        raise HTTPException(400, "Current password is incorrect")
+    p = body.new_password
+    if not (re.search(r"[a-z]", p) and re.search(r"[A-Z]", p) and re.search(r"\d", p)) or p == body.current_password:
+        raise HTTPException(400, "Use at least 10 characters with upper and lower case letters and a number, different from the current password")
+    await db.users.update_one({"user_id": admin["user_id"]}, {"$set": {"password_hash": hash_pw(p), "password_changed_at": now(), "must_change_password": False}})
+    token = request.headers.get("Authorization", "")[7:]
+    await db.admin_sessions.delete_many({"user_id": admin["user_id"], "token_hash": {"$ne": sha256(token)}})
+    await audit(admin["user_id"], "admin.password_changed", admin["user_id"])
+    return await admin_out(admin["user_id"])
 
 
 @api.post("/auth/session")
@@ -636,8 +649,7 @@ def mask(v: str) -> str:
 STORAGE_BASE = (os.environ.get("INTEGRATION_PROXY_URL") or "").strip() or "https://integrations.emergentagent.com"
 STORAGE_URL = STORAGE_BASE.rstrip("/") + "/objstore/api/v1/storage"
 STORAGE_APP = "travoo"
-DOC_KINDS = ["profile", "licence", "rc", "vehicle"]
-MAX_UPLOAD = 8 * 1024 * 1024
+MAX_UPLOAD = 10 * 1024 * 1024
 _storage_key: Optional[str] = None
 
 
@@ -683,33 +695,102 @@ def sniff_image(data: bytes) -> Optional[tuple[str, str]]:
         return "image/png", "png"
     if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
         return "image/webp", "webp"
-    if data[4:8] == b"ftyp" and data[8:12] in (b"heic", b"heix", b"mif1", b"msf1", b"heif"):
-        return "image/heic", "heic"
+    if data[:5] == b"%PDF-":
+        return "application/pdf", "pdf"
     return None
 
 
+DOC_META = {
+    # kind: (label, required, max files, pdf allowed)
+    "profile": ("Profile photo", True, 1, False),
+    "licence_front": ("Driving licence (front)", True, 1, True),
+    "licence_back": ("Driving licence (back)", True, 1, True),
+    "id_proof": ("Aadhaar / ID proof", True, 1, True),
+    "rc": ("Registration certificate (RC)", True, 1, True),
+    "insurance": ("Vehicle insurance", True, 1, True),
+    "vehicle": ("Vehicle photos", True, 4, False),
+    "other": ("Other documents", False, 3, True),
+    "licence": ("Driving licence", False, 1, True),  # legacy single-sided licence (older accounts)
+}
+UPLOAD_KINDS = [k for k in DOC_META if k != "licence"]
+REQUIRED_KINDS = [k for k, m in DOC_META.items() if m[1]]
+LOCKED_STATUSES = ("under_review", "approved")
+FILE_OUT = {"_id": 0, "file_id": 1, "kind": 1, "content_type": 1, "size": 1, "original_name": 1, "created_at": 1}
+
+
+async def active_files(uid: str) -> list:
+    return await db.files.find({"owner_id": uid, "deleted": {"$ne": True}, "kind": {"$in": list(DOC_META)}}, FILE_OUT).sort("created_at", 1).to_list(60)
+
+
+def missing_kinds(files: list) -> list:
+    have = {f["kind"] for f in files}
+    if "licence" in have:  # legacy accounts: single licence photo counts for both sides
+        have |= {"licence_front", "licence_back"}
+    return [k for k in REQUIRED_KINDS if k not in have]
+
+
+async def sync_photo_map(uid: str):
+    """driver_documents.photos keeps the primary file id per kind (used by badges & older screens)."""
+    files = await active_files(uid)
+    photos: dict = {}
+    for f in files:
+        photos.setdefault(f["kind"], f["file_id"])
+    await db.driver_documents.update_one({"user_id": uid}, {"$set": {"photos": photos, "user_id": uid}}, upsert=True)
+
+
+async def add_history(uid: str, action: str, by: str, note: str = ""):
+    await db.driver_verification_events.insert_one({"event_id": nid("dve"), "user_id": uid, "action": action, "by": by, "note": note, "at": now()})
+
+
 @api.post("/driver/documents/{kind}")
-async def upload_document(kind: str, file: UploadFile = File(...), user: dict = Depends(get_user)):
-    if kind not in DOC_KINDS:
+async def upload_document(kind: str, request: Request, file: UploadFile = File(...), user: dict = Depends(get_user)):
+    if kind not in UPLOAD_KINDS:
         raise HTTPException(400, "Unknown document type")
-    if user.get("driver_status") in ("under_review", "approved"):
-        raise HTTPException(400, "Documents are locked while under review or approved")
-    ctype = (file.content_type or "").lower()
-    data = await file.read()
+    if user.get("driver_status") in LOCKED_STATUSES:
+        raise HTTPException(400, "Documents are locked while your verification is pending or approved")
+    await rate_limit(f"upload:{user['user_id']}", 60, 3600, "Too many uploads. Please try again later.")
+    label, _, max_files, pdf_ok = DOC_META[kind]
+    data = await file.read(MAX_UPLOAD + 1)
     if len(data) > MAX_UPLOAD:
-        raise HTTPException(413, "Image is too large (max 8 MB)")
+        raise HTTPException(413, "File is too large. The maximum size is 10 MB.")
+    if len(data) < 1024:
+        raise HTTPException(400, "This file looks empty or damaged. Please choose another one.")
     sniffed = sniff_image(data)
     if not sniffed:
-        raise HTTPException(400, "Please upload a JPEG, PNG, WEBP or HEIC photo")
+        raise HTTPException(400, f"{label}: please upload a JPG or PNG{' or PDF' if pdf_ok else ''} file")
     ctype, ext = sniffed
+    if ctype == "application/pdf" and not pdf_ok:
+        raise HTTPException(400, f"{label} must be a photo (JPG or PNG), not a PDF")
+    digest = hashlib.sha256(data).hexdigest()
+    dup = await db.files.find_one({"owner_id": user["user_id"], "kind": kind, "sha256": digest, "deleted": {"$ne": True}}, FILE_OUT)
+    if dup:
+        return {**dup, "duplicate": True}
+    existing = await db.files.count_documents({"owner_id": user["user_id"], "kind": kind, "deleted": {"$ne": True}})
+    if max_files > 1 and existing >= max_files:
+        raise HTTPException(400, f"You can upload up to {max_files} files for {label}. Delete one first.")
     path = f"{STORAGE_APP}/driver-docs/{user['user_id']}/{kind}-{uuid.uuid4().hex}.{ext}"
     res = await run_in_threadpool(put_object, path, data, ctype)
     fid = nid("file")
-    await db.files.insert_one({"file_id": fid, "owner_id": user["user_id"], "path": res["path"], "kind": kind,
-                               "content_type": ctype, "size": len(data), "original_name": file.filename, "created_at": now()})
-    await db.driver_documents.update_one({"user_id": user["user_id"]}, {"$set": {f"photos.{kind}": fid, "user_id": user["user_id"]}}, upsert=True)
-    await db.files.update_many({"owner_id": user["user_id"], "kind": kind, "file_id": {"$ne": fid}}, {"$set": {"deleted": True}})
-    return {"file_id": fid, "kind": kind}
+    doc = {"file_id": fid, "owner_id": user["user_id"], "path": res["path"], "kind": kind, "content_type": ctype, "size": len(data),
+           "sha256": digest, "original_name": (file.filename or "")[:120], "created_at": now()}
+    await db.files.insert_one(doc)
+    if max_files == 1:
+        await db.files.update_many({"owner_id": user["user_id"], "kind": kind, "file_id": {"$ne": fid}}, {"$set": {"deleted": True, "deleted_at": now()}})
+        if kind in ("licence_front", "licence_back"):
+            await db.files.update_many({"owner_id": user["user_id"], "kind": "licence"}, {"$set": {"deleted": True, "deleted_at": now()}})
+    await sync_photo_map(user["user_id"])
+    return {k: doc[k] for k in ("file_id", "kind", "content_type", "size", "original_name", "created_at")}
+
+
+@api.delete("/driver/documents/file/{fid}")
+async def delete_document(fid: str, user: dict = Depends(get_user)):
+    if user.get("driver_status") in LOCKED_STATUSES:
+        raise HTTPException(400, "Documents are locked while your verification is pending or approved")
+    r = await db.files.update_one({"file_id": fid, "owner_id": user["user_id"], "deleted": {"$ne": True}}, {"$set": {"deleted": True, "deleted_at": now()}})
+    if not r.matched_count:
+        raise HTTPException(404, "File not found")
+    await sync_photo_map(user["user_id"])
+    return {"ok": True}
 
 
 @api.get("/files/{fid}")
@@ -719,13 +800,20 @@ async def get_file(fid: str, request: Request, token: Optional[str] = None):
     if not tok:
         raise HTTPException(401, "Not authenticated")
     user = await user_from_token(tok)
-    f = await db.files.find_one({"file_id": fid, "deleted": {"$ne": True}}, {"_id": 0})
-    if not f or (f["owner_id"] != user["user_id"] and user.get("role") != "admin"):
+    f = await db.files.find_one({"file_id": fid}, {"_id": 0})
+    is_admin = user.get("role") == "admin" and user.get("_admin_session")
+    if not f or (f["owner_id"] != user["user_id"] and not is_admin) or (f.get("deleted") and not is_admin):
         raise HTTPException(404, "File not found")
     data, ctype = await run_in_threadpool(get_object, f["path"])
-    return Response(content=data, media_type=f.get("content_type") or ctype,
-                    headers={"Cache-Control": "private, max-age=3600", "X-Content-Type-Options": "nosniff",
-                             "Content-Security-Policy": "default-src 'none'; sandbox"})
+    if is_admin and f["owner_id"] != user["user_id"]:
+        await audit(user["user_id"], "admin.document_view", f["owner_id"], {"file_id": fid, "kind": f.get("kind")})
+    ct = f.get("content_type") or ctype
+    headers = {"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"}
+    if ct == "application/pdf":
+        headers["Content-Disposition"] = f'inline; filename="{f.get("kind", "document")}.pdf"'
+    else:
+        headers["Content-Security-Policy"] = "default-src 'none'; sandbox"
+    return Response(content=data, media_type=ct, headers=headers)
 
 
 @api.get("/driver/profile")
@@ -734,24 +822,31 @@ async def driver_profile(user: dict = Depends(get_user)):
     if doc:
         doc["licence_no"] = mask(doc.get("licence_no", ""))
         doc["rc_no"] = mask(doc.get("rc_no", ""))
+    files = await active_files(user["user_id"])
     vehicles = await db.vehicles.find({"owner_id": user["user_id"], "deleted": {"$ne": True}}, {"_id": 0}).to_list(20)
-    return {"status": user.get("driver_status", "not_submitted"), "documents": doc, "vehicles": vehicles}
+    kinds = [{"kind": k, "label": DOC_META[k][0], "required": DOC_META[k][1], "max": DOC_META[k][2], "pdf": DOC_META[k][3]} for k in UPLOAD_KINDS]
+    return {"status": user.get("driver_status", "not_submitted"), "documents": doc, "vehicles": vehicles, "files": files,
+            "kinds": kinds, "missing": missing_kinds(files), "locked": user.get("driver_status") in LOCKED_STATUSES}
 
 
 @api.post("/driver/verification")
 async def submit_verification(body: VerificationIn, user: dict = Depends(get_user)):
-    if user.get("driver_status") in ("under_review", "approved"):
+    if user.get("driver_status") in LOCKED_STATUSES:
         raise HTTPException(400, "Verification already submitted")
-    existing = await db.driver_documents.find_one({"user_id": user["user_id"]}, {"_id": 0, "photos": 1}) or {}
-    missing = [k for k in DOC_KINDS if not (existing.get("photos") or {}).get(k)]
+    missing = missing_kinds(await active_files(user["user_id"]))
     if missing:
-        raise HTTPException(400, f"Please upload: {', '.join(missing)} photo")
+        raise HTTPException(400, f"Please upload: {', '.join(DOC_META[k][0] for k in missing)}")
+    prev = user.get("driver_status", "not_submitted")
     settings = await get_settings()
     status = "approved" if settings.get("instant_driver_approval") else "under_review"
     doc = {**body.model_dump(), "licence_no": body.licence_no.upper(), "rc_no": body.rc_no.upper(),
            "user_id": user["user_id"], "submitted_at": now(), "admin_note": "", "reviewed_at": None}
     await db.driver_documents.update_one({"user_id": user["user_id"]}, {"$set": doc}, upsert=True)
     await db.users.update_one({"user_id": user["user_id"]}, {"$set": {"driver_status": status, "phone": body.phone}})
+    resub = prev in ("rejected", "resubmit")
+    await add_history(user["user_id"], "resubmitted" if resub else "submitted", user["user_id"])
+    await admin_alert("resubmission" if resub else "verification_submitted",
+                      f"{'Documents resubmitted' if resub else 'New driver verification'}: {user.get('name')}", user["user_id"])
     if status == "approved":
         await notify(user["user_id"], "driver_approved", {})
     await audit(user["user_id"], "driver.submit", user["user_id"], {"status": status})
@@ -769,21 +864,19 @@ AI_EXTRACT_PROMPT = (
 @api.post("/driver/ai-extract")
 async def ai_extract(user: dict = Depends(get_user)):
     """Read the uploaded licence + RC photos with an AI vision model and return the fields to pre-fill."""
-    if user.get("driver_status") in ("under_review", "approved"):
+    if user.get("driver_status") in LOCKED_STATUSES:
         raise HTTPException(400, "Verification already submitted")
-    doc = await db.driver_documents.find_one({"user_id": user["user_id"]}, {"_id": 0, "photos": 1}) or {}
-    photos = doc.get("photos") or {}
-    missing = [k for k in ("licence", "rc") if not photos.get(k)]
-    if missing:
-        raise HTTPException(400, f"Please upload: {', '.join(missing)} photo")
+    await rate_limit(f"ai:{user['user_id']}", 10, 3600)
+    files = {f["kind"]: f for f in await active_files(user["user_id"])}
+    lic = files.get("licence_front") or files.get("licence")
+    if not lic or not files.get("rc"):
+        raise HTTPException(400, "Please upload the licence (front) and RC first")
     images = []
-    for k in ("licence", "rc"):
-        f = await db.files.find_one({"file_id": photos[k], "owner_id": user["user_id"]}, {"_id": 0})
-        if not f:
-            raise HTTPException(400, f"Please upload: {k} photo")
-        if f.get("content_type") == "image/heic":
-            raise HTTPException(400, "AI reading needs JPEG or PNG photos. Please retake the photo.")
-        data, _ = await run_in_threadpool(get_object, f["path"])
+    for f in (lic, files["rc"]):
+        if f["content_type"] not in ("image/jpeg", "image/png", "image/webp"):
+            raise HTTPException(400, "AI reading needs photos (JPG or PNG) of the licence and RC, not PDFs")
+        full = await db.files.find_one({"file_id": f["file_id"]}, {"_id": 0, "path": 1})
+        data, _ = await run_in_threadpool(get_object, full["path"])
         images.append(ImageContent(image_base64=base64.b64encode(data).decode()))
     chat = LlmChat(api_key=os.environ["EMERGENT_LLM_KEY"], session_id=f"ai-extract-{user['user_id']}-{uuid.uuid4().hex[:8]}",
                    system_message="You extract fields from document photos and answer with strict JSON.").with_model("openai", "gpt-5.4")
@@ -1225,6 +1318,7 @@ async def create_booking(body: BookingIn, user: dict = Depends(get_user)):
         await notify(user["user_id"], "booking_confirmed", {"route": b["route"]}, b["booking_id"])
     else:
         await notify(trip["driver_id"], "booking_request", {"route": b["route"]}, b["booking_id"])
+    await admin_alert("booking", f"New booking {b['booking_id']} · {b['route']}", b["booking_id"])
     b.pop("_id", None)
     return b
 
@@ -1459,6 +1553,7 @@ async def create_ticket(body: TicketIn, user: dict = Depends(get_user)):
          "user_name": user["name"], "status": "open", "priority": "high" if body.type == "sos" else "normal", "created_at": now()}
     await db.tickets.insert_one(t)
     t.pop("_id", None)
+    await admin_alert("complaint", f"New {body.type} ticket from {user['name']}", t["ticket_id"])
     return t
 
 
@@ -1494,7 +1589,17 @@ async def admin_stats(_: dict = Depends(get_admin)):
             "trips": await db.trips.count_documents({}), "active": await db.trips.count_documents({"status": {"$in": ["scheduled", "started"]}}),
             "bookings": await c({}), "completed": await c({"status": "completed"}), "cancelled": await c({"status": "cancelled"}),
             "value": value[0]["v"] if value else 0, "earnings": earned[0]["v"] if earned else 0,
-            "monthly": monthly, "growth": growth, "top_drivers": top, "top_routes": routes}
+            "monthly": monthly, "growth": growth, "top_drivers": top, "top_routes": routes,
+            "passengers_registered": await db.users.count_documents({"role": "user", "driver_status": "not_submitted"}),
+            "rejected": await db.users.count_documents({"driver_status": "rejected"}),
+            "resubmit": await db.users.count_documents({"driver_status": "resubmit"}),
+            "rides_active": await db.trips.count_documents({"status": {"$in": ["scheduled", "started"]}}),
+            "rides_completed": await db.trips.count_documents({"status": "completed"}),
+            "rides_cancelled": await db.trips.count_documents({"status": "cancelled"}),
+            "complaints_open": await db.tickets.count_documents({"status": {"$ne": "resolved"}}),
+            "complaints_total": await db.tickets.count_documents({}),
+            "new_7d": await db.users.count_documents({"created_at": {"$gt": now() - timedelta(days=7)}}),
+            "unread_alerts": await db.admin_notifications.count_documents({"read": False})}
 
 
 @api.get("/admin/users")
@@ -1524,8 +1629,12 @@ async def admin_suspend(uid: str, body: SuspendIn, admin: dict = Depends(get_adm
 
 
 @api.get("/admin/drivers")
-async def admin_drivers(status: str = "under_review", _: dict = Depends(get_admin)):
-    users = await db.users.find({"driver_status": status}, USER_PRIVATE).to_list(200)
+async def admin_drivers(status: str = "under_review", q: str = "", _: dict = Depends(get_admin)):
+    filt: dict = {"driver_status": {"$ne": "not_submitted"}} if status == "all" else {"driver_status": status}
+    if q:
+        rx = {"$regex": re.escape(q.strip()), "$options": "i"}
+        filt["$or"] = [{"name": rx}, {"email": rx}, {"phone": rx}, {"user_id": rx}]
+    users = await db.users.find(filt, USER_PRIVATE).sort("created_at", -1).to_list(200)
     for u in users:
         u["documents"] = await db.driver_documents.find_one({"user_id": u["user_id"]}, {"_id": 0})
         u["vehicles"] = await db.vehicles.find({"owner_id": u["user_id"], "deleted": {"$ne": True}}, {"_id": 0}).to_list(10)
@@ -1559,7 +1668,7 @@ async def admin_passengers(q: str = "", _: dict = Depends(get_admin)):
 
 class DriverReviewIn(BaseModel):
     decision: Literal["approved", "rejected", "resubmit"]
-    note: str = Field(default="", max_length=300)
+    note: str = Field(default="", max_length=500)
 
 
 @api.post("/admin/drivers/{uid}/review")
@@ -1569,16 +1678,97 @@ async def admin_review_driver(uid: str, body: DriverReviewIn, admin: dict = Depe
     if not doc or not doc.get("submitted_at") or not target:
         raise HTTPException(400, "This user has not submitted verification details")
     if target["driver_status"] not in ("under_review", "approved"):
-        raise HTTPException(400, "Only submitted verifications can be reviewed")
-    r = await db.users.update_one({"user_id": uid}, {"$set": {"driver_status": body.decision}})
-    if not r.matched_count:
-        raise HTTPException(404, "User not found")
-    await db.driver_documents.update_one({"user_id": uid}, {"$set": {"admin_note": body.note, "reviewed_at": now(), "reviewed_by": admin["user_id"]}})
-    if body.decision == "approved":
-        await db.vehicles.update_many({"owner_id": uid}, {"$set": {"verified": True}})
-    await notify(uid, "driver_approved" if body.decision == "approved" else "driver_rejected", {})
-    await audit(admin["user_id"], f"driver.{body.decision}", uid, {"note": body.note})
+        raise HTTPException(400, "Only pending or approved verifications can be reviewed")
+    note = body.note.strip()
+    if body.decision != "approved" and len(note) < 5:
+        raise HTTPException(400, "Please add a reason (at least 5 characters) so the driver knows what to fix")
+    await db.users.update_one({"user_id": uid}, {"$set": {"driver_status": body.decision}})
+    await db.driver_documents.update_one({"user_id": uid}, {"$set": {"admin_note": note, "reviewed_at": now(), "reviewed_by": admin["user_id"]}})
+    await db.vehicles.update_many({"owner_id": uid}, {"$set": {"verified": body.decision == "approved"}})
+    await add_history(uid, body.decision, admin["user_id"], note)
+    ntype = {"approved": "driver_approved", "rejected": "driver_rejected", "resubmit": "driver_resubmit"}[body.decision]
+    await notify(uid, ntype, {"note": note})
+    await notify_driver_status_email(uid, body.decision, note)
+    await audit(admin["user_id"], f"driver.{body.decision}", uid, {"note": note})
+    return {"ok": True, "status": body.decision}
+
+
+@api.get("/admin/drivers/{uid}/detail")
+async def admin_driver_detail(uid: str, admin: dict = Depends(get_admin)):
+    u = await db.users.find_one({"user_id": uid}, USER_PRIVATE)
+    if not u:
+        raise HTTPException(404, "Driver not found")
+    files = await db.files.find({"owner_id": uid, "kind": {"$in": list(DOC_META)}}, {**FILE_OUT, "deleted": 1}).sort("created_at", -1).to_list(100)
+    history = await db.driver_verification_events.find({"user_id": uid}, {"_id": 0}).sort("at", -1).to_list(100)
+    names = {a["user_id"]: a["name"] for a in await db.users.find({"user_id": {"$in": list({h["by"] for h in history})}}, {"_id": 0, "user_id": 1, "name": 1}).to_list(50)}
+    for h in history:
+        h["by_name"] = names.get(h["by"], h["by"])
+    await audit(admin["user_id"], "admin.document_review_open", uid)
+    return {"user": u, "documents": await db.driver_documents.find_one({"user_id": uid}, {"_id": 0}) or {},
+            "files": [f for f in files if not f.get("deleted")], "removed_files": [f for f in files if f.get("deleted")][:20],
+            "labels": {k: m[0] for k, m in DOC_META.items()}, "missing": missing_kinds([f for f in files if not f.get("deleted")]),
+            "history": history, "vehicles": await db.vehicles.find({"owner_id": uid, "deleted": {"$ne": True}}, {"_id": 0}).to_list(10),
+            "trips": await db.trips.count_documents({"driver_id": uid}),
+            "recent_trips": await db.trips.find({"driver_id": uid}, {"_id": 0, "trip_id": 1, "origin.name": 1, "destination.name": 1, "date": 1, "time": 1, "status": 1, "price": 1}).sort("departure_at", -1).to_list(10)}
+
+
+@api.get("/admin/passengers/{uid}/detail")
+async def admin_passenger_detail(uid: str, admin: dict = Depends(get_admin)):
+    u = await db.users.find_one({"user_id": uid}, USER_PRIVATE)
+    if not u:
+        raise HTTPException(404, "Passenger not found")
+    rides = await db.bookings.find({"passenger_id": uid}, {"_id": 0, "active_key": 0}).sort("created_at", -1).to_list(100)
+    drivers = {d["user_id"]: d["name"] for d in await db.users.find({"user_id": {"$in": list({r["driver_id"] for r in rides})}}, {"_id": 0, "user_id": 1, "name": 1}).to_list(100)}
+    for r in rides:
+        r["driver_name"] = drivers.get(r["driver_id"], "")
+    tickets = await db.tickets.find({"user_id": uid}, {"_id": 0}).sort("created_at", -1).to_list(50)
+    await audit(admin["user_id"], "admin.passenger_view", uid)
+    return {"user": u, "rides": rides, "tickets": tickets,
+            "stats": {"total": len(rides), "completed": sum(r["status"] == "completed" for r in rides),
+                      "cancelled": sum(r["status"] == "cancelled" for r in rides),
+                      "spent": sum(r["fare_total"] for r in rides if r["status"] == "completed")}}
+
+
+@api.get("/admin/rides")
+async def admin_rides(status: Literal["active", "completed", "cancelled", "all"] = "active", q: str = "", _: dict = Depends(get_admin)):
+    filt: dict = {"status": {"active": {"$in": ["scheduled", "started"]}, "completed": "completed", "cancelled": "cancelled"}[status]} if status != "all" else {}
+    if q:
+        rx = {"$regex": re.escape(q), "$options": "i"}
+        filt["$or"] = [{"origin.name": rx}, {"destination.name": rx}, {"trip_id": rx}]
+    trips = await db.trips.find(filt, {"_id": 0, "trip_id": 1, "driver_id": 1, "origin.name": 1, "destination.name": 1, "pickup_point": 1, "drop_point": 1,
+                                       "date": 1, "time": 1, "price": 1, "status": 1, "seats_total": 1, "seats_available": 1, "created_at": 1,
+                                       "cancel_reason": 1, "vehicle.make": 1, "vehicle.model": 1}).sort("departure_at", -1).to_list(150)
+    tids = [t["trip_id"] for t in trips]
+    bookings = await db.bookings.find({"trip_id": {"$in": tids}}, {"_id": 0, "booking_id": 1, "trip_id": 1, "passenger_id": 1, "seats": 1, "fare_total": 1, "status": 1, "created_at": 1}).to_list(1000)
+    uids = list({t["driver_id"] for t in trips} | {b["passenger_id"] for b in bookings})
+    users = {u["user_id"]: u for u in await db.users.find({"user_id": {"$in": uids}}, {"_id": 0, "user_id": 1, "name": 1, "phone": 1}).to_list(len(uids) or 1)}
+    for t in trips:
+        t["driver"] = users.get(t["driver_id"], {})
+        t["bookings"] = [{**b, "passenger": users.get(b["passenger_id"], {})} for b in bookings if b["trip_id"] == t["trip_id"]]
+        t["booked_value"] = sum(b["fare_total"] for b in t["bookings"] if b["status"] in ("confirmed", "started", "completed"))
+    return trips
+
+
+@api.get("/admin/notifications")
+async def admin_notifications(_: dict = Depends(get_admin)):
+    rows = await db.admin_notifications.find({}, {"_id": 0}).sort("created_at", -1).to_list(100)
+    return {"items": rows, "unread": await db.admin_notifications.count_documents({"read": False})}
+
+
+@api.post("/admin/notifications/read")
+async def admin_notifications_read(admin: dict = Depends(get_admin)):
+    await db.admin_notifications.update_many({"read": False}, {"$set": {"read": True, "read_by": admin["user_id"], "read_at": now()}})
     return {"ok": True}
+
+
+@api.get("/admin/activity")
+async def admin_activity(_: dict = Depends(get_admin)):
+    admins = [a["user_id"] for a in await db.users.find({"role": "admin"}, {"_id": 0, "user_id": 1}).to_list(50)]
+    names = {a["user_id"]: a["name"] for a in await db.users.find({"role": "admin"}, {"_id": 0, "user_id": 1, "name": 1}).to_list(50)}
+    rows = await db.audit_logs.find({"$or": [{"actor": {"$in": admins}}, {"action": {"$regex": "^admin\\."}}]}, {"_id": 0}).sort("created_at", -1).to_list(200)
+    for r in rows:
+        r["actor_name"] = names.get(r["actor"], r["actor"])
+    return rows
 
 
 # ---------------------------------------------------------------- Licence Verification System
@@ -1895,7 +2085,10 @@ async def seed():
     if not await db.users.find_one({"email": admin_email}):
         doc = new_user_doc(admin_email, "Travoo Admin", role="admin")
         doc["password_hash"] = hash_pw(os.environ["ADMIN_PASSWORD"])
+        doc["must_change_password"] = True
         await db.users.insert_one(doc)
+    # migration: an admin who still uses the bootstrap password from the environment must replace it
+    await db.users.update_many({"role": "admin", "must_change_password": {"$exists": False}}, {"$set": {"must_change_password": True}})
     if not await db.users.find_one({"email": "driver@travoo.in"}):
         drv = new_user_doc("driver@travoo.in", "Arjun Rao (Demo)", phone="9876543210", driver_status="approved", is_demo=True)
         drv.update(password_hash=hash_pw("Driver@2026"), upi_id="arjun.demo@upi", rating_avg=4.8, rating_count=0)
@@ -2289,6 +2482,19 @@ async def admin_review_pro(uid: str, body: DriverReviewIn, admin: dict = Depends
 geo_router = get_router(db, get_admin)
 app.include_router(api)
 app.include_router(geo_router)
+
+
+@app.middleware("http")
+async def system_error_alerts(request: Request, call_next):
+    try:
+        response = await call_next(request)
+    except Exception as exc:
+        logger.exception("Unhandled error on %s %s", request.method, request.url.path)
+        await admin_alert("system_error", f"Server error on {request.method} {request.url.path}", None, {"error": str(exc)[:300]})
+        return Response(content='{"detail":"Something went wrong on our side. Please try again."}', status_code=500, media_type="application/json")
+    if response.status_code >= 500:
+        await admin_alert("system_error", f"{response.status_code} on {request.method} {request.url.path}")
+    return response
 app.add_middleware(CORSMiddleware, allow_credentials=True, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 

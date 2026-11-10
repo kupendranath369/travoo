@@ -110,7 +110,7 @@ export default function ProfileScreen() {
           <Row testID="profile-more-row" icon="menu-outline" label={t("v2.more")} onPress={() => router.push("/more")} />
           <Row testID="profile-safety-row" icon="alert-circle-outline" label={t("profile.safety")} onPress={() => router.push("/support?tab=safety")} />
           <Row testID="profile-legal-row" icon="document-text-outline" label={t("profile.legal")} onPress={() => router.push("/legal")} />
-          {user.role === "admin" ? <Row testID="profile-admin-row" icon="speedometer-outline" label={t("profile.admin")} onPress={() => router.push("/admin")} /> : null}
+          {user.role === "admin" ? <Row testID="profile-admin-row" icon="speedometer-outline" label={t("profile.admin")} onPress={() => router.push("/admin/login")} /> : null}
         </Card>
 
         <Btn testID="profile-logout-button" variant="outline" icon="log-out-outline" label={t("profile.logout")} onPress={logout} />
