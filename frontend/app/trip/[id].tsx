@@ -6,6 +6,8 @@ import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { api, publicPhoto } from "@/src/api";
+import { DriverReviews } from "@/src/components/DriverReviews";
+import { FeatureCard } from "@/src/components/FeatureCard";
 import { OsmMap } from "@/src/components/OsmMap";
 import { fmtDur } from "@/src/components/RideCard";
 import { useToast } from "@/src/components/toast";
@@ -129,6 +131,12 @@ export default function TripScreen() {
           {trip.driver.bio ? <T testID="trip-driver-bio" size={13}><T weight="700" size={13}>{t("v2.about_me")}: </T>{trip.driver.bio}</T> : null}
           <Btn small variant="ghost" icon="person-outline" label={t("v2.view_profile")} onPress={() => router.push(`/user/${trip.driver_id}`)} testID="trip-driver-profile-link" />
         </Card>
+
+        {!trip.is_driver ? (
+          <DriverReviews avg={trip.driver.rating_avg} count={trip.driver.rating_count} reviews={trip.driver_reviews ?? []} onSeeAll={() => router.push(`/user/${trip.driver_id}`)} />
+        ) : null}
+
+        {trip.is_driver && trip.status === "scheduled" && trip.seats_available > 0 ? <FeatureCard tripId={trip.trip_id} /> : null}
 
         {trip.cost_breakdown ? (
           <Card testID="trip-cost-breakdown" style={{ gap: 2 }}>

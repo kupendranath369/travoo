@@ -85,6 +85,8 @@ INDEXES: dict[str, list[IndexModel]] = {
     "reviews": [IndexModel([("booking_id", ASCENDING), ("reviewer_id", ASCENDING), ("target_id", ASCENDING)], name="uniq_review", unique=True),
                 IndexModel([("target_id", ASCENDING)], name="target")],
     "messages": [IndexModel([("booking_id", ASCENDING), ("created_at", ASCENDING)], name="booking_time")],
+    "featured": [IndexModel([("feature_id", ASCENDING)], name="feaid", unique=True), IndexModel([("trip_id", ASCENDING)], name="trip"),
+                 IndexModel([("status", ASCENDING), ("expires_at", ASCENDING)], name="status_exp")],
     "notifications": [IndexModel([("user_id", ASCENDING), ("created_at", DESCENDING)], name="user_time")],
     "tickets": [IndexModel([("ticket_id", ASCENDING)], name="tkid", unique=True), IndexModel([("user_id", ASCENDING)], name="user")],
     "files": [IndexModel([("file_id", ASCENDING)], name="fid", unique=True), IndexModel([("owner_id", ASCENDING)], name="owner")],
@@ -655,7 +657,11 @@ async def popular_routes():
 @api.get("/settings")
 async def public_settings():
     s = await get_settings()
-    return {k: s.get(k) for k in ("passenger_cancel_hours", "driver_cancel_hours", "cancellation_reasons", "instant_driver_approval")}
+    out = {k: s.get(k) for k in ("passenger_cancel_hours", "driver_cancel_hours", "cancellation_reasons", "instant_driver_approval",
+                                 "featured_upi_id")}
+    out["featured_price"] = s.get("featured_price", FEATURED_DEFAULT_PRICE)
+    out["featured_days"] = FEATURED_DAYS
+    return out
 
 
 # ---------------------------------------------------------------- driver verification & vehicles
@@ -1256,6 +1262,10 @@ async def get_trip(tid: str, user: dict = Depends(get_user)):
     trip["driver"] = await public_user(trip["driver_id"])
     trip["driver"]["has_photo"] = trip["driver"].get("driver_status") == "approved" and await has_badge_photo(trip["driver_id"])
     trip["is_driver"] = trip["driver_id"] == user["user_id"]
+    trip["driver_reviews"] = await db.reviews.find(
+        {"target_id": trip["driver_id"], "role": "driver", "hidden": {"$ne": True}},
+        {"_id": 0, "review_id": 1, "reviewer_name": 1, "rating": 1, "comment": 1, "route": 1, "created_at": 1},
+    ).sort("created_at", -1).to_list(5)
     if trip["is_driver"] or user.get("role") == "admin":
         bookings = await db.bookings.find({"trip_id": tid}, {"_id": 0}).sort("created_at", 1).to_list(100)
         for b in bookings:
@@ -2111,6 +2121,8 @@ class SettingsIn(BaseModel):
     driver_cancel_hours: Optional[int] = Field(default=None, ge=0, le=72)
     maintenance_per_km: Optional[float] = Field(default=None, ge=0, le=20)
     max_price_factor: Optional[float] = Field(default=None, ge=1, le=3)
+    featured_price: Optional[int] = Field(default=None, ge=0, le=100000)
+    featured_upi_id: Optional[str] = Field(default=None, max_length=80)
 
 
 @api.get("/admin/settings")
@@ -2124,6 +2136,95 @@ async def admin_put_settings(body: SettingsIn, admin: dict = Depends(get_admin))
     await db.settings.update_one({"key": "platform"}, {"$set": upd}, upsert=True)
     await audit(admin["user_id"], "settings.update", "platform", upd)
     return await get_settings()
+
+
+# ---------------------------------------------------------------- featured rides (paid by UPI to the platform, admin approves)
+FEATURED_DAYS = 7
+FEATURED_DEFAULT_PRICE = 199
+FEATURE_OUT = {"_id": 0}
+
+
+class FeatureIn(BaseModel):
+    payment_ref: str = Field(min_length=6, max_length=40, pattern=r"^[A-Za-z0-9\-]+$")
+
+
+@api.get("/trips/{tid}/feature")
+async def my_trip_feature(tid: str, user: dict = Depends(get_user)):
+    return await db.featured.find_one({"trip_id": tid, "driver_id": user["user_id"]}, FEATURE_OUT, sort=[("requested_at", -1)])
+
+
+@api.post("/trips/{tid}/feature")
+async def request_feature(tid: str, body: FeatureIn, user: dict = Depends(get_user)):
+    trip = await db.trips.find_one({"trip_id": tid, "driver_id": user["user_id"]}, {"_id": 0})
+    if not trip:
+        raise HTTPException(404, "Trip not found")
+    if trip["status"] != "scheduled" or trip["departure_at"].replace(tzinfo=timezone.utc) <= now():
+        raise HTTPException(400, "Only upcoming rides can be featured")
+    if trip["seats_available"] <= 0:
+        raise HTTPException(400, "This ride is full, so it can't be featured")
+    s = await get_settings()
+    if not s.get("featured_upi_id"):
+        raise HTTPException(400, "Featured spots are not open yet. Please try again later.")
+    if await db.featured.find_one({"trip_id": tid, "$or": [{"status": "pending"}, {"status": "active", "expires_at": {"$gt": now()}}]}):
+        raise HTTPException(409, "This ride already has a featured request")
+    doc = {"feature_id": nid("fea"), "trip_id": tid, "driver_id": user["user_id"], "driver_name": user["name"],
+           "route": route_label(trip), "date": trip["date"], "time": trip["time"],
+           "amount": s.get("featured_price", FEATURED_DEFAULT_PRICE), "days": FEATURED_DAYS,
+           "payment_ref": body.payment_ref.upper(), "status": "pending", "admin_note": "",
+           "requested_at": now(), "approved_at": None, "expires_at": None}
+    await db.featured.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+@api.get("/featured")
+async def featured_rides():
+    feats = await db.featured.find({"status": "active", "expires_at": {"$gt": now()}}, {"_id": 0, "trip_id": 1, "expires_at": 1}).to_list(50)
+    if not feats:
+        return []
+    ids = [f["trip_id"] for f in feats]
+    out_proj = {k: v for k, v in TRIP_OUT.items()}
+    rows = await db.trips.find({"trip_id": {"$in": ids}, "status": "scheduled", "seats_available": {"$gt": 0},
+                                "departure_at": {"$gt": now()}}, out_proj).sort("departure_at", 1).to_list(10)
+    return await enrich_trips(rows)
+
+
+@api.get("/admin/featured")
+async def admin_featured(status: str = "pending", _: dict = Depends(get_admin)):
+    q: dict = {"status": status}
+    if status == "active":
+        q["expires_at"] = {"$gt": now()}
+    elif status == "ended":
+        q = {"$or": [{"status": "ended"}, {"status": "active", "expires_at": {"$lte": now()}}]}
+    return await db.featured.find(q, FEATURE_OUT).sort("requested_at", -1).to_list(200)
+
+
+class FeatureReviewIn(BaseModel):
+    note: str = Field(default="", max_length=300)
+
+
+@api.post("/admin/featured/{fid}/{action}")
+async def admin_review_feature(fid: str, action: Literal["approve", "reject", "end"], body: FeatureReviewIn, admin: dict = Depends(get_admin)):
+    f = await db.featured.find_one({"feature_id": fid}, FEATURE_OUT)
+    if not f:
+        raise HTTPException(404, "Request not found")
+    if action in ("approve", "reject") and f["status"] != "pending":
+        raise HTTPException(400, "Only pending requests can be reviewed")
+    if action == "end" and f["status"] != "active":
+        raise HTTPException(400, "Only active spots can be ended")
+    upd = {"admin_note": body.note, "reviewed_by": admin["user_id"]}
+    if action == "approve":
+        upd.update(status="active", approved_at=now(), expires_at=now() + timedelta(days=FEATURED_DAYS))
+    elif action == "reject":
+        upd.update(status="rejected")
+    else:
+        upd.update(status="ended", expires_at=now())
+    await db.featured.update_one({"feature_id": fid}, {"$set": upd})
+    await audit(admin["user_id"], f"featured.{action}", fid)
+    if action != "end":
+        await notify(f["driver_id"], f"featured_{'approved' if action == 'approve' else 'rejected'}",
+                     {"route": f["route"], "days": FEATURED_DAYS})
+    return {"ok": True}
 
 
 # ---------------------------------------------------------------- seeding

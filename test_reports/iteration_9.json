@@ -1,0 +1,42 @@
+{
+  "summary": "Tested Driver Ratings/Reviews on trip detail and paid Featured Rides (UPI + admin approval) end-to-end. Backend: 15/15 pytest pass (approved TEST driver with uploaded docs, completed booking, 2 reviews, 1 hidden by admin, featured request validation 400/404/409/422, approve/reject/end, 7-day expiry, public /featured, featured_approved notification, settings PUT/GET, closed when no UPI). Frontend (375x667): home 'Featured rides' section renders and tapping a card opens the trip; rider trip detail shows DriverReviews card ABOVE booking form (avg 4.0, 1 rating after hidden review excluded); hidden on driver's own trip; FeatureCard live/pending/closed/open states, UPI id + amount, ref sanitising, submit -> 'Checking payment'; admin Featured tab filters + approve/end move items correctly; admin Settings featured price/UPI save reflected in /api/settings. No blocking bugs found. No deprecated Expo packages detected. Admin password had to be changed on forced first login (now TravooAdmin2026, saved to /app/memory/test_credentials.md which was missing).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/trips/{tid} (driver_reviews)", "issue": "Query filters only target_id=driver, not role='driver', so reviews a driver got while riding as a passenger appear as 'ratings from passengers' (rating_avg mixes both too)."},
+      {"endpoint": "POST /api/trips/{tid}/feature", "issue": "No unique index or atomic check for pending/active requests, so two requests sent at the same moment can both be created. A full ride (seats_available=0) can still be featured and charged, but /api/featured hides it."},
+      {"endpoint": "PUT /api/admin/settings", "issue": "featured_upi_id can't be reset to null because None values are dropped. An empty string works to close spots, but /api/settings then returns '' instead of null."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "FeatureCard", "issue": "The card shows for any trip with status=scheduled, even after departure time has passed. The driver can open it and only gets the backend 400 'Only upcoming rides can be featured' after submitting.", "testID": "feature-open-button", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Admin dashboard > Featured", "issues": ["Approve, Reject and End now act on a single tap with no confirmation. Reject always sends the same hard-coded note, so the admin can't give a custom reason."]},
+      {"screen": "Home", "issues": ["Featured rides include the viewer's own trips and trips they already booked."]}
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/test_iter9_featured_reviews.py", "/app/test_reports/pytest/pytest_iter9.xml"],
+  "action_items": [
+    "Optional: filter driver_reviews (and possibly the rating shown) by role='driver'.",
+    "Optional: add a partial unique index or atomic upsert for pending/active featured requests per trip, and refuse featuring when seats_available == 0.",
+    "Optional: hide FeatureCard when departure_at is in the past.",
+    "Optional: add a confirm step and a custom note input for admin approve/reject/end.",
+    "Translate the new feat.*, rev.count/none/see_all and notif.featured_* strings in the other 22 locales. They are only in en.json; the app falls back to English for now."
+  ],
+  "critical_code_review_comments": [
+    "app/admin/dashboard.tsx is 705 lines (over 700); split the tab renderers (featured, settings, etc.) into components.",
+    "FeatureCard load(): if /settings fails, the rejection is unhandled and the card stays hidden with no error state.",
+    "The 7-day expiry is checked at query time, and status stays 'active' after expires_at. The admin 'active' filter and the public list handle this correctly, but the 'ended' filter will never list naturally expired spots."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter9_featured_reviews.py (new)", "/app/memory/test_credentials.md (created; admin password changed to TravooAdmin2026 due to forced change)"],
+  "success_rate": {"backend": "100% (15/15)", "frontend": "100% of tested flows"},
+  "seed_data_creation": "TEST_FeatDriver/TEST_FeatPax/TEST_FeatPax2 users (several, from multiple runs), their vehicles, trips, bookings, 4 TEST reviews (some hidden), featured requests. TEST featured spots ended and TEST future trips cancelled. Platform settings featured_price/featured_upi_id restored to original (unset -> 199/null) via $unset.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Admin password is now TravooAdmin2026. Admin login is rate limited (5 per 15 min per email). Run the iter9 test with `pytest test_iter9_featured_reviews.py -n 0` (sequential flow; pytest.ini adds xdist). It reads the admin token from /tmp/admtok or ADMIN_TOKEN, else logs in. Driver verification needs uploads (licence_front, licence_back, id_proof, vehicle, rc) and trips need fuel_price + mileage. The test restores featured settings in its cleanup step. Frontend auth: localStorage travoo_lang='\"en\"', travoo_token=JSON string; admin uses travoo_admin_session.",
+  "rca_of_issue": ""
+}

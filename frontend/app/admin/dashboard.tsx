@@ -15,11 +15,11 @@ import { Badge, Btn, Card, Chip, Empty, ErrorBox, Field, Header, Loading, Sectio
 import { inr, useI18n } from "@/src/i18n";
 import { useTheme } from "@/src/theme";
 
-const TABS = ["overview", "notifications", "drivers", "passengers", "rides", "activity", "licence_verifications", "pro", "places", "users", "trips", "bookings", "tickets", "reviews", "routes", "settings"] as const;
+const TABS = ["overview", "notifications", "drivers", "passengers", "rides", "activity", "licence_verifications", "pro", "places", "users", "trips", "bookings", "tickets", "reviews", "featured", "routes", "settings"] as const;
 type Tab = (typeof TABS)[number];
-const PATH: Record<Tab, string> = { overview: "/admin/stats", notifications: "/admin/notifications", rides: "/admin/rides", activity: "/admin/activity", drivers: "/admin/drivers", passengers: "/admin/passengers", licence_verifications: "/admin/licence-verifications", pro: "/admin/pro-drivers", places: "/admin/locations/missing", users: "/admin/users", trips: "/admin/trips", bookings: "/admin/bookings", tickets: "/admin/tickets", reviews: "/admin/reviews", routes: "/routes/popular", settings: "/admin/settings" };
+const PATH: Record<Tab, string> = { overview: "/admin/stats", notifications: "/admin/notifications", rides: "/admin/rides", activity: "/admin/activity", drivers: "/admin/drivers", passengers: "/admin/passengers", licence_verifications: "/admin/licence-verifications", pro: "/admin/pro-drivers", places: "/admin/locations/missing", users: "/admin/users", trips: "/admin/trips", bookings: "/admin/bookings", tickets: "/admin/tickets", reviews: "/admin/reviews", featured: "/admin/featured", routes: "/routes/popular", settings: "/admin/settings" };
 
-const TAB_LABEL: Partial<Record<string, string>> = { notifications: "Alerts", rides: "Rides", activity: "Activity log", passengers: "Passengers", licence_verifications: "Licence checks" };
+const TAB_LABEL: Partial<Record<string, string>> = { notifications: "Alerts", rides: "Rides", activity: "Activity log", passengers: "Passengers", licence_verifications: "Licence checks", featured: "Featured" };
 const RIDE_TONE: Record<string, any> = { scheduled: "info", started: "warning", completed: "success", cancelled: "error" };
 
 export default function AdminScreen() {
@@ -41,6 +41,15 @@ export default function AdminScreen() {
   const [note, setNote] = useState("");
   const [preview, setPreview] = useState<string | null>(null);
   const [fuel, setFuel] = useState<Record<string, string>>({});
+  const [fStatus, setFStatus] = useState("pending");
+  const [featPrice, setFeatPrice] = useState("");
+  const [featUpi, setFeatUpi] = useState("");
+  useEffect(() => {
+    if (dataTab === "settings" && data) {
+      setFeatPrice(String(data.featured_price ?? 199));
+      setFeatUpi(data.featured_upi_id ?? "");
+    }
+  }, [dataTab, data]);
   const [reviewDriver, setReviewDriver] = useState<any | null>(null);
   const [validationChecks, setValidationChecks] = useState<Record<string, boolean>>({
     licence_expiry_valid: false,
@@ -60,14 +69,14 @@ export default function AdminScreen() {
   const load = useCallback(async () => {
     setErr("");
     try {
-      const path = tab === "drivers" ? `${PATH.drivers}?status=${dStatus}&q=${encodeURIComponent(q)}` : tab === "pro" ? `${PATH[tab]}?status=${dStatus}` : tab === "rides" ? `${PATH.rides}?status=${rStatus}&q=${encodeURIComponent(q)}` : tab === "users" || tab === "passengers" ? `${PATH[tab]}?q=${encodeURIComponent(q)}` : PATH[tab];
+      const path = tab === "drivers" ? `${PATH.drivers}?status=${dStatus}&q=${encodeURIComponent(q)}` : tab === "pro" ? `${PATH[tab]}?status=${dStatus}` : tab === "rides" ? `${PATH.rides}?status=${rStatus}&q=${encodeURIComponent(q)}` : tab === "featured" ? `${PATH.featured}?status=${fStatus}` : tab === "users" || tab === "passengers" ? `${PATH[tab]}?q=${encodeURIComponent(q)}` : PATH[tab];
       const res = await api(path);
       setData(res);
       setDataTab(tab);
     } catch (e: any) {
       setErr(e.message);
     }
-  }, [tab, dStatus, rStatus, q]);
+  }, [tab, dStatus, rStatus, fStatus, q]);
   useEffect(() => { setData(null); load(); }, [load]);
 
   const act = async (path: string, body: any = {}, method = "POST") => {
@@ -481,6 +490,34 @@ export default function AdminScreen() {
             {!r.hidden ? <Btn small variant="ghost" testID={`admin-hide-review-${r.review_id}`} label={t("admin.delete")} onPress={() => act(`/admin/reviews/${r.review_id}`, {}, "DELETE")} /> : null}
           </Card>
         ));
+      case "featured":
+        return (
+          <>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: space.sm }}>
+              {["pending", "active", "rejected", "ended"].map((s) => <View key={s} style={{ flexShrink: 0 }}><Chip testID={`admin-featured-filter-${s}`} label={s[0].toUpperCase() + s.slice(1)} active={fStatus === s} onPress={() => setFStatus(s)} /></View>)}
+            </ScrollView>
+            <T size={12} color={colors.muted}>Drivers pay your UPI ID and send the transaction ID. Check it arrived in your bank/UPI app, then approve to feature the ride on the home screen for 7 days.</T>
+            {data.length === 0 ? <Empty title={t("admin.empty")} /> : data.map((f: any) => (
+              <Card key={f.feature_id} testID={`admin-featured-${f.feature_id}`} style={{ gap: 4, padding: space.md }}>
+                <View style={{ flexDirection: "row", justifyContent: "space-between", gap: space.sm }}>
+                  <T weight="700" style={{ flex: 1 }}>{f.route}</T>
+                  <Badge label={f.status} tone={f.status === "active" ? "success" : f.status === "pending" ? "warning" : "muted"} />
+                </View>
+                <T size={12} color={colors.muted}>{f.driver_name} · ride {f.date} {f.time} · {inr(f.amount)}</T>
+                <T testID={`admin-featured-ref-${f.feature_id}`} size={13} weight="700">UTR: {f.payment_ref}</T>
+                <T size={11} color={colors.muted}>Requested {fmtDate(f.requested_at, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}{f.expires_at ? ` · until ${fmtDate(f.expires_at, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}` : ""}</T>
+                {f.status === "pending" ? (
+                  <View style={{ flexDirection: "row", gap: space.sm, marginTop: space.xs }}>
+                    <Btn small style={{ flex: 1 }} testID={`admin-featured-approve-${f.feature_id}`} label="Payment received · Approve" onPress={() => act(`/admin/featured/${f.feature_id}/approve`, { note: "" })} />
+                    <Btn small variant="outline" testID={`admin-featured-reject-${f.feature_id}`} label="Reject" onPress={() => act(`/admin/featured/${f.feature_id}/reject`, { note: "Payment not found. Please check the transaction ID." })} />
+                  </View>
+                ) : f.status === "active" ? (
+                  <Btn small variant="ghost" testID={`admin-featured-end-${f.feature_id}`} label="End now" onPress={() => act(`/admin/featured/${f.feature_id}/end`, { note: "" })} />
+                ) : null}
+              </Card>
+            ))}
+          </>
+        );
       case "routes":
         return (
           <>
@@ -530,6 +567,13 @@ export default function AdminScreen() {
             <View style={{ gap: space.sm }}>
               <T size={13} weight="600">{t("v2.maintenance")}</T>
               <Stepper testID="admin-maint" min={0} max={20} value={Math.round(data.maintenance_per_km ?? 2)} onChange={(v) => act("/admin/settings", { maintenance_per_km: v }, "PUT")} />
+            </View>
+            <View style={{ gap: space.sm }}>
+              <T weight="800">Featured rides</T>
+              <T size={12} color={colors.muted}>Price for 7 days on the home screen, and the UPI ID drivers pay. Featuring stays closed until a UPI ID is set.</T>
+              <Field testID="admin-featured-price" label="Price (₹)" value={featPrice} onChangeText={(v) => setFeatPrice(v.replace(/\D/g, ""))} keyboardType="number-pad" />
+              <Field testID="admin-featured-upi" label="Your UPI ID" placeholder="travoo@upi" value={featUpi} onChangeText={setFeatUpi} autoCapitalize="none" />
+              <Btn small testID="admin-featured-save" label={t("common.save")} disabled={!featPrice} onPress={() => act("/admin/settings", { featured_price: Number(featPrice), featured_upi_id: featUpi.trim() }, "PUT")} />
             </View>
             <View style={{ flexDirection: "row", gap: space.sm, alignItems: "center" }}>
               <Ionicons name="information-circle-outline" size={18} color={colors.muted} />

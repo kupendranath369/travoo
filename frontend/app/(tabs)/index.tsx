@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { api } from "@/src/api";
 import { Logo } from "@/src/components/Logo";
+import { RideCard } from "@/src/components/RideCard";
 import { Card, IconName, T, radius, space } from "@/src/components/ui";
 import { useAuth } from "@/src/auth";
 import { useI18n } from "@/src/i18n";
@@ -20,13 +21,15 @@ export default function Home() {
   const router = useRouter();
   const { user } = useAuth();
   const [recent, setRecent] = useState<any[]>([]);
+  const [featured, setFeatured] = useState<any[]>([]);
   const [unread, setUnread] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
-    const [r, n] = await Promise.all([api("/searches").catch(() => []), api("/notifications").catch(() => ({ unread: 0 }))]);
+    const [r, n, f] = await Promise.all([api("/searches").catch(() => []), api("/notifications").catch(() => ({ unread: 0 })), api("/featured").catch(() => [])]);
     setRecent(r);
     setUnread(n.unread);
+    setFeatured(f);
   }, []);
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
@@ -75,6 +78,23 @@ export default function Home() {
         {service("home-find-ride-button", "car-sport", t("v2.find_intercity"), t("v2.find_intercity_d"), colors.brand, colors.onBrand, () => router.push("/search"), 0)}
         {service("home-hire-driver-button", "key", t("v2.hire"), t("v2.hire_d"), colors.brandPrimary, colors.onBrandPrimary, () => router.push("/hire"), 80)}
         {service("home-offer-ride-button", "add-circle", t("btn.offer"), t("v2.offer_d"), colors.brandTertiary, colors.onBrandTertiary, () => router.push("/offer"), 160)}
+
+        {featured.length ? (
+          <View testID="home-featured-section" style={{ gap: space.sm, marginTop: space.md }}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
+              <Ionicons name="star" size={18} color={colors.brandTertiary} />
+              <T size={18} weight="800" style={{ flex: 1 }}>{t("feat.home_title")}</T>
+              <T size={11} color={colors.muted}>{t("feat.sponsored")}</T>
+            </View>
+            <ScrollView testID="home-featured-list" horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -space.lg }} contentContainerStyle={{ gap: space.md, paddingHorizontal: space.lg }}>
+              {featured.map((tr) => (
+                <View key={tr.trip_id} testID={`home-featured-${tr.trip_id}`} style={{ width: 310, flexShrink: 0 }}>
+                  <RideCard trip={tr} />
+                </View>
+              ))}
+            </ScrollView>
+          </View>
+        ) : null}
 
         <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: space.md }}>
           <T size={18} weight="800">{t("v2.recent")}</T>

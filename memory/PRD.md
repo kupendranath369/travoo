@@ -75,3 +75,10 @@ Pan-India intercity paid carpooling app (BlaBlaCar model) called TRAVOO, tagline
 
 ## 2026-06 - Build & Run
 - Backend failed to start (missing Python packages e.g. resend). Installed requirements (skipped conflicting emergentintegrations/litellm pins, not imported by app). Backend + Expo restarted and verified.
+
+## 2026-06 — Driver ratings + Featured rides
+- Trip detail shows driver star rating + latest 5 driver reviews before booking (driver_reviews in GET /trips/{id}).
+- Featured rides: driver requests on own upcoming trip, pays admin UPI ID offline, submits UTR; admin approves in Featured tab → home "Featured rides" for 7 days. Admin Settings: featured price (default 199) + UPI ID (featuring closed until set).
+- Tested iteration_9: 15/15 backend, UI flows pass.
+### Backlog
+- Translate new strings into 22 languages; confirm dialog + custom reject note in admin; auto-mark expired spots; Razorpay option for instant activation.
