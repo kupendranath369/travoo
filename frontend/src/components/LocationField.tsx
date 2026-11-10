@@ -144,11 +144,11 @@ export function LocationSearchModal({ visible, title, onClose, onSelect }: { vis
             <Pressable testID="location-clear" onPress={() => setQ("")} hitSlop={10}><Ionicons name="close-circle" size={18} color={colors.muted} /></Pressable>
           ) : null}
         </View>
-        {row("location-current-button", "navigate-circle", t("loc.current"), current)}
-        <Pressable testID="location-map-button" onPress={() => setMapAt(rows[0] ? { lat: rows[0].lat, lng: rows[0].lng } : null)} style={{ flexDirection: "row", alignItems: "center", gap: space.md, paddingHorizontal: space.lg, paddingVertical: space.md, backgroundColor: colors.brandPrimary, marginHorizontal: space.lg, marginTop: space.sm, borderRadius: radius.md }}>
-          <Ionicons name="map-outline" size={22} color={colors.onBrandPrimary} />
-          <T weight="600" color={colors.onBrandPrimary}>{t("geo.choose_map")}</T>
+        <Pressable testID="location-map-button" onPress={() => setMapAt(rows[0] ? { lat: rows[0].lat, lng: rows[0].lng } : null)} style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: space.md, paddingHorizontal: space.lg, paddingVertical: space.md, backgroundColor: colors.brandPrimary, marginHorizontal: space.lg, marginTop: space.sm, borderRadius: radius.lg, minHeight: 56 }}>
+          <Ionicons name="map" size={24} color={colors.onBrandPrimary} />
+          <T weight="700" size={16} color={colors.onBrandPrimary}>{t("geo.choose_map")}</T>
         </Pressable>
+        {row("location-current-button", "navigate-circle", t("loc.current"), current)}
         {busy ? <ActivityIndicator color={colors.brandPrimary} /> : null}
         {msg ? (
           <View style={{ paddingHorizontal: space.lg, gap: space.sm }}>
