@@ -145,6 +145,10 @@ export function LocationSearchModal({ visible, title, onClose, onSelect }: { vis
           ) : null}
         </View>
         {row("location-current-button", "navigate-circle", t("loc.current"), current)}
+        <Pressable testID="location-map-button" onPress={() => setMapAt(rows[0] ? { lat: rows[0].lat, lng: rows[0].lng } : null)} style={{ flexDirection: "row", alignItems: "center", gap: space.md, paddingHorizontal: space.lg, paddingVertical: space.md, backgroundColor: colors.brandPrimary, marginHorizontal: space.lg, marginTop: space.sm, borderRadius: radius.md }}>
+          <Ionicons name="map-outline" size={22} color={colors.onBrandPrimary} />
+          <T weight="600" color={colors.onBrandPrimary}>{t("geo.choose_map")}</T>
+        </Pressable>
         {busy ? <ActivityIndicator color={colors.brandPrimary} /> : null}
         {msg ? (
           <View style={{ paddingHorizontal: space.lg, gap: space.sm }}>
@@ -157,12 +161,6 @@ export function LocationSearchModal({ visible, title, onClose, onSelect }: { vis
           keyboardShouldPersistTaps="handled"
           keyExtractor={(i) => i.loc_id}
           contentContainerStyle={{ paddingBottom: insets.bottom + space.xl }}
-          ListHeaderComponent={rows.length > 0 ? (
-            <Pressable testID="location-map-button" onPress={() => setMapAt(rows[0] ? { lat: rows[0].lat, lng: rows[0].lng } : null)} style={{ flexDirection: "row", alignItems: "center", gap: space.md, paddingHorizontal: space.lg, paddingVertical: space.md, backgroundColor: colors.brandSoft, marginHorizontal: space.lg, marginTop: space.sm, borderRadius: radius.md }}>
-              <Ionicons name="map-outline" size={22} color={colors.brandPrimary} />
-              <T weight="600" color={colors.brandPrimary}>{t("geo.choose_map")}</T>
-            </Pressable>
-          ) : null}
           renderItem={({ item }) => (
             <Pressable testID={`location-option-${item.loc_id}`} onPress={() => pick(item)} style={({ pressed }) => ({ flexDirection: "row", gap: space.md, paddingLeft: space.lg, paddingRight: space.sm, paddingVertical: space.md, backgroundColor: pressed ? colors.surfaceTertiary : "transparent", alignItems: "center" })}>
               <View style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: colors.brandSoft, alignItems: "center", justifyContent: "center" }}>
