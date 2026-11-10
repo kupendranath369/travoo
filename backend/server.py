@@ -561,6 +561,7 @@ class ProfileIn(BaseModel):
     upi_id: Optional[str] = Field(default=None, max_length=60)
     language: Optional[str] = Field(default=None, max_length=8)
     bio: Optional[str] = Field(default=None, max_length=500)
+    picture: Optional[str] = Field(default=None, max_length=100)
 
 
 @api.put("/me")
@@ -571,6 +572,43 @@ async def update_me(body: ProfileIn, user: dict = Depends(get_user)):
     if upd:
         await db.users.update_one({"user_id": user["user_id"]}, {"$set": upd})
     return await db.users.find_one({"user_id": user["user_id"]}, USER_PRIVATE)
+
+
+@api.post("/me/photo")
+async def upload_profile_photo(file: UploadFile = File(...), user: dict = Depends(get_user)):
+    """Upload a profile photo for a regular user (not driver documents)."""
+    # Check file size (max 5MB)
+    MAX_SIZE = 5 * 1024 * 1024
+    content = await file.read()
+    if len(content) > MAX_SIZE:
+        raise HTTPException(400, "Photo too large. Maximum 5MB allowed.")
+    
+    # Check file type
+    if not file.content_type.startswith("image/"):
+        raise HTTPException(400, "Only image files are allowed.")
+    
+    # Generate file_id
+    file_id = nid("file")
+    
+    # Store in files collection with data directly (no external storage)
+    doc = {
+        "file_id": file_id,
+        "owner_id": user["user_id"],
+        "kind": "user_profile",
+        "content_type": file.content_type,
+        "size": len(content),
+        "original_name": file.filename,
+        "data": content,  # Store directly in MongoDB
+        "created_at": now(),
+        "deleted": False
+    }
+    
+    await db.files.insert_one(doc)
+    
+    # Update user's picture field
+    await db.users.update_one({"user_id": user["user_id"]}, {"$set": {"picture": file_id}})
+    
+    return {"file_id": file_id, "picture": file_id}
 
 
 @api.get("/users/{uid}")

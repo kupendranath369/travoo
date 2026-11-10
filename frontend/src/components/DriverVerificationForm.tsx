@@ -1,13 +1,14 @@
 import { useFocusEffect, useRouter } from "expo-router";
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { View } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { api } from "@/src/api";
 import { DocFile, DocKind, DocPhotos } from "@/src/components/DocPhotos";
+import { useAuth } from "@/src/auth";
 import { useToast } from "@/src/components/toast";
-import { Btn, Card, Field, Header, Loading, T, radius, space } from "@/src/components/ui";
+import { ActivityIndicator, Btn, Card, Field, Header, Loading, T, radius, space } from "@/src/components/ui";
 import { useI18n } from "@/src/i18n";
 import { useTheme } from "@/src/theme";
 
@@ -20,11 +21,13 @@ export function DriverVerificationForm({ ai }: { ai: boolean }) {
   const { t } = useI18n();
   const router = useRouter();
   const toast = useToast();
+  const { user } = useAuth();
   const [prof, setProf] = useState<{ files: DocFile[]; kinds: DocKind[]; missing: string[] } | null>(null);
   const [f, setF] = useState(EMPTY);
   const [busy, setBusy] = useState("");
   const [err, setErr] = useState("");
   const [aiDone, setAiDone] = useState(false);
+  const [extracting, setExtracting] = useState(false);
 
   const load = useCallback(async () => {
     const r = await api("/driver/profile");
@@ -32,12 +35,48 @@ export function DriverVerificationForm({ ai }: { ai: boolean }) {
   }, []);
   useFocusEffect(useCallback(() => { load().catch((e) => setErr(e.message)); }, [load]));
 
+  // Auto-extract when documents are uploaded
+  useEffect(() => {
+    if (!prof || !ai) return;
+    
+    const hasLicence = prof.files.some((f) => f.kind === "licence_front" || f.kind === "licence");
+    const hasRC = prof.files.some((f) => f.kind === "rc");
+    
+    // Only extract if we have both documents and haven't extracted yet
+    if (hasLicence && hasRC && !aiDone && !extracting) {
+      extractWithAi();
+    }
+  }, [prof, ai, aiDone, extracting]);
+
   if (!prof) return <View style={{ flex: 1, backgroundColor: colors.surface }}><Header title={ai ? "AI Verification" : "Manual Verification"} /><Loading /></View>;
   const missing = prof.missing;
   const labelOf = (k: string) => prof.kinds.find((x) => x.kind === k)?.label ?? k;
   const has = (k: string) => prof.files.some((f) => f.kind === k);
   const canRead = (has("licence_front") || has("licence")) && has("rc");
   const required = prof.kinds.filter((k) => k.required).length;
+
+  const extractWithAi = async () => {
+    setExtracting(true);
+    setErr("");
+    try {
+      const r = await api("/driver/ai-extract", { method: "POST" });
+      
+      // Populate fields with extracted data, only if not already filled
+      setF((cur) => ({
+        ...cur,
+        vehicle_name: r.vehicle_name && !cur.vehicle_name ? r.vehicle_name : cur.vehicle_name,
+        phone: !cur.phone && user?.phone ? user.phone : cur.phone,
+        licence_no: r.licence_no && !cur.licence_no ? r.licence_no : cur.licence_no,
+        licence_expiry: r.licence_expiry && !cur.licence_expiry ? r.licence_expiry : cur.licence_expiry,
+        rc_no: r.rc_no && !cur.rc_no ? r.rc_no : cur.rc_no,
+      }));
+      setAiDone(true);
+      toast("Document details extracted successfully");
+    } catch (e: any) {
+      setErr("Unable to extract document details. Please enter them manually.");
+    }
+    setExtracting(false);
+  };
 
   const readWithAi = async () => {
     setBusy("ai");
@@ -86,13 +125,19 @@ export function DriverVerificationForm({ ai }: { ai: boolean }) {
         <Card style={{ gap: space.md }}>
           <T weight="800">Upload your documents</T>
           <T size={12} color={colors.muted}>
-            {ai ? "Add clear photos. AI then reads your licence and RC to fill the details for you." : "Add clear photos. Our team reviews them before approving you."}
+            {ai ? "Add clear photos. AI will automatically extract details from your licence and RC." : "Add clear photos. Our team reviews them before approving you."}
           </T>
           <DocPhotos files={prof.files} kinds={prof.kinds} editable onChanged={() => load().catch(() => {})} />
           <T testID="verify-photos-progress" size={12} weight="700" color={missing.length ? colors.muted : colors.success}>
             {required - missing.length} of {required} required documents uploaded
           </T>
-          {ai ? (
+          {extracting ? (
+            <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm, paddingVertical: space.sm }}>
+              <ActivityIndicator size="small" color={colors.brandPrimary} />
+              <T size={13} color={colors.muted}>Extracting document details...</T>
+            </View>
+          ) : null}
+          {ai && !extracting ? (
             <Btn testID="verify-ai-read-button" icon="sparkles" label={aiDone ? "Read again with AI" : "Fill details with AI"} onPress={readWithAi} loading={busy === "ai"} disabled={!canRead || !!busy} />
           ) : null}
         </Card>

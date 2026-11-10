@@ -77,14 +77,16 @@ export default function ProfileScreen() {
       const compressed = await manipulateAsync(result.assets[0].uri, actions, { compress: 0.8, format: SaveFormat.JPEG });
       const picked = { uri: compressed.uri, name: `profile_${Date.now()}.jpg`, mimeType: "image/jpeg", isPdf: false };
 
-      const r = await uploadWithProgress(`${API_BASE}/driver/documents/profile`, picked, {
+      // Upload to the new user profile photo endpoint
+      const r = await uploadWithProgress(`${API_BASE}/me/photo`, picked, {
         headers: { Authorization: `Bearer ${getApiToken()}` },
         onProgress: (p) => setPhotoProgress(p),
       });
       let body: any = {};
       try { body = JSON.parse(r.body || "{}"); } catch { body = {}; }
+      
       if (r.status >= 200 && r.status < 300) {
-        toast(body.duplicate ? "This photo was already uploaded" : "Profile photo updated successfully");
+        toast("Profile photo updated successfully");
         await refresh();
       } else {
         toast(body.detail || "Failed to upload photo", "error");
