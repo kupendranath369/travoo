@@ -19,10 +19,6 @@ export default function TabsLayout() {
           <NativeTabs.Trigger.Icon sf="house.fill" />
           <NativeTabs.Trigger.Label>{t("tab.home")}</NativeTabs.Trigger.Label>
         </NativeTabs.Trigger>
-        <NativeTabs.Trigger name="search">
-          <NativeTabs.Trigger.Icon sf="magnifyingglass" />
-          <NativeTabs.Trigger.Label>{t("tab.search")}</NativeTabs.Trigger.Label>
-        </NativeTabs.Trigger>
         <NativeTabs.Trigger name="offer">
           <NativeTabs.Trigger.Icon sf="plus.circle.fill" />
           <NativeTabs.Trigger.Label>{t("tab.offer")}</NativeTabs.Trigger.Label>
@@ -55,7 +51,6 @@ export default function TabsLayout() {
       }}
     >
       <Tabs.Screen name="index" options={{ title: t("tab.home"), tabBarButtonTestID: "tab-home", tabBarIcon: icon("home", "home-outline") }} />
-      <Tabs.Screen name="search" options={{ title: t("tab.search"), tabBarButtonTestID: "tab-search", tabBarIcon: icon("search", "search-outline") }} />
       <Tabs.Screen
         name="offer"
         options={{

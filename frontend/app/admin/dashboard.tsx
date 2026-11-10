@@ -44,10 +44,13 @@ export default function AdminScreen() {
   const [fStatus, setFStatus] = useState("pending");
   const [featPrice, setFeatPrice] = useState("");
   const [featUpi, setFeatUpi] = useState("");
+  const [mil, setMil] = useState<Record<string, string>>({});
   useEffect(() => {
     if (dataTab === "settings" && data) {
       setFeatPrice(String(data.featured_price ?? 199));
       setFeatUpi(data.featured_upi_id ?? "");
+      const m = { hatchback: 18, sedan: 16, suv: 12, muv: 13, ...(data.mileage_defaults ?? {}) } as Record<string, number>;
+      setMil(Object.fromEntries(Object.entries(m).map(([k, v]) => [k, String(v)])));
     }
   }, [dataTab, data]);
   const [reviewDriver, setReviewDriver] = useState<any | null>(null);
@@ -571,6 +574,18 @@ export default function AdminScreen() {
             <View style={{ gap: space.sm }}>
               <T weight="800">Admin account</T>
               <Btn small variant="outline" icon="key-outline" testID="admin-change-password-button" label="Change admin password" onPress={() => router.push("/admin/change-password")} />
+            </View>
+            <View style={{ gap: space.sm }}>
+              <T weight="800">Typical mileage by vehicle (km/l)</T>
+              <T size={12} color={colors.muted}>Used for the ride price when a driver has not entered their own car's mileage (petrol/diesel). Fuel prices are set in the Fuel prices tab.</T>
+              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.sm }}>
+                {["hatchback", "sedan", "suv", "muv"].map((k) => (
+                  <View key={k} style={{ width: "47%" }}>
+                    <Field testID={`admin-mileage-${k}`} label={k.toUpperCase()} value={mil[k] ?? ""} onChangeText={(x) => setMil({ ...mil, [k]: x.replace(/[^\d.]/g, "") })} keyboardType="decimal-pad" />
+                  </View>
+                ))}
+              </View>
+              <Btn small testID="admin-mileage-save" label={t("common.save")} onPress={() => act("/admin/settings", { mileage_defaults: Object.fromEntries(Object.entries(mil).map(([k, x]) => [k, Number(x)])) }, "PUT")} />
             </View>
             <View style={{ gap: space.sm }}>
               <T weight="800">Featured rides</T>

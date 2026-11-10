@@ -51,10 +51,11 @@ class TestSetup:
             assert r.status_code == 200, r.text
         r = requests.post(f"{API}/driver/documents/rc", headers=h(S["drv"]), files={"file": ("rc.pdf", real_pdf(900 + uuid.uuid4().int % 500), "application/pdf")}, timeout=120)
         assert r.status_code == 200, r.text
-        r = requests.post(f"{API}/driver/verification", headers=h(S["drv"]), json={"vehicle_name": "Honda City", "phone": "9876512345",
+        requests.put(f"{API}/me", headers=h(S["drv"]), json={"phone": "9876512345"})
+        r = requests.post(f"{API}/driver/verification", headers=h(S["drv"]), json={"vehicle_name": "Honda City", "licence_name": "TEST Feat", "vehicle_class": "LMV",
                           "licence_no": "KA0120209999123", "licence_expiry": "01-01-2032", "rc_no": "KA05FT0009"})
         assert r.status_code == 200, r.text
-        v = requests.post(f"{API}/vehicles", headers=h(S["drv"]), json={"make": "Honda", "model": "City", "vtype": "sedan", "reg_no": "KA05FT0009", "seats": 4}).json()
+        v = requests.post(f"{API}/vehicles", headers=h(S["drv"]), json={"make": "Honda", "model": "City", "vtype": "sedan", "reg_no": "KA05FT0009", "seats": 3}).json()
         S["vid"] = v["vehicle_id"]
         r = requests.post(f"{API}/admin/drivers/{S['drv_id']}/review", headers=h(S["adm"]), json={"decision": "approved"})
         assert r.status_code == 200, r.text

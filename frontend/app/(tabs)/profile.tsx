@@ -3,11 +3,11 @@ import * as ImagePicker from "expo-image-picker";
 import { manipulateAsync, SaveFormat } from "expo-image-manipulator";
 import { useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useState } from "react";
-import { ActivityIndicator, Pressable, View } from "react-native";
+import { ActivityIndicator, Linking, Pressable, View } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { api, fileUrl, getApiToken, API_BASE } from "@/src/api";
+import { api, pictureUrl, getApiToken, API_BASE } from "@/src/api";
 import { useAuth } from "@/src/auth";
 import { useToast } from "@/src/components/toast";
 import { Avatar, Badge, Btn, Card, Field, IconName, Rating, T, space, statusTone } from "@/src/components/ui";
@@ -62,6 +62,16 @@ export default function ProfileScreen() {
   };
 
   const uploadProfilePhoto = async () => {
+    const perm = await ImagePicker.getMediaLibraryPermissionsAsync();
+    if (!perm.granted) {
+      if (!perm.canAskAgain) {
+        toast("Allow photo access in Settings to choose a profile photo", "error");
+        Linking.openSettings();
+        return;
+      }
+      const req = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!req.granted) return toast("Photo access is needed to choose a profile photo", "error");
+    }
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ["images"],
       quality: 1,
@@ -104,8 +114,8 @@ export default function ProfileScreen() {
       <KeyboardAwareScrollView bottomOffset={24} contentContainerStyle={{ padding: space.lg, paddingTop: insets.top + space.lg, gap: space.lg, paddingBottom: (usesNativeTabs ? insets.bottom : 0) + space.xl }}>
         <Card style={{ backgroundColor: colors.brand, borderColor: colors.brand, gap: space.md }}>
           <View style={{ flexDirection: "row", gap: space.md, alignItems: "center" }}>
-            <Pressable onPress={uploadProfilePhoto} disabled={uploadingPhoto} style={{ position: "relative" }} hitSlop={20}>
-              <Avatar name={user.name} uri={user.picture ? fileUrl(user.picture) : null} size={60} />
+            <Pressable testID="profile-photo-button" accessibilityLabel="Change profile photo" onPress={uploadProfilePhoto} disabled={uploadingPhoto} style={{ position: "relative" }} hitSlop={20}>
+              <Avatar name={user.name} uri={pictureUrl(user.picture)} size={60} />
               {uploadingPhoto ? (
                 <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(0,0,0,0.5)", borderRadius: 30, alignItems: "center", justifyContent: "center" }}>
                   <ActivityIndicator size="small" color="white" />

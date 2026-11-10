@@ -1,0 +1,48 @@
+{
+  "summary": "Tested iteration 10 on the backend (25 new pytest tests, all passing; iter9 regression: 14 passed, 1 skipped) and on the frontend (Playwright, 375x667 mobile). Every requested feature works end to end. Home booking card: location pick, swap, date, passengers, the error when locations are missing, the Hire/Offer shortcuts, recent searches that re-run, and the avatar photo. The Search tab is gone (tabs are home, offer, bookings, profile) and /search opens as a stack screen with a back button. Offer: OSRM route map and summary (143 km, 1h 59m), map pins for exact pickup/drop that reverse-geocode into the text fields, and the seat stepper capped at 3 for a sedan with the limit text. The calculator has no maintenance field and shows a fuel-source fallback label. The price follows the recommended value, stops when edited, and returns with 'use recommended'. The preview breakdown is correct (143/16=8.94 l x 102 = 912 + 300 tolls = 1212 / 3 = 404). Publish persisted pickup_pin, drop_pin and cost_breakdown (sharers=3, maintenance 0). Vehicle form offers only 4 types, capped 3 for hatchback/sedan and 8 for SUV/MUV, with hints. Profile photo upload on web works and shows on the home avatar after logout and login. Driver verification: no profile kind and no phone input; shows the registered phone with an Add button; the new licence fields have DD-MM-YYYY masks; the scan starts on its own and shows the 'unclear' message for a synthetic image; status stays not_submitted. Admin dashboard shows the mileage fields and the driver review page shows the new licence fields. Regression: passenger booking works and the driver gets a new_booking notification. One HIGH backend bug: PUT /api/trips/{id} bypasses the price cap and does not recalculate cost_breakdown when seats change.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "PUT /api/trips/{tid}", "issue": "No price-cap check on edit. A trip published at the recommended ₹384 was changed to ₹20000 with a 200 response. The rule 'price ≤ recommended × max_price_factor' is only enforced on POST /api/trips (server.py:1205-1226).", "priority": "HIGH"},
+      {"endpoint": "PUT /api/trips/{tid}", "issue": "Changing seats does not recalculate cost_breakdown. After seats went 3→1, cost_breakdown.sharers stayed 3 and recommended stayed 384, so the breakdown is stale and the per-person cap is wrong. Recalculate cb (total/seats) and re-check the cap whenever seats or price change.", "priority": "HIGH"}
+    ],
+    "minor": [
+      {"endpoint": "cost_breakdown / TripIn", "issue": "Dead parameters: TripIn still accepts maintenance_per_km and share_mode, and cost_breakdown() overrides them inside (server.py:1070-1071, 1095-1100). Remove them to avoid confusion."},
+      {"endpoint": "POST /api/driver/ai-extract", "issue": "Rate limited to 10 per hour, and the frontend auto-scan calls it on every visit to the screen (see the frontend issue below), so users can hit 429."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "DriverVerificationForm auto-scan", "issue": "The scan re-runs every time the AI verification screen is opened or reloaded while a licence-front photo exists. scannedId is local state starting at null (DriverVerificationForm.tsx:76-81). This was confirmed with 2 ai-extract calls across one reload. Each run costs an LLM call and uses up the 10/hour limit, and a re-scan can overwrite details the user has already typed. Only auto-scan right after a new upload, or remember the scanned file_id (for example compare against the files present at first load).", "testID": "verify-scan-message", "priority": "MEDIUM"},
+      {"component": "Offer fuel-prices effect", "issue": "The fuel-prices effect (offer.tsx:111-121) runs whenever origin state or vehicle changes and resets mileage and fuelPrice. With no admin fuel prices on file, a fuel price the driver typed is wiped to '' if they change the origin afterwards. Only overwrite when the field was not edited by the user.", "testID": "offer-fuel-price-input", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Search results", "issues": ["Empty state says 'No rides found on this date' even when the date is 'Any date'."]},
+      {"screen": "Profile header", "issues": ["Long email wraps mid-word ('...@example.co m'). Use numberOfLines={1} with ellipsize."]},
+      {"screen": "Trip detail", "issues": ["Shows 'Duration 1h 59m (Estimated)' even when route_source is osrm."]},
+      {"screen": "Booking confirmation", "issues": ["Empty blank area to the left of the Booking ID in the web preview."]}
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/test_iter10_capacity_pricing_photo.py", "/app/backend/tests/ui_setup_iter10.py", "/app/backend/tests/test_iter9_featured_reviews.py", "/app/test_reports/pytest/pytest_iter10.xml"],
+  "action_items": [
+    "HIGH: In PUT /api/trips/{tid}, when price or seats change, recalculate cost_breakdown (sharers=seats, recommended=round(total/seats)) and reject price > recommended × max_price_factor.",
+    "MEDIUM: In DriverVerificationForm, stop auto-scanning on every mount. Only scan after a new licence-front upload, and never overwrite fields the user has edited.",
+    "LOW: offer.tsx fuel-prices effect should not wipe a mileage or fuel price the user typed when origin or vehicle changes.",
+    "LOW: Fix the search empty-state copy for 'Any date', the profile email wrap, and the '(Estimated)' label on OSRM trips.",
+    "Cleanup: remove the unused maintenance_per_km and share_mode from TripIn and cost_breakdown. Split admin/dashboard.tsx (724 lines) and server.py (2759 lines)."
+  ],
+  "critical_code_review_comments": [
+    "server.py update_trip: price edit has no cap and cost_breakdown is not recalculated after seat changes. This undermines the cost-sharing (non-commercial) rule.",
+    "Frontend and backend compute distance from separate OSRM calls. Usually identical, but if the routes differ the backend cap can reject a price the UI showed as allowed.",
+    "app/admin/dashboard.tsx is 724 lines (over 700) and server.py is 2759 lines; split them into modules.",
+    "home-passengers and offer-seats testIDs are only on the children (-minus, -plus, -value), not the Stepper wrapper. That is fine, but note it for future tests."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter10_capacity_pricing_photo.py (new)", "/app/backend/tests/ui_setup_iter10.py (new)", "/app/backend/tests/test_iter9_featured_reviews.py (setup updated for the new verification and seat rules: phone via PUT /me, licence_name, vehicle_class, sedan seats 3)"],
+  "success_rate": {"backend": "95% (all 25 new + 14 regression tests pass; 1 HIGH bug found in PUT /trips via a manual check)", "frontend": "95% (all requested flows work; 1 medium and 1 low UX bug)"},
+  "seed_data_creation": "TEST_ users created via the API: test_uidriver10_db0de9@example.com (approved driver, phone 9876500010) and test_uiverify10_42c04c@example.com (licence front + profile photo), both with password Passw0rd!x, plus pytest TEST_ users. Test trips, bookings and vehicles were cancelled or deleted. instant_driver_approval was restored to False (its original value) and mileage_defaults were restored to 18/16/12/13.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run pytest with: cd /app/backend/tests && python -m pytest <file> -c /dev/null --rootdir . (pytest.ini forces xdist -n, which breaks these sequential flows). The admin token is cached in /tmp/admtok; admin_token() in test_iter10 reuses it. For web UI auth you can inject localStorage 'travoo_token' and 'travoo_admin_session' as JSON strings. Fuel prices collection is empty by design, so the driver types the fuel price.",
+  "rca_of_issue": "PUT /trips: update_trip (server.py:1205) only validates seats against vehicle caps and blocks price changes after bookings. It never calls cost_breakdown or checks the max_price_factor cap. Repro: create a trip (recommended ₹384) and PUT {price:20000}: 200, price saved. Then PUT {seats:1}: cost_breakdown.sharers stays 3. Mitigation: recalculate cost_breakdown from the stored distance, mileage, fuel_price and tolls with the new seats, then enforce the cap on the new or existing price."
+}

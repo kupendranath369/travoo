@@ -40,7 +40,7 @@ export function RideCard({ trip, seats = 1 }: { trip: any; seats?: number }) {
       </View>
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.sm, alignItems: "center" }}>
         <Badge icon="calendar-outline" label={fmtDate(trip.date)} tone="muted" />
-        <Badge icon="time-outline" label={`${fmtDur(trip.duration_min)} · ~${trip.distance_km} km`} tone="muted" />
+        <Badge icon="time-outline" label={`${fmtDur(trip.duration_min)} · ${trip.route_source === "osrm" ? "" : "~"}${trip.distance_km} km`} tone="muted" />
         <Badge icon="person-outline" label={t("ride.seats_left", { n: trip.seats_available })} tone={trip.seats_available ? "info" : "error"} />
         {trip.instant_booking ? <Badge icon="flash" label={t("trip.instant")} tone="warning" /> : null}
         {trip.match?.type === "along_route" ? <Badge testID={`ride-along-route-${trip.trip_id}`} icon="git-merge-outline" label={t("geo.along_route", { n: trip.match.pickup_km, time: trip.match.pickup_eta ?? "" })} tone="accent" /> : null}

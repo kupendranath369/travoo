@@ -13,7 +13,8 @@ import { Badge, Btn, Card, Chip, Field, Header, Loading, Section, Stepper, T, ra
 import { useI18n } from "@/src/i18n";
 import { useTheme } from "@/src/theme";
 
-const VTYPES = ["hatchback", "sedan", "suv", "muv", "other"];
+const VTYPES = ["hatchback", "sedan", "suv", "muv"];
+const SEAT_CAP: Record<string, number> = { hatchback: 3, sedan: 3, suv: 8, muv: 8 };
 
 export default function DriverScreen() {
   const insets = useSafeAreaInsets();
@@ -152,7 +153,7 @@ export default function DriverScreen() {
               <Ionicons name="car-sport" size={26} color={colors.brandPrimary} />
               <View style={{ flex: 1 }}>
                 <T weight="800">{x.make} {x.model}</T>
-                <T size={12} color={colors.muted}>{x.reg_no} · {x.vtype} · {x.seats} seats · {x.ac ? t("ride.ac") : t("ride.nonac")}</T>
+                <T size={12} color={colors.muted}>{x.reg_no} · {(x.vtype ?? "").toUpperCase()} · {Math.min(x.seats, SEAT_CAP[x.vtype] ?? 3)} {t("vehicle.passenger_seats").toLowerCase()} · {x.ac ? t("ride.ac") : t("ride.nonac")}</T>
               </View>
               {x.verified ? <Badge label={t("ride.verified")} tone="success" /> : null}
               <Pressable testID={`vehicle-delete-${x.vehicle_id}`} hitSlop={10} onPress={() => api(`/vehicles/${x.vehicle_id}`, { method: "DELETE" }).then(load)}>
@@ -166,14 +167,15 @@ export default function DriverScreen() {
               <Field testID="vehicle-model" label={t("vehicle.model")} value={v.model} onChangeText={(x) => setV({ ...v, model: x })} placeholder="Dzire" />
               <T size={13} weight="600" color={colors.muted}>{t("vehicle.type")}</T>
               <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.sm }}>
-                {VTYPES.map((x) => <Chip key={x} testID={`vehicle-type-${x}`} label={x.toUpperCase()} active={v.vtype === x} onPress={() => setV({ ...v, vtype: x })} />)}
+                {VTYPES.map((x) => <Chip key={x} testID={`vehicle-type-${x}`} label={x.toUpperCase()} active={v.vtype === x} onPress={() => setV({ ...v, vtype: x, seats: SEAT_CAP[x] === 3 ? Math.min(v.seats, 3) : Math.max(v.seats, 4) })} />)}
               </View>
               <Field testID="vehicle-color" label={t("vehicle.color")} value={v.color} onChangeText={(x) => setV({ ...v, color: x })} />
               <Field testID="vehicle-reg" label={t("vehicle.reg")} value={v.reg_no} onChangeText={(x) => setV({ ...v, reg_no: x.toUpperCase() })} autoCapitalize="characters" />
-              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-                <T weight="600">{t("vehicle.seats")}</T>
-                <Stepper testID="vehicle-seats" value={v.seats} onChange={(x) => setV({ ...v, seats: x })} />
+              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: space.sm }}>
+                <T weight="600" style={{ flex: 1 }}>{t("vehicle.passenger_seats")}</T>
+                <Stepper testID="vehicle-seats" value={v.seats} max={SEAT_CAP[v.vtype] ?? 3} onChange={(x) => setV({ ...v, seats: x })} />
               </View>
+              <T testID="vehicle-seats-hint" size={12} color={colors.muted}>{SEAT_CAP[v.vtype] === 3 ? t("vehicle.seats_hint_small") : t("vehicle.seats_hint_big")}</T>
               <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
                 <T weight="600">{t("vehicle.ac")}</T>
                 <Switch testID="vehicle-ac-switch" value={v.ac} onValueChange={(x) => setV({ ...v, ac: x })} trackColor={{ true: colors.brandPrimary, false: colors.border }} />

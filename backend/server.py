@@ -8,7 +8,7 @@ import uuid
 from contextlib import suppress
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import List, Literal, Optional
+from typing import Dict, List, Literal, Optional
 
 import bcrypt
 import httpx
@@ -18,7 +18,7 @@ from dotenv import load_dotenv
 from fastapi import APIRouter, Depends, FastAPI, File, HTTPException, Query, Request, Response, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from motor.motor_asyncio import AsyncIOMotorClient
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 from pymongo import ASCENDING, DESCENDING, GEOSPHERE, IndexModel, ReturnDocument
 from pymongo.errors import DuplicateKeyError
 from starlette.middleware.cors import CORSMiddleware
@@ -583,39 +583,35 @@ async def update_me(body: ProfileIn, user: dict = Depends(get_user)):
 
 @api.post("/me/photo")
 async def upload_profile_photo(file: UploadFile = File(...), user: dict = Depends(get_user)):
-    """Upload a profile photo for a regular user (not driver documents)."""
-    # Check file size (max 5MB)
-    MAX_SIZE = 5 * 1024 * 1024
-    content = await file.read()
-    if len(content) > MAX_SIZE:
-        raise HTTPException(400, "Photo too large. Maximum 5MB allowed.")
-    
-    # Check file type
-    if not file.content_type.startswith("image/"):
-        raise HTTPException(400, "Only image files are allowed.")
-    
-    # Generate file_id
+    """Personal profile photo (managed only from the Profile screen). Stored in private object storage."""
+    await rate_limit(f"photo:{user['user_id']}", 20, 3600, "Too many photo uploads. Please try again later.")
+    content = await file.read(5 * 1024 * 1024 + 1)
+    if len(content) > 5 * 1024 * 1024:
+        raise HTTPException(413, "Photo too large. Maximum 5 MB allowed.")
+    sniffed = sniff_image(content)
+    if not sniffed or sniffed[0] == "application/pdf":
+        raise HTTPException(400, "Please choose a JPG, PNG or WEBP photo.")
+    ctype, ext = sniffed
     file_id = nid("file")
-    
-    # Store in files collection with data directly (no external storage)
-    doc = {
-        "file_id": file_id,
-        "owner_id": user["user_id"],
-        "kind": "user_profile",
-        "content_type": file.content_type,
-        "size": len(content),
-        "original_name": file.filename,
-        "data": content,  # Store directly in MongoDB
-        "created_at": now(),
-        "deleted": False
-    }
-    
+    doc = {"file_id": file_id, "owner_id": user["user_id"], "kind": "user_profile", "content_type": ctype, "size": len(content),
+           "sha256": hashlib.sha256(content).hexdigest(), "original_name": (file.filename or "")[:120], "created_at": now(), "deleted": False}
+    try:
+        res = await run_in_threadpool(put_object, f"{STORAGE_APP}/profile/{user['user_id']}/{uuid.uuid4().hex}.{ext}", content, ctype)
+        doc["path"] = res["path"]
+    except Exception as e:  # storage outage: keep the photo in the database instead of failing the upload
+        logger.warning("profile photo storage failed, using database: %s", e)
+        doc["data"] = content
     await db.files.insert_one(doc)
-    
-    # Update user's picture field
+    await db.files.update_many({"owner_id": user["user_id"], "kind": "user_profile", "file_id": {"$ne": file_id}}, {"$set": {"deleted": True, "deleted_at": now()}})
     await db.users.update_one({"user_id": user["user_id"]}, {"$set": {"picture": file_id}})
-    
     return {"file_id": file_id, "picture": file_id}
+
+
+async def read_file_bytes(f: dict) -> bytes:
+    if f.get("data") is not None:
+        return f["data"]
+    data, _ = await run_in_threadpool(get_object, f["path"])
+    return data
 
 
 @api.get("/users/{uid}")
@@ -665,11 +661,25 @@ async def public_settings():
 
 
 # ---------------------------------------------------------------- driver verification & vehicles
+DMY = r"^\d{2}-\d{2}-\d{4}$"
+
+
+def valid_dmy(s: str) -> bool:
+    try:
+        datetime.strptime(s, "%d-%m-%Y")
+        return True
+    except ValueError:
+        return False
+
+
 class VerificationIn(BaseModel):
     vehicle_name: str = Field(min_length=2, max_length=80)
-    phone: str = Field(pattern=r"^[6-9]\d{9}$")
     licence_no: str = Field(min_length=8, max_length=20)
-    licence_expiry: str = Field(pattern=r"^\d{2}-\d{2}-\d{4}$")
+    licence_name: str = Field(min_length=2, max_length=80)
+    licence_dob: str = Field(default="", max_length=10)
+    licence_issue: str = Field(default="", max_length=10)
+    licence_expiry: str = Field(pattern=DMY)
+    vehicle_class: str = Field(min_length=2, max_length=80)
     rc_no: str = Field(min_length=6, max_length=15)
 
 
@@ -757,8 +767,8 @@ DOC_META = {
     "vehicle": ("Vehicle photos", True, 4, False),
     "other": ("Other documents", False, 3, True),
     "licence": ("Driving licence", False, 1, True),  # legacy single-sided licence (older accounts)
-    "profile": ("Profile photo", False, 1, False),  # optional, not required for verification
 }
+# The personal photo is managed only from the Profile screen (users.picture), never in driver verification.
 UPLOAD_KINDS = [k for k in DOC_META if k != "licence"]
 REQUIRED_KINDS = [k for k, m in DOC_META.items() if m[1]]
 LOCKED_STATUSES = ("under_review", "approved")
@@ -911,13 +921,22 @@ async def submit_verification(body: VerificationIn, user: dict = Depends(get_use
     missing = missing_kinds(await active_files(user["user_id"]))
     if missing:
         raise HTTPException(400, f"Please upload: {', '.join(DOC_META[k][0] for k in missing)}")
+    phone = re.sub(r"\D", "", user.get("phone") or "")[-10:]
+    if not re.fullmatch(r"[6-9]\d{9}", phone):
+        raise HTTPException(400, "Add a valid 10-digit mobile number in Profile → Edit profile first. We use your registered number for verification.")
+    for label, val, required in (("Licence expiry", body.licence_expiry, True), ("Date of birth", body.licence_dob, False), ("Licence issue date", body.licence_issue, False)):
+        if (val or required) and not (re.fullmatch(DMY, val) and valid_dmy(val)):
+            raise HTTPException(400, f"{label}: enter a real date as DD-MM-YYYY")
+    if datetime.strptime(body.licence_expiry, "%d-%m-%Y").date() < datetime.now(IST).date():
+        raise HTTPException(400, "Your driving licence has expired. Please renew it before applying.")
     prev = user.get("driver_status", "not_submitted")
     settings = await get_settings()
     status = "approved" if settings.get("instant_driver_approval") else "under_review"
-    doc = {**body.model_dump(), "licence_no": body.licence_no.upper(), "rc_no": body.rc_no.upper(),
+    doc = {**body.model_dump(), "licence_no": body.licence_no.upper().replace(" ", ""), "rc_no": body.rc_no.upper().replace(" ", ""),
+           "licence_name": body.licence_name.strip(), "vehicle_class": body.vehicle_class.strip().upper(), "phone": phone,
            "user_id": user["user_id"], "submitted_at": now(), "admin_note": "", "reviewed_at": None}
     await db.driver_documents.update_one({"user_id": user["user_id"]}, {"$set": doc}, upsert=True)
-    await db.users.update_one({"user_id": user["user_id"]}, {"$set": {"driver_status": status, "phone": body.phone}})
+    await db.users.update_one({"user_id": user["user_id"]}, {"$set": {"driver_status": status}})
     resub = prev in ("rejected", "resubmit")
     await add_history(user["user_id"], "resubmitted" if resub else "submitted", user["user_id"])
     await admin_alert("resubmission" if resub else "verification_submitted",
@@ -929,10 +948,12 @@ async def submit_verification(body: VerificationIn, user: dict = Depends(get_use
 
 
 AI_EXTRACT_PROMPT = (
-    "You read Indian driving documents. Image 1 is a driving licence, image 2 is a vehicle Registration Certificate (RC). "
-    "Return ONLY a JSON object with keys: licence_no (no spaces), "
-    "licence_expiry (DD-MM-YYYY, the non-transport validity date), rc_no (vehicle registration number, no spaces), "
-    "vehicle_name (maker and model from RC). Use an empty string for anything you cannot read clearly. No extra text."
+    "You read Indian driving documents (OCR). Image 1 is the FRONT of a driving licence{rc}. "
+    "Return ONLY a JSON object with keys: licence_no (no spaces), licence_name (holder's name exactly as printed), "
+    "licence_dob (date of birth DD-MM-YYYY), licence_issue (date of issue DD-MM-YYYY), "
+    "licence_expiry (DD-MM-YYYY, the non-transport validity date), vehicle_class (classes of vehicle as printed, e.g. 'LMV, MCWG')"
+    "{rc_keys}, readable (true if the licence photo is clear enough to read, else false). "
+    "Copy only what is printed and clearly legible. Never guess, infer or invent: use an empty string for anything missing, cut off or blurry. No extra text."
 )
 
 
@@ -944,20 +965,23 @@ async def ai_extract(user: dict = Depends(get_user)):
     await rate_limit(f"ai:{user['user_id']}", 10, 3600)
     files = {f["kind"]: f for f in await active_files(user["user_id"])}
     lic = files.get("licence_front") or files.get("licence")
-    if not lic or not files.get("rc"):
-        raise HTTPException(400, "Please upload the licence (front) and RC first")
+    if not lic:
+        raise HTTPException(400, "Please upload a photo of the front of your driving licence first")
+    if lic["content_type"] not in ("image/jpeg", "image/png", "image/webp"):
+        raise HTTPException(400, "Automatic reading needs a photo (JPG or PNG) of the licence, not a PDF. Upload a photo or type the details.")
+    rc = files.get("rc") if files.get("rc", {}).get("content_type") in ("image/jpeg", "image/png", "image/webp") else None
     images = []
-    for f in (lic, files["rc"]):
-        if f["content_type"] not in ("image/jpeg", "image/png", "image/webp"):
-            raise HTTPException(400, "AI reading needs photos (JPG or PNG) of the licence and RC, not PDFs")
-        full = await db.files.find_one({"file_id": f["file_id"]}, {"_id": 0, "path": 1})
-        data, _ = await run_in_threadpool(get_object, full["path"])
-        images.append(ImageContent(image_base64=base64.b64encode(data).decode()))
+    for f in [lic, *([rc] if rc else [])]:
+        full = await db.files.find_one({"file_id": f["file_id"]}, {"_id": 0})
+        images.append(ImageContent(image_base64=base64.b64encode(await read_file_bytes(full)).decode()))
+    prompt = AI_EXTRACT_PROMPT.format(
+        rc=", image 2 is the vehicle Registration Certificate (RC)" if rc else "",
+        rc_keys=", rc_no (registration number from RC, no spaces), vehicle_name (maker and model from RC)" if rc else "")
     chat = LlmChat(api_key=os.environ["EMERGENT_LLM_KEY"], session_id=f"ai-extract-{user['user_id']}-{uuid.uuid4().hex[:8]}",
                    system_message="You extract fields from document photos and answer with strict JSON.").with_model("openai", "gpt-5.4")
     out = ""
     try:
-        async for ev in chat.stream_message(UserMessage(text=AI_EXTRACT_PROMPT, file_contents=images)):
+        async for ev in chat.stream_message(UserMessage(text=prompt, file_contents=images)):
             if isinstance(ev, TextDelta):
                 out += ev.content
             elif isinstance(ev, StreamDone):
@@ -970,20 +994,33 @@ async def ai_extract(user: dict = Depends(get_user)):
         parsed = jsonlib.loads(m.group(0)) if m else {}
     except ValueError:
         parsed = {}
-    keys = ("licence_no", "licence_expiry", "rc_no", "vehicle_name")
+    keys = ("licence_no", "licence_name", "licence_dob", "licence_issue", "licence_expiry", "vehicle_class", "rc_no", "vehicle_name")
     res = {k: str(parsed.get(k) or "").strip() for k in keys}
     res["licence_no"] = res["licence_no"].replace(" ", "").upper()
     res["rc_no"] = res["rc_no"].replace(" ", "").upper()
-    if not re.fullmatch(r"\d{2}-\d{2}-\d{4}", res["licence_expiry"]):
-        res["licence_expiry"] = ""
-    await audit(user["user_id"], "driver.ai_extract", user["user_id"], {"found": [k for k in keys if res[k]]})
+    for k in ("licence_dob", "licence_issue", "licence_expiry"):
+        if not (re.fullmatch(DMY, res[k]) and valid_dmy(res[k])):
+            res[k] = ""  # never pass on a date we could not read as a real date
+    found = [k for k in keys if res[k]]
+    res["unclear"] = parsed.get("readable") is False or not (res["licence_no"] or res["licence_expiry"])
+    res["missing"] = [k for k in keys[:6] if not res[k]]
+    await audit(user["user_id"], "driver.ai_extract", user["user_id"], {"found": found})
     return res
+
+
+# Maximum passenger seats (driver excluded). SUV/MUV: driver enters the RC-approved seating minus the driver, up to 8.
+SEAT_CAPS = {"hatchback": 3, "sedan": 3, "suv": 8, "muv": 8, "other": 3}
+MILEAGE_DEFAULTS = {"hatchback": 18, "sedan": 16, "suv": 12, "muv": 13}
+
+
+def seat_cap(vtype: Optional[str]) -> int:
+    return SEAT_CAPS.get(vtype or "other", 3)
 
 
 class VehicleIn(BaseModel):
     make: str = Field(min_length=2, max_length=40)
     model: str = Field(min_length=1, max_length=40)
-    vtype: Literal["hatchback", "sedan", "suv", "muv", "other"] = "sedan"
+    vtype: Literal["hatchback", "sedan", "suv", "muv"] = "sedan"
     color: str = Field(default="", max_length=20)
     reg_no: str = Field(min_length=6, max_length=15)
     seats: int = Field(ge=1, le=8)
@@ -995,6 +1032,8 @@ class VehicleIn(BaseModel):
 
 @api.post("/vehicles")
 async def add_vehicle(body: VehicleIn, user: dict = Depends(get_user)):
+    if body.seats > seat_cap(body.vtype):
+        raise HTTPException(400, f"A {body.vtype} can offer at most {seat_cap(body.vtype)} passenger seats (driver not counted)")
     v = {**body.model_dump(), "reg_no": body.reg_no.upper().replace(" ", ""), "vehicle_id": nid("veh"),
          "owner_id": user["user_id"], "verified": user.get("driver_status") == "approved", "created_at": now()}
     await db.vehicles.insert_one(v)
@@ -1033,6 +1072,16 @@ class TripIn(BaseModel):
     return_date: Optional[str] = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
     return_time: Optional[str] = Field(default=None, pattern=r"^\d{2}:\d{2}$")
     route_choice: int = Field(default=0, ge=0, le=2)
+    pickup_pin: Optional["PinIn"] = None
+    drop_pin: Optional["PinIn"] = None
+
+
+class PinIn(BaseModel):
+    lat: float = Field(ge=6, le=37.5)
+    lng: float = Field(ge=68, le=97.5)
+
+
+TripIn.model_rebuild()
 
 
 async def road_route(pts: list, choice: int = 0) -> Optional[dict]:
@@ -1044,11 +1093,13 @@ async def road_route(pts: list, choice: int = 0) -> Optional[dict]:
 
 
 def cost_breakdown(km: float, mileage: float, fuel_price: float, tolls: float, maint: float, seats: int, mode: str, fuel_type: str) -> dict:
+    """Fuel = km / mileage × price; total = fuel + tolls; per person = total / passenger seats offered (driver never counted)."""
     fuel_units = km / mileage
     fuel_cost = fuel_units * fuel_price
-    maint_cost = km * maint
-    total = fuel_cost + tolls + maint_cost
-    sharers = seats + 1 if mode == "equal" else seats
+    maint, mode = 0, "passenger"
+    maint_cost = 0
+    total = fuel_cost + tolls
+    sharers = seats
     return {"distance_km": km, "fuel_type": fuel_type, "mileage": mileage, "fuel_price": fuel_price,
             "fuel_units": round(fuel_units, 2), "fuel_cost": round(fuel_cost), "tolls": round(tolls),
             "maintenance_per_km": maint, "maintenance_cost": round(maint_cost), "total": round(total),
@@ -1096,6 +1147,7 @@ async def build_trip(body: TripIn, driver: dict, vehicle: dict, is_demo=False) -
                 extra["route_line"] = {"type": "LineString", "coordinates": line}
     return {"trip_id": nid("trip"), "driver_id": driver["user_id"], "origin": o, "destination": d, "stops": stops,
             "pickup_point": body.pickup_point, "drop_point": body.drop_point, "date": body.date, "time": body.time,
+            "pickup_pin": body.pickup_pin.model_dump() if body.pickup_pin else None, "drop_pin": body.drop_pin.model_dump() if body.drop_pin else None,
             "departure_at": dep.astimezone(timezone.utc), "arrival_time": arr.strftime("%H:%M"),
             "arrival_date": arr.strftime("%Y-%m-%d"), "distance_km": km, "duration_min": mins, "route_source": route_source,
             "seats_total": body.seats, "seats_available": body.seats, "price": body.price,
@@ -1114,8 +1166,9 @@ async def create_trip(body: TripIn, user: dict = Depends(get_user)):
     vehicle = await db.vehicles.find_one({"vehicle_id": body.vehicle_id, "owner_id": user["user_id"], "deleted": {"$ne": True}}, {"_id": 0})
     if not vehicle:
         raise HTTPException(400, "Select one of your vehicles")
-    if body.seats > vehicle["seats"]:
-        raise HTTPException(400, f"This vehicle has only {vehicle['seats']} passenger seats")
+    max_seats = min(vehicle["seats"], seat_cap(vehicle.get("vtype")))
+    if body.seats > max_seats:
+        raise HTTPException(400, f"This {vehicle.get('vtype') or 'vehicle'} can offer at most {max_seats} passenger seats (driver not counted)")
     if body.origin.loc_id == body.destination.loc_id:
         raise HTTPException(400, "Origin and destination must be different")
     trip = await build_trip(body, user, vehicle)
@@ -1159,10 +1212,24 @@ async def update_trip(tid: str, body: TripUpdate, user: dict = Depends(get_user)
         booked = trip["seats_total"] - trip["seats_available"]
         if body.seats < booked:
             raise HTTPException(400, f"{booked} seats are already booked")
+        veh = await db.vehicles.find_one({"vehicle_id": trip["vehicle"]["vehicle_id"]}, {"_id": 0, "seats": 1, "vtype": 1}) or {}
+        max_seats = min(veh.get("seats", 8), seat_cap(veh.get("vtype") or trip["vehicle"].get("vtype")))
+        if body.seats > max_seats:
+            raise HTTPException(400, f"This vehicle can offer at most {max_seats} passenger seats")
         upd["seats_total"] = body.seats
         upd["seats_available"] = body.seats - booked
     if "price" in upd and await db.bookings.count_documents({"trip_id": tid, "status": {"$in": ["pending", "confirmed"]}}):
         raise HTTPException(400, "Price cannot change after bookings are made")
+    cb = trip.get("cost_breakdown")
+    if cb and (body.seats is not None or body.price is not None):
+        seats = upd.get("seats_total", trip["seats_total"])
+        cb = {**cb, "sharers": seats, "recommended": max(50, round(cb["total"] / seats))}
+        cap = round(cb["recommended"] * (await get_settings()).get("max_price_factor", 1.5))
+        price = upd.get("price", trip["price"])
+        if price > cap:
+            raise HTTPException(400, f"Price exceeds the cost-sharing limit of ₹{cap} per seat for {seats} seat(s)."
+                                + (" Lower the price first." if body.price is None and not await db.bookings.count_documents({"trip_id": tid, "status": {"$in": ["pending", "confirmed"]}}) else ""))
+        upd["cost_breakdown"] = cb
     await db.trips.update_one({"trip_id": tid}, {"$set": upd})
     async for b in db.bookings.find({"trip_id": tid, "status": {"$in": ["pending", "confirmed"]}}, {"_id": 0}):
         await notify(b["passenger_id"], "trip_updated", {"route": b["route"]}, b["booking_id"])
@@ -1172,9 +1239,8 @@ async def update_trip(tid: str, body: TripUpdate, user: dict = Depends(get_user)
 async def enrich_trips(trips: list) -> list:
     ids = list({t["driver_id"] for t in trips})
     drivers = {u["user_id"]: u for u in await db.users.find({"user_id": {"$in": ids}}, PUBLIC_FIELDS).to_list(len(ids) or 1)}
-    with_photo = set(await db.driver_documents.distinct("user_id", {"user_id": {"$in": ids}, "photos.profile": {"$exists": True}}))
     for d in drivers.values():
-        d["has_photo"] = d["user_id"] in with_photo and d.get("driver_status") == "approved"
+        d["has_photo"] = str(d.get("picture") or "").startswith("file_") and d.get("driver_status") == "approved"
     for t in trips:
         t["driver"] = drivers.get(t["driver_id"], {"name": "Driver"})
     return trips
@@ -2123,6 +2189,14 @@ class SettingsIn(BaseModel):
     max_price_factor: Optional[float] = Field(default=None, ge=1, le=3)
     featured_price: Optional[int] = Field(default=None, ge=0, le=100000)
     featured_upi_id: Optional[str] = Field(default=None, max_length=80)
+    mileage_defaults: Optional[Dict[Literal["hatchback", "sedan", "suv", "muv"], float]] = None
+
+    @field_validator("mileage_defaults")
+    @classmethod
+    def _mil(cls, v):
+        if v and any(not (3 <= x <= 60) for x in v.values()):
+            raise ValueError("Mileage must be between 3 and 60 km per litre")
+        return v
 
 
 @api.get("/admin/settings")
@@ -2310,22 +2384,21 @@ def mask_phone(p: Optional[str]) -> str:
 @api.get("/public/photo/{uid}")
 async def public_driver_photo(uid: str):
     """Verified badge photo: only the profile photo of an APPROVED driver is public. Documents stay private."""
-    u = await db.users.find_one({"user_id": uid}, {"_id": 0, "driver_status": 1})
+    u = await db.users.find_one({"user_id": uid}, {"_id": 0, "driver_status": 1, "picture": 1})
     pro = await db.pro_drivers.find_one({"user_id": uid, "status": "approved"}, {"_id": 1})
-    doc = await db.driver_documents.find_one({"user_id": uid}, {"_id": 0, "photos.profile": 1})
-    fid = ((doc or {}).get("photos") or {}).get("profile")
-    if not fid or not (pro or (u and u.get("driver_status") == "approved")):
+    fid = (u or {}).get("picture")
+    if not str(fid or "").startswith("file_") or not (pro or (u and u.get("driver_status") == "approved")):
         raise HTTPException(404, "No verified photo")
-    f = await db.files.find_one({"file_id": fid, "deleted": {"$ne": True}}, {"_id": 0})
+    f = await db.files.find_one({"file_id": fid, "owner_id": uid, "deleted": {"$ne": True}}, {"_id": 0})
     if not f:
         raise HTTPException(404, "No verified photo")
-    data, ctype = await run_in_threadpool(get_object, f["path"])
-    return Response(content=data, media_type=f.get("content_type") or ctype,
-                    headers={"Cache-Control": "public, max-age=86400", "X-Content-Type-Options": "nosniff"})
+    return Response(content=await read_file_bytes(f), media_type=f.get("content_type") or "image/jpeg",
+                    headers={"Cache-Control": "public, max-age=3600", "X-Content-Type-Options": "nosniff"})
 
 
 async def has_badge_photo(uid: str) -> bool:
-    return bool(await db.driver_documents.find_one({"user_id": uid, "photos.profile": {"$exists": True}}, {"_id": 1}))
+    u = await db.users.find_one({"user_id": uid}, {"_id": 0, "picture": 1})
+    return str((u or {}).get("picture") or "").startswith("file_")
 
 
 @api.get("/users/{uid}/profile")
@@ -2445,7 +2518,9 @@ async def fuel_prices(state: str = ""):
     for r in sorted(rows, key=lambda x: x["state"] != "default"):  # state-specific overrides default
         out[r["fuel_type"]] = r
     s = await get_settings()
-    return {"prices": out, "maintenance_per_km": s.get("maintenance_per_km", 2), "max_price_factor": s.get("max_price_factor", 1.5)}
+    return {"prices": out, "maintenance_per_km": 0, "max_price_factor": s.get("max_price_factor", 1.5),
+            "mileage_defaults": {**MILEAGE_DEFAULTS, **(s.get("mileage_defaults") or {})}, "seat_caps": SEAT_CAPS,
+            "live_source": None}  # no official live fuel-price feed is connected; prices are admin-maintained estimates
 
 
 @api.post("/admin/fuel-prices")
@@ -2484,7 +2559,10 @@ async def pro_me(user: dict = Depends(get_user)):
     doc = await db.driver_documents.find_one({"user_id": user["user_id"]}, {"_id": 0, "photos": 1}) or {}
     if p:
         p["licence_no"] = mask(p["licence_no"])
-    return {"profile": p, "photos": doc.get("photos", {})}
+    photos = {**(doc.get("photos") or {})}
+    if str(user.get("picture") or "").startswith("file_"):
+        photos["profile"] = user["picture"]
+    return {"profile": p, "photos": photos}
 
 
 @api.post("/pro/register")
@@ -2495,9 +2573,12 @@ async def pro_register(body: ProDriverIn, user: dict = Depends(get_user)):
     if existing and existing["status"] in ("under_review", "approved"):
         raise HTTPException(400, "Local driver profile already submitted")
     doc = await db.driver_documents.find_one({"user_id": user["user_id"]}, {"_id": 0, "photos": 1}) or {}
-    missing = [k for k in ("profile", "licence") if not (doc.get("photos") or {}).get(k)]
+    photos = {**(doc.get("photos") or {})}
+    if str(user.get("picture") or "").startswith("file_"):
+        photos["profile"] = user["picture"]
+    missing = [k for k in ("profile", "licence") if not photos.get(k) and not (k == "licence" and photos.get("licence_front"))]
     if missing:
-        raise HTTPException(400, f"Please upload: {', '.join(missing)} photo")
+        raise HTTPException(400, "Please add your " + " and ".join("profile photo (Profile screen)" if k == "profile" else "licence photo" for k in missing))
     status = "approved" if (await get_settings()).get("instant_driver_approval") else "under_review"
     rec = {**body.model_dump(), "city": loc_snapshot(body.city), "licence_no": body.licence_no.upper(), "user_id": user["user_id"],
            "name": user["name"], "status": status, "submitted_at": now(), "admin_note": ""}
@@ -2672,6 +2753,10 @@ app.add_middleware(CORSMiddleware, allow_credentials=True, allow_origins=["*"], 
 async def startup():
     await ensure_indexes()
     await seed()
+    # one-time move: profile photos uploaded in the old driver-verification screen become the Profile photo
+    async for d in db.driver_documents.find({"photos.profile": {"$exists": True}}, {"_id": 0, "user_id": 1, "photos.profile": 1}):
+        await db.users.update_one({"user_id": d["user_id"], "picture": {"$not": {"$regex": "^file_"}}}, {"$set": {"picture": d["photos"]["profile"]}})
+        await db.driver_documents.update_one({"user_id": d["user_id"]}, {"$unset": {"photos.profile": ""}})
     app.state.geo_sync = asyncio.create_task(geo_router.sync_loop())
     try:
         await run_in_threadpool(init_storage)

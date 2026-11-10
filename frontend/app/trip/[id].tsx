@@ -96,7 +96,7 @@ export default function TripScreen() {
           ))}
           <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.sm }}>
             <Badge icon="speedometer-outline" label={`${t("ride.distance")} ${trip.route_source === "osrm" ? "" : "~"}${trip.distance_km} km`} tone="muted" />
-            <Badge icon="time-outline" label={`${t("ride.duration")} ${fmtDur(trip.duration_min)} (${t("ride.est")})`} tone="muted" />
+            <Badge icon="time-outline" label={`${t("ride.duration")} ${fmtDur(trip.duration_min)}${trip.route_source === "osrm" ? "" : ` (${t("ride.est")})`}`} tone="muted" />
             <Badge icon={trip.instant_booking ? "flash" : "hand-left-outline"} label={trip.instant_booking ? t("trip.instant") : t("trip.request")} tone="warning" />
           </View>
           <OsmMap testID="trip-route-map" style={{ height: 200 }}
@@ -142,7 +142,7 @@ export default function TripScreen() {
           <Card testID="trip-cost-breakdown" style={{ gap: 2 }}>
             <T weight="800">{t("v2.breakdown")}</T>
             <T size={13}>{t("v2.fuel_cost")}: {trip.cost_breakdown.distance_km} km ÷ {trip.cost_breakdown.mileage} × ₹{trip.cost_breakdown.fuel_price} = {inr(trip.cost_breakdown.fuel_cost)}</T>
-            <T size={13}>{t("v2.tolls")}: {inr(trip.cost_breakdown.tolls)}{trip.cost_breakdown.tolls_estimated ? ` (${t("ride.est")})` : ""} · {t("v2.maintenance")}: {inr(trip.cost_breakdown.maintenance_cost)}</T>
+            <T size={13}>{t("v2.tolls")}: {inr(trip.cost_breakdown.tolls)}{trip.cost_breakdown.tolls_estimated ? ` (${t("ride.est")})` : ""}{trip.cost_breakdown.maintenance_cost ? ` · ${t("v2.maintenance")}: ${inr(trip.cost_breakdown.maintenance_cost)}` : ""}</T>
             <T size={13} weight="700">{t("v2.total_cost")}: {inr(trip.cost_breakdown.total)} ÷ {trip.cost_breakdown.sharers} = {inr(trip.cost_breakdown.recommended)} ({t("v2.recommended")})</T>
             <T size={13} weight="800" color={colors.brandPrimary}>{t("v2.your_price")}: {inr(trip.price)}</T>
             <T size={11} color={colors.muted}>{t("v2.cost_note")}</T>
@@ -205,10 +205,10 @@ export default function TripScreen() {
                 <Field testID="trip-edit-drop" label={t("offer.drop")} value={edit.drop_point} onChangeText={(x) => setEdit({ ...edit, drop_point: x })} />
                 <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
                   <T weight="600">{t("offer.seats")}</T>
-                  <Stepper testID="trip-edit-seats" value={edit.seats} min={Math.max(1, booked)} onChange={(x) => setEdit({ ...edit, seats: x })} />
+                  <Stepper testID="trip-edit-seats" value={edit.seats} min={Math.max(1, booked)} max={["hatchback", "sedan", "other"].includes(trip.vehicle?.vtype) ? 3 : 8} onChange={(x) => setEdit({ ...edit, seats: x })} />
                 </View>
                 <Field testID="trip-edit-notes" label={t("offer.notes")} value={edit.notes} onChangeText={(x) => setEdit({ ...edit, notes: x })} multiline />
-                <Btn testID="trip-edit-save" label={t("common.save")} loading={busy === "edit"} onPress={async () => { setBusy("edit"); try { await api(`/trips/${id}`, { method: "PUT", body: edit }); setEdit(null); await load(); } catch (e: any) { setActionErr(e.message); } setBusy(""); }} />
+                <Btn testID="trip-edit-save" label={t("common.save")} loading={busy === "edit"} onPress={async () => { setBusy("edit"); try { setActionErr(""); await api(`/trips/${id}`, { method: "PUT", body: edit }); setEdit(null); await load(); } catch (e: any) { setActionErr(e.message); } setBusy(""); }} />
               </Card>
             ) : null}
             {trip.status === "scheduled" ? (

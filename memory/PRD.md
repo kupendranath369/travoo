@@ -87,3 +87,14 @@ Pan-India intercity paid carpooling app (BlaBlaCar model) called TRAVOO, tagline
 - Admin portal confirmed at /admin/login → /admin/dashboard (separate server-side admin sessions, rate-limited login, audit log, forced first password change).
 - Fixed: /admin links were redirected to the language picker for first-time visitors; admin pages now skip that gate.
 - Added "Change admin password" button in Admin → Settings and "Back to dashboard" on the change-password page.
+
+## 2026-06 — Home booking, map pins, seat caps, auto price, profile photo, licence OCR
+- Home: booking form (from/to via autocomplete or map, date, passengers) + Hire a Driver / Offer a Ride shortcuts + recent searches; Search tab removed (now /search stack screen with back). Home avatar = profile photo.
+- Offer: exact pickup/drop map pins (pickup_pin/drop_pin stored), route km + ETA summary, seat cap by vehicle type, price auto = (km/mileage x fuel price + tolls) / passenger seats; maintenance & equal-share removed; fuel price source label (admin-set estimate or driver-entered); preview breakdown.
+- Vehicles: hatchback/sedan max 3, SUV/MUV max 8 (RC seats minus driver); enforced in POST /vehicles, POST/PUT /trips. Admin Settings: typical mileage per vehicle type.
+- Profile photo: /me/photo sniffed + object storage (DB fallback), replaces old; badge photo now = users.picture. Old verification profile photos migrated on startup.
+- Driver verification: no profile-photo doc, no phone field (registered phone required), new fields name/DOB/issue/expiry/vehicle class; licence-only OCR (GPT vision) auto-scan on new upload, unclear message, never auto-approves.
+- PUT /trips recomputes breakdown + enforces cap.
+- Tested iteration_10 + 11: all pass.
+### Backlog
+- No live fuel-price/toll API connected (admin-maintained estimates). Translate new strings to 22 languages. Pluralisation ("1 seats"). Split server.py.

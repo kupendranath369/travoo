@@ -1,6 +1,6 @@
 import Ionicons from "@react-native-vector-icons/ionicons";
 import { useFocusEffect, useRouter } from "expo-router";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, Switch, View } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -10,6 +10,7 @@ import { useAuth } from "@/src/auth";
 import { DateField } from "@/src/components/Calendar";
 import { TimeChips, isoDate } from "@/src/components/DateChips";
 import { LocationField, LocationSearchModal } from "@/src/components/LocationField";
+import { MapPicker } from "@/src/components/MapPicker";
 import { NearbyChips } from "@/src/components/NearbyChips";
 import { OsmMap } from "@/src/components/OsmMap";
 import { fmtDur } from "@/src/components/RideCard";
@@ -49,8 +50,15 @@ export default function OfferScreen() {
   const [fuelPrice, setFuelPrice] = useState("");
   const [mileage, setMileage] = useState("");
   const [tolls, setTolls] = useState("0");
-  const [maint, setMaint] = useState("2");
-  const [mode, setMode] = useState<"equal" | "passenger">("equal");
+  const [fuelInfo, setFuelInfo] = useState<{ state: string; updated_at?: string } | null>(null);
+  const [caps, setCaps] = useState<Record<string, number>>({ hatchback: 3, sedan: 3, suv: 8, muv: 8, other: 3 });
+  const [milDefaults, setMilDefaults] = useState<Record<string, number>>({});
+  const [priceTouched, setPriceTouched] = useState(false);
+  const fuelTouched = useRef(false);
+  const milTouched = useRef(false);
+  const [pin, setPin] = useState<{ kind: "pickup" | "drop" } | null>(null);
+  const [pickupPin, setPickupPin] = useState<{ lat: number; lng: number } | null>(null);
+  const [dropPin, setDropPin] = useState<{ lat: number; lng: number } | null>(null);
   const [routes, setRoutes] = useState<{ source: string; routes: any[] } | null>(null);
   const [choice, setChoice] = useState(0);
   const [tollsTouched, setTollsTouched] = useState(false);
@@ -87,6 +95,12 @@ export default function OfferScreen() {
   }, [o, d, stops, time, routes, choice]);
 
   const veh0 = vehicles?.find((v) => v.vehicle_id === vid);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const pinInitial = useMemo(() => (pin?.kind === "drop" ? dropPin ?? (d ? { lat: d.lat, lng: d.lng } : null) : pickupPin ?? (o ? { lat: o.lat, lng: o.lng } : null)), [pin]);
+  const maxSeats = veh0 ? Math.min(veh0.seats, caps[veh0.vtype] ?? 3) : 3;
+  useEffect(() => {
+    setSeats((s) => Math.min(Math.max(1, s), maxSeats));
+  }, [maxSeats]);
   useEffect(() => {
     setChoice(0);
     if (!o || !d) return setRoutes(null);
@@ -97,24 +111,36 @@ export default function OfferScreen() {
     if (!tollsTouched && road && road.source === "osrm") setTolls(String(road.toll_estimate ?? 0));
   }, [road?.toll_estimate, road?.source, tollsTouched]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
-    if (veh0?.mileage) setMileage(String(veh0.mileage));
     api(`/fuel-prices?state=${encodeURIComponent(o?.state ?? "")}`).then((r) => {
+      setCaps(r.seat_caps);
+      setMilDefaults(r.mileage_defaults);
+      setMileage((cur) => (milTouched.current && cur ? cur : veh0?.mileage ? String(veh0.mileage) : veh0 && ["petrol", "diesel"].includes(veh0.fuel_type) && r.mileage_defaults[veh0.vtype] ? String(r.mileage_defaults[veh0.vtype]) : ""));
       const fp = r.prices[veh0?.fuel_type ?? "petrol"];
-      if (fp) setFuelPrice(String(fp.price));
-      setMaint(String(r.maintenance_per_km));
+      if (fuelTouched.current && fp === undefined) return setCap(r.max_price_factor);
+      if (!fuelTouched.current || fp) {
+        setFuelPrice(fp ? String(fp.price) : "");
+        setFuelInfo(fp ? { state: fp.state === "default" ? "India" : fp.state, updated_at: fp.updated_at } : null);
+        fuelTouched.current = false;
+      }
       setCap(r.max_price_factor);
     }).catch(() => {});
-  }, [o?.state, veh0?.vehicle_id, veh0?.fuel_type, veh0?.mileage]);
+  }, [o?.state, veh0?.vehicle_id, veh0?.fuel_type, veh0?.mileage, veh0?.vtype]);
+  useEffect(() => {
+    milTouched.current = false;
+  }, [vid]);
 
   const cost = useMemo(() => {
     const km = road?.distance_km ?? est?.road;
     const mil = Number(mileage), fp = Number(fuelPrice);
-    if (!km || !mil || !fp) return null;
-    const fuelUnits = km / mil, fuelCost = fuelUnits * fp, m = km * Number(maint || 0), total = fuelCost + Number(tolls || 0) + m;
-    const sharers = mode === "equal" ? seats + 1 : seats;
-    const rec = Math.max(50, Math.round(total / sharers));
-    return { km, fuelUnits, fuelCost, m, total, sharers, rec, max: Math.round(rec * cap) };
-  }, [road, est, mileage, fuelPrice, maint, tolls, mode, seats, cap]);
+    if (!km || !mil || !fp || !seats) return null;
+    // Fuel (l) = km ÷ mileage; fuel cost = litres × price; total = fuel + tolls; per person = total ÷ passenger seats (driver excluded)
+    const fuelUnits = km / mil, fuelCost = fuelUnits * fp, total = fuelCost + Number(tolls || 0);
+    const rec = Math.max(50, Math.round(total / seats));
+    return { km, fuelUnits, fuelCost, total, sharers: seats, rec, max: Math.round(rec * cap) };
+  }, [road, est, mileage, fuelPrice, tolls, seats, cap]);
+  useEffect(() => {
+    if (cost && !priceTouched) setPrice(String(cost.rec));
+  }, [cost?.rec, priceTouched]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const bottom = (usesNativeTabs ? insets.bottom : 0) + space.xl;
   if (!user || vehicles === null) return <Loading />;
@@ -154,12 +180,13 @@ export default function OfferScreen() {
     try {
       const trip = await api("/trips", {
         body: { origin: locPayload(o!), destination: locPayload(d!), stops: stops.map(locPayload), pickup_point: pickup.trim(), drop_point: drop.trim(), date, time, seats, price: Number(price), vehicle_id: vid, instant_booking: instant, notes: notes.trim(),
-          fuel_price: Number(fuelPrice) || null, mileage: Number(mileage) || null, tolls: Number(tolls) || 0, tolls_estimated: !tollsTouched, maintenance_per_km: Number(maint || 0), share_mode: mode, route_choice: stops.length ? 0 : choice,
+          fuel_price: Number(fuelPrice) || null, mileage: Number(mileage) || null, tolls: Number(tolls) || 0, tolls_estimated: !tollsTouched, maintenance_per_km: 0, share_mode: "passenger", route_choice: stops.length ? 0 : choice,
+          pickup_pin: pickupPin, drop_pin: dropPin,
           return_date: retOn ? retDate ?? date : null, return_time: retOn ? retTime : null },
       });
       toast(t("offer.published"));
       setPreview(false);
-      setO(null); setD(null); setStops([]); setPickup(""); setDrop(""); setPrice(""); setNotes("");
+      setO(null); setD(null); setStops([]); setPickup(""); setDrop(""); setPrice(""); setNotes(""); setPickupPin(null); setDropPin(null); setPriceTouched(false);
       router.push(`/trip/${trip.trip_id}`);
     } catch (e: any) {
       setErr(e.message);
@@ -168,6 +195,8 @@ export default function OfferScreen() {
   };
 
   const veh = vehicles.find((v) => v.vehicle_id === vid);
+  const unit = veh?.fuel_type === "electric" ? "kWh" : veh?.fuel_type === "cng" ? "kg" : "l";
+  const unitPer = `km/${unit}`;
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.surface }}>
@@ -183,8 +212,18 @@ export default function OfferScreen() {
             <T color={colors.muted}>{t("trip.pickup")}: {pickup}</T>
             <T color={colors.muted}>{t("trip.drop")}: {drop}</T>
             {stops.length ? <T color={colors.muted}>{t("trip.stops")}: {stops.map((s) => s.name).join(", ")}</T> : null}
-            <T color={colors.muted}>{veh?.make} {veh?.model} · {veh?.ac ? t("ride.ac") : t("ride.nonac")}</T>
+            <T color={colors.muted}>{veh?.make} {veh?.model} · {veh?.vtype?.toUpperCase()} · {veh?.ac ? t("ride.ac") : t("ride.nonac")}</T>
             <T color={colors.muted}>~{est.road} km · {fmtDur(est.mins)}</T>
+            {cost ? (
+              <View testID="offer-preview-breakdown" style={{ gap: 2, backgroundColor: colors.surfaceTertiary, borderRadius: 12, padding: space.md }}>
+                <T weight="800">{t("offer.breakdown")}</T>
+                <T size={13}>{t("v2.road_distance")}: {cost.km} km</T>
+                <T size={13}>{t("offer.fuel_needed")}: {cost.km} ÷ {mileage} = {cost.fuelUnits.toFixed(2)} {unit}</T>
+                <T size={13}>{t("v2.fuel_cost")}: {cost.fuelUnits.toFixed(2)} × ₹{fuelPrice} = {inr(cost.fuelCost)}</T>
+                <T size={13}>{t("v2.tolls")}: {inr(Number(tolls))}{!tollsTouched ? ` (${t("ride.est")})` : ""}</T>
+                <T size={13} weight="700">{t("v2.total_cost")}: {inr(cost.total)} ÷ {seats} = {inr(cost.rec)}</T>
+              </View>
+            ) : null}
             <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
               <T weight="700">{seats} × {inr(Number(price))}</T>
               <T testID="offer-max-earnings" weight="800" color={colors.brandPrimary}>{inr(seats * Number(price))}</T>
@@ -204,9 +243,20 @@ export default function OfferScreen() {
             {o && d && routes ? (
               <View style={{ gap: space.sm }}>
                 <OsmMap testID="offer-route-map"
-                  markers={[o, ...stops, d].map((p, i, a) => ({ lat: p.lat, lng: p.lng, label: p.name, color: i === 0 ? colors.brandPrimary : i === a.length - 1 ? colors.brandTertiary : colors.muted }))}
+                  markers={[
+                    ...[o, ...stops, d].map((p, i, a) => ({ lat: p.lat, lng: p.lng, label: p.name, color: i === 0 ? colors.brandPrimary : i === a.length - 1 ? colors.brandTertiary : colors.muted })),
+                    ...(pickupPin ? [{ ...pickupPin, label: pickup || t("trip.pickup"), color: colors.success }] : []),
+                    ...(dropPin ? [{ ...dropPin, label: drop || t("trip.drop"), color: colors.error }] : []),
+                  ]}
                   lines={routes.routes.map((r, i) => ({ coords: r.geometry, id: i, color: i === choice ? colors.brandPrimary : colors.borderStrong, width: i === choice ? 6 : 4, dashed: !routes.source.startsWith("osrm") })).sort((a, b) => Number(a.id === choice) - Number(b.id === choice))}
                   onLinePress={setChoice} />
+                {est ? (
+                  <View testID="offer-route-summary" style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
+                    <Ionicons name="speedometer-outline" size={18} color={colors.brandPrimary} />
+                    <T weight="800" style={{ flex: 1 }}>{t("offer.route_summary", { km: est.road, dur: fmtDur(est.mins) })}</T>
+                    <Badge label={road?.source === "osrm" ? "OpenStreetMap" : t("ride.est")} tone={road?.source === "osrm" ? "success" : "warning"} />
+                  </View>
+                ) : null}
                 {routes.routes.length > 1 ? (
                   <View style={{ gap: space.xs }}>
                     <T size={13} weight="600" color={colors.muted}>{t("geo.routes")}</T>
@@ -220,8 +270,10 @@ export default function OfferScreen() {
               </View>
             ) : null}
             <Field testID="offer-pickup-input" label={t("offer.pickup")} value={pickup} onChangeText={setPickup} placeholder="e.g. Silk Board Junction, Gate 2" />
+            {o ? <Btn small variant="outline" icon={pickupPin ? "checkmark-circle" : "pin-outline"} testID="offer-pickup-pin-button" label={pickupPin ? t("offer.pickup_pinned") : t("offer.pin_on_map")} onPress={() => setPin({ kind: "pickup" })} style={{ alignSelf: "flex-start" }} /> : null}
             <NearbyChips loc={o} onPick={setPickup} testID="offer-pickup-nearby" />
             <Field testID="offer-drop-input" label={t("offer.drop")} value={drop} onChangeText={setDrop} placeholder="e.g. Koyambedu Bus Terminus" />
+            {d ? <Btn small variant="outline" icon={dropPin ? "checkmark-circle" : "pin-outline"} testID="offer-drop-pin-button" label={dropPin ? t("offer.drop_pinned") : t("offer.pin_on_map")} onPress={() => setPin({ kind: "drop" })} style={{ alignSelf: "flex-start" }} /> : null}
             <NearbyChips loc={d} onPick={setDrop} testID="offer-drop-nearby" />
             <View style={{ gap: space.sm }}>
               <T size={13} weight="600" color={colors.muted}>{t("offer.stops")}</T>
@@ -239,40 +291,41 @@ export default function OfferScreen() {
               <T size={13} weight="600" color={colors.muted}>{t("offer.time")}: <T weight="800">{time}</T>{est ? `  ·  ${t("offer.est_arrival")}: ${est.arrival}` : ""}</T>
               <TimeChips value={time} onChange={setTime} />
             </View>
-            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-              <T weight="600">{t("offer.seats")}</T>
-              <Stepper testID="offer-seats" value={seats} max={veh?.seats ?? 8} onChange={setSeats} />
+            <View style={{ gap: space.xs }}>
+              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                <T weight="600">{t("offer.seats")}</T>
+                <Stepper testID="offer-seats" value={seats} max={maxSeats} onChange={setSeats} />
+              </View>
+              {veh ? <T testID="offer-seat-limit" size={12} color={colors.muted}>{t("offer.seat_limit", { type: (veh.vtype ?? "").toUpperCase(), n: maxSeats })}</T> : null}
             </View>
             <Card testID="offer-cost-calculator" style={{ gap: space.sm }}>
               <T weight="800">{t("v2.cost_title")}</T>
               {road ? <T testID="offer-road-distance" size={12} color={colors.muted}>{t("v2.road_distance")}: {road.distance_km} km{road.source !== "osrm" ? ` (${t("ride.est")})` : " (OpenStreetMap)"}</T> : null}
               <View style={{ flexDirection: "row", gap: space.sm }}>
-                <View style={{ flex: 1 }}><Field testID="offer-mileage-input" label={`${t("v2.mileage")} (${veh?.fuel_type === "electric" ? "km/kWh" : veh?.fuel_type === "cng" ? "km/kg" : "km/l"})`} value={mileage} onChangeText={(v) => setMileage(v.replace(/[^\d.]/g, ""))} keyboardType="decimal-pad" /></View>
-                <View style={{ flex: 1 }}><Field testID="offer-fuel-price-input" label={`${t("v2.fuel_price")} (₹/${veh?.fuel_type === "electric" ? "kWh" : veh?.fuel_type === "cng" ? "kg" : "l"})`} value={fuelPrice} onChangeText={(v) => setFuelPrice(v.replace(/[^\d.]/g, ""))} keyboardType="decimal-pad" /></View>
+                <View style={{ flex: 1 }}><Field testID="offer-mileage-input" label={`${t("v2.mileage")} (${unitPer})`} value={mileage} onChangeText={(v) => { milTouched.current = true; setMileage(v.replace(/[^\d.]/g, "")); }} keyboardType="decimal-pad" /></View>
+                <View style={{ flex: 1 }}><Field testID="offer-fuel-price-input" label={`${t("v2.fuel_price")} (₹/${unit})`} value={fuelPrice} onChangeText={(v) => { fuelTouched.current = true; setFuelPrice(v.replace(/[^\d.]/g, "")); setFuelInfo(null); }} keyboardType="decimal-pad" /></View>
               </View>
-              <View style={{ flexDirection: "row", gap: space.sm }}>
-                <View style={{ flex: 1 }}><Field testID="offer-tolls-input" label={t("v2.tolls")} value={tolls} onChangeText={(v) => { setTollsTouched(true); setTolls(v.replace(/\D/g, "")); }} keyboardType="number-pad" /></View>
-                <View style={{ flex: 1 }}><Field testID="offer-maint-input" label={t("v2.maintenance")} value={maint} onChangeText={(v) => setMaint(v.replace(/[^\d.]/g, ""))} keyboardType="decimal-pad" /></View>
-              </View>
-              <T size={11} color={colors.brandTertiary}>{!tollsTouched && road?.source === "osrm" ? t("geo.toll_auto", { n: road.toll_km }) : t("v2.tolls_est")}</T>
-              <View style={{ flexDirection: "row", gap: space.sm, flexWrap: "wrap" }}>
-                <Chip testID="offer-mode-equal" label={t("v2.mode_equal")} active={mode === "equal"} onPress={() => setMode("equal")} />
-                <Chip testID="offer-mode-passenger" label={t("v2.mode_passenger")} active={mode === "passenger"} onPress={() => setMode("passenger")} />
-              </View>
+              <T testID="offer-fuel-source" size={11} color={fuelInfo ? colors.muted : colors.brandTertiary}>
+                {fuelInfo ? t("offer.fuel_src_admin", { state: fuelInfo.state, date: fuelInfo.updated_at ? new Date(fuelInfo.updated_at).toLocaleDateString() : "—" }) : t("offer.fuel_src_none")}
+              </T>
+              {!veh0?.mileage && veh0 && milDefaults[veh0.vtype] && ["petrol", "diesel"].includes(veh0.fuel_type) ? <T size={11} color={colors.muted}>{`Typical ${veh0.vtype} mileage (${milDefaults[veh0.vtype]} km/l, set by Travoo) used — add your car's real mileage in Driver → Vehicles.`}</T> : null}
+              <Field testID="offer-tolls-input" label={t("v2.tolls")} value={tolls} onChangeText={(v) => { setTollsTouched(true); setTolls(v.replace(/\D/g, "")); }} keyboardType="number-pad" />
+              <T size={11} color={colors.brandTertiary}>{!tollsTouched && road?.source === "osrm" ? t("geo.toll_auto", { n: road.toll_km }) : tollsTouched ? t("v2.tolls")+": entered by you" : t("v2.tolls_est")}</T>
               {cost ? (
                 <View style={{ gap: 2 }}>
-                  <T size={13}>{t("v2.fuel_cost")}: {cost.km} ÷ {mileage} = {cost.fuelUnits.toFixed(2)} × ₹{fuelPrice} = {inr(cost.fuelCost)}</T>
-                  <T size={13}>{t("v2.maintenance")}: {inr(cost.m)} · {t("v2.tolls")}: {inr(Number(tolls))}</T>
-                  <T size={13} weight="700">{t("v2.total_cost")}: {inr(cost.total)} ÷ {cost.sharers}</T>
-                  <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-                    <T weight="800" color={colors.brandPrimary} testID="offer-recommended">{t("v2.recommended")}: {inr(cost.rec)}</T>
-                    <Btn small variant="outline" label={t("v2.use_recommended")} onPress={() => setPrice(String(cost.rec))} testID="offer-use-recommended" />
+                  <T size={13}>{t("offer.fuel_needed")}: {cost.km} km ÷ {mileage} = {cost.fuelUnits.toFixed(2)} {unit}</T>
+                  <T size={13}>{t("v2.fuel_cost")}: {cost.fuelUnits.toFixed(2)} × ₹{fuelPrice} = {inr(cost.fuelCost)}</T>
+                  <T size={13}>{t("v2.tolls")}: {inr(Number(tolls))}</T>
+                  <T size={13} weight="700">{t("v2.total_cost")}: {inr(cost.total)} ÷ {seats} {t("search.passengers").toLowerCase()}</T>
+                  <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: space.sm }}>
+                    <T weight="800" color={colors.brandPrimary} testID="offer-recommended" style={{ flex: 1 }}>{t("offer.per_person")}: {inr(cost.rec)}</T>
+                    {priceTouched ? <Btn small variant="outline" label={t("v2.use_recommended")} onPress={() => { setPriceTouched(false); setPrice(String(cost.rec)); }} testID="offer-use-recommended" /> : null}
                   </View>
-                  <T size={11} color={colors.muted}>Max ₹{cost.max} · {t("v2.cost_note")}</T>
+                  <T size={11} color={colors.muted}>{t("offer.auto_price", { n: cost.max })} · {t("v2.cost_note")}</T>
                 </View>
               ) : null}
             </Card>
-            <Field testID="offer-price-input" label={t("v2.your_price")} value={price} onChangeText={(v) => setPrice(v.replace(/\D/g, ""))} keyboardType="number-pad" placeholder="700" />
+            <Field testID="offer-price-input" label={t("v2.your_price")} value={price} onChangeText={(v) => { setPriceTouched(true); setPrice(v.replace(/\D/g, "")); }} keyboardType="number-pad" placeholder="700" />
             {cost && Number(price) > cost.max ? <T testID="offer-over-cap" size={12} color={colors.error}>{t("v2.over_cap", { n: cost.max })}</T> : null}
             {Number(price) ? <T size={13} color={colors.brandPrimary} weight="700">{t("offer.max_earn")}: {inr(seats * Number(price))}</T> : null}
             <View style={{ gap: space.sm }}>
@@ -282,7 +335,7 @@ export default function OfferScreen() {
                   <Ionicons name="car-sport" size={22} color={colors.brandPrimary} />
                   <View style={{ flex: 1 }}>
                     <T weight="700">{v.make} {v.model}</T>
-                    <T size={12} color={colors.muted}>{v.reg_no} · {v.seats} seats · {v.ac ? t("ride.ac") : t("ride.nonac")}</T>
+                    <T size={12} color={colors.muted}>{v.reg_no} · {(v.vtype ?? "").toUpperCase()} · {Math.min(v.seats, caps[v.vtype] ?? 3)} {t("vehicle.passenger_seats").toLowerCase()} · {v.ac ? t("ride.ac") : t("ride.nonac")}</T>
                   </View>
                 </Pressable>
               ))}
@@ -309,6 +362,14 @@ export default function OfferScreen() {
         )}
       </KeyboardAwareScrollView>
       <LocationSearchModal visible={stopOpen} title={t("offer.add_stop")} onClose={() => setStopOpen(false)} onSelect={(l) => { setStops([...stops, l]); setStopOpen(false); }} />
+      <MapPicker visible={!!pin} title={pin?.kind === "drop" ? t("offer.drop") : t("offer.pickup")}
+        initial={pinInitial}
+        onClose={() => setPin(null)}
+        onConfirm={(l) => {
+          const label = [l.name, l.district].filter(Boolean).join(", ");
+          if (pin?.kind === "drop") { setDropPin({ lat: l.lat, lng: l.lng }); setDrop(label); } else { setPickupPin({ lat: l.lat, lng: l.lng }); setPickup(label); }
+          setPin(null);
+        }} />
     </View>
   );
 }

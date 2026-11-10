@@ -1,0 +1,48 @@
+{
+  "summary": "Retest of the iteration 10 fixes. All 4 fixes work. (1) HIGH: PUT /api/trips/{tid} now recomputes cost_breakdown. A price of 20000 returns 400 and is not saved. cap+1 returns 400 and the exact cap is accepted. Changing seats from 3 to 1 gives sharers=1 and recommended=total/1. Raising seats while the price is high now returns 400. Seats above the vehicle cap still return 400. Other field edits keep the breakdown. The UI edit (seats 3->1) shows '₹1,153 ÷ 1 = ₹1,153'. (2) MEDIUM: DriverVerificationForm makes 0 ai-extract calls on the first visit and on a revisit when a licence photo already exists. The manual verify-ai-read-button makes 1 call and shows the scan message. Uploading a new licence front photo through the UI (Replace -> Gallery -> Upload) triggers exactly 1 auto-scan. (3) LOW: on the Offer screen, the typed mileage 19 and fuel price 104.5 are kept after the origin changes from Bengaluru to Chennai. The admin-fuel-price override branch was checked in code only, because the fuel_prices collection is empty. (4) LOW: the empty state with no date shows 'No rides found for this route yet'. The OSRM trip detail shows 'Duration 1h 59m' without '(Estimated)'. Maintenance is hidden when it is 0. Regression: iter10 + iter9 gave 39 passed, 1 skipped (UPI already configured). The new iter11 test gave 8/8. Home form -> Find a Ride -> results (Bengaluru -> Mysuru) works. Settings were restored (instant_driver_approval=false, mileage defaults unchanged).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "PUT /api/trips/{tid}", "issue": "When a trip has bookings and a seat increase lowers the cap below the locked price, the error says 'Lower the price first', but the price cannot change once bookings exist. The driver is left with no way forward. Change the message, for example: 'Cannot add seats at the current price'."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Trip detail edit (app/trip/[id].tsx:211)", "issue": "trip-action-error is not cleared after a later successful save. The 'at most 3 passenger seats' error stays on screen after seats were saved as 1. Call setActionErr('') before or after a successful PUT.", "testID": "trip-action-error", "priority": "LOW"},
+      {"component": "Trip edit seats stepper (app/trip/[id].tsx:208)", "issue": "The stepper has no max, so it defaults to 8. A sedan trip can be stepped to 4 and only fails on save. Pass max=min(vehicle.seats, seat_cap[vtype]), as the Offer screen does.", "testID": "trip-edit-seats", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Search results / RideCard (src/components/RideCard.tsx:43)", "issues": ["The card always shows '~143 km' even for OSRM routes. The trip detail now drops the '~' for OSRM, so the two screens disagree.", "Plural text: '1 rides found' and '1 seats left'."]},
+      {"screen": "Trip detail / Offer calculator", "issues": ["The label 'Tolls (₹): ₹200' repeats the ₹ sign because the v2.tolls label includes '(₹)'."]},
+      {"screen": "i18n", "issues": ["The new key search.none_any exists only in en.json. Other languages fall back to English."]}
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter11_trip_update_breakdown.py",
+    "/app/backend/tests/ui_setup_iter11.py",
+    "/app/test_reports/pytest/iter11_trip_update.xml",
+    "/app/test_reports/pytest/iter11_regression.xml"
+  ],
+  "action_items": [
+    "LOW: Clear actionErr after a successful trip edit save (app/trip/[id].tsx).",
+    "LOW: Cap the trip-edit seats Stepper at the vehicle seat cap.",
+    "LOW: In RideCard, drop the '~' on distance when trip.route_source === 'osrm'. Fix the plurals ('1 ride found', '1 seat left').",
+    "LOW: Change the PUT /trips price-cap error message for trips that already have bookings.",
+    "OPTIONAL: Add search.none_any to the other locale files."
+  ],
+  "critical_code_review_comments": [
+    "update_trip: the recompute is correct. It uses the stored cb.total, so fuel and tolls are not recomputed, which is expected. Legacy trips without cost_breakdown skip the cap check.",
+    "DriverVerificationForm.scan() overwrites any field the driver already typed whenever the scan returns a value. This is fine for a manual scan. On auto-scan after a re-upload, it can silently replace the driver's own corrections.",
+    "offer.tsx: milTouched keeps the typed mileage even when the vehicle changes (the effect depends on veh0). Switching to another vehicle with a different mileage keeps the old typed value. Consider resetting milTouched when vehicle_id changes.",
+    "Location search: when Nominatim returned 429, the query 'Mumbai' showed Chennai as the first option, which looks like stale results. Observed once; root cause not confirmed."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter11_trip_update_breakdown.py (new)", "/app/backend/tests/ui_setup_iter11.py (new)"],
+  "success_rate": {"backend": "100% (47/47 run, 1 skipped)", "frontend": "100% of requested retest flows; 2 minor new UI bugs"},
+  "seed_data_creation": "Ran ui_setup_iter10.py and ui_setup_iter11.py. They created users TEST_UIDriver10 (test_uidriver10_a27150@example.com) and TEST_UIVerify10 (test_uiverify10_ae4c2a@example.com), a sedan veh_22a818cd29a3, and licence photos. The TEST trips created were cancelled. No admin or seed data was changed. instant_driver_approval and mileage defaults were verified as restored.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "pytest.ini forces xdist. Run the sequential suites with: python -m pytest -o addopts='' -p no:xdist <files>. The admin token is cached in /tmp/admtok. For web auth, set localStorage travoo_token=JSON.stringify(token) and travoo_lang=JSON.stringify('en'); otherwise the language picker blocks the home screen. In the DocPhotos sheet, use dispatch_event('click') for the replace, gallery and upload buttons, because a normal click reports 'outside viewport'. Nominatim may return 429 when you run many location searches in a row.",
+  "rca_of_issue": ""
+}

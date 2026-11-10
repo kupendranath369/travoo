@@ -12,6 +12,8 @@ export const API_BASE = BASE;
 export const publicPhoto = (uid: string) => `${BASE}/public/photo/${uid}`;
 /** Private file URL (owner/admin only). Token in query so it works for <img> on web too. */
 export const fileUrl = (fid: string) => `${BASE}/files/${fid}?token=${encodeURIComponent(token ?? "")}`;
+/** A user's own profile photo: uploaded file id (private, owner-only) or a Google photo URL. */
+export const pictureUrl = (picture?: string | null) => (!picture ? null : /^https?:\/\//.test(picture) ? picture : fileUrl(picture));
 export const setUnauthorizedHandler = (fn: () => void) => {
   onUnauthorized = fn;
 };

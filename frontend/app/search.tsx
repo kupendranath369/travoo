@@ -10,7 +10,6 @@ import { LocationField } from "@/src/components/LocationField";
 import { RideCard } from "@/src/components/RideCard";
 import { Card, Chip, Empty, ErrorBox, Loading, Stepper, T, space } from "@/src/components/ui";
 import { inr, useI18n } from "@/src/i18n";
-import { usesNativeTabs } from "@/src/navigation";
 import { useTheme } from "@/src/theme";
 
 const PRICE_CAPS = [300, 500, 800, 1200];
@@ -71,7 +70,12 @@ export default function SearchScreen() {
       <View style={{ paddingTop: insets.top + space.sm, backgroundColor: colors.surfaceSecondary, borderBottomWidth: 1, borderBottomColor: colors.border }}>
         {editing ? (
           <View style={{ paddingHorizontal: space.lg, paddingBottom: space.md }}>
-            <T size={22} weight="800" style={{ marginBottom: space.xs }}>{t("search.title")}</T>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm, marginBottom: space.xs }}>
+              <Pressable testID="search-edit-back-button" accessibilityLabel={t("common.back")} hitSlop={8} onPress={() => (from && to && res ? setEditing(false) : router.canGoBack() ? router.back() : router.replace("/"))} style={{ width: 36, height: 44, justifyContent: "center" }}>
+                <Ionicons name="arrow-back" size={22} color={colors.onSurface} />
+              </Pressable>
+              <T size={22} weight="800">{t("search.title")}</T>
+            </View>
             <LocationField testID="search-from-field" label={t("search.from")} value={from} onChange={setFrom} icon="radio-button-on" />
             <LocationField testID="search-to-field" label={t("search.to")} value={to} onChange={setTo} icon="location" />
             <DateField testID="search-date" label={t("search.date")} value={date} onChange={setDate} allowClear marked={marked} />
@@ -89,14 +93,19 @@ export default function SearchScreen() {
             </Pressable>
           </View>
         ) : (
-          <Pressable testID="search-summary" onPress={() => setEditing(true)} style={{ marginHorizontal: space.lg, marginBottom: space.sm, padding: space.md, borderRadius: 14, backgroundColor: colors.surfaceTertiary, flexDirection: "row", alignItems: "center", gap: space.md }}>
-            <Ionicons name="search" size={18} color={colors.brandPrimary} />
+          <View style={{ flexDirection: "row", alignItems: "center", paddingLeft: space.sm, marginBottom: space.sm }}>
+          <Pressable testID="search-back-button" accessibilityLabel={t("common.back")} hitSlop={8} onPress={() => (router.canGoBack() ? router.back() : router.replace("/"))} style={{ width: 44, height: 44, alignItems: "center", justifyContent: "center" }}>
+            <Ionicons name="arrow-back" size={22} color={colors.onSurface} />
+          </Pressable>
+          <Pressable testID="search-summary" onPress={() => setEditing(true)} style={{ flex: 1, marginRight: space.lg, padding: space.md, borderRadius: 14, backgroundColor: colors.surfaceTertiary, flexDirection: "row", alignItems: "center", gap: space.md }}>
+            <Ionicons name="navigate-outline" size={18} color={colors.brandPrimary} />
             <View style={{ flex: 1 }}>
               <T weight="800" numberOfLines={1}>{from?.name} → {to?.name}</T>
               <T size={12} color={colors.muted}>{date ? fmtDate(date) : t("search.any_date")} · {seats} {t("search.passengers")}</T>
             </View>
             <Ionicons name="create-outline" size={18} color={colors.muted} />
           </Pressable>
+          </View>
         )}
         {!editing ? (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ height: 56, flexGrow: 0 }} contentContainerStyle={{ gap: space.sm, paddingHorizontal: space.lg, alignItems: "center", justifyContent: "center" }}>
@@ -119,12 +128,12 @@ export default function SearchScreen() {
           testID="search-results-list"
           data={res?.trips ?? []}
           keyExtractor={(i) => i.trip_id}
-          contentContainerStyle={{ padding: space.lg, gap: space.md, paddingBottom: (usesNativeTabs ? insets.bottom : 0) + space.xl }}
+          contentContainerStyle={{ padding: space.lg, gap: space.md, paddingBottom: insets.bottom + space.xl }}
           ListHeaderComponent={res?.trips.length ? <T testID="search-results-count" weight="700" color={colors.muted}>{t("search.results", { n: res.trips.length })}</T> : undefined}
           renderItem={({ item }) => <RideCard trip={item} seats={seats} />}
           ListEmptyComponent={
             <View>
-              <Empty icon="car-outline" title={t("search.none")} />
+              <Empty icon="car-outline" title={date ? t("search.none") : t("search.none_any")} />
               {res?.alternative_dates.length ? (
                 <Card style={{ gap: space.sm }}>
                   <T weight="700">{t("search.alt")}</T>
