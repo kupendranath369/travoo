@@ -2,7 +2,7 @@ import Ionicons from "@react-native-vector-icons/ionicons";
 import * as Location from "expo-location";
 import { useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, FlatList, Linking, Modal, Pressable, TextInput, View } from "react-native";
+import { ActivityIndicator, Animated, FlatList, Linking, Modal, Pressable, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { api, Loc } from "@/src/api";
@@ -56,6 +56,23 @@ export function LocationSearchModal({ visible, title, onClose, onSelect }: { vis
   const [synced, setSynced] = useState<string | null>(null);
   const seq = useRef(0);
   const router = useRouter();
+  const slideAnim = useRef(new Animated.Value(-500)).current;
+
+  useEffect(() => {
+    if (visible) {
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 300,
+        useNativeDriver: true,
+      }).start();
+    } else {
+      Animated.timing(slideAnim, {
+        toValue: -500,
+        duration: 250,
+        useNativeDriver: true,
+      }).start();
+    }
+  }, [visible, slideAnim]);
 
   useEffect(() => {
     if (visible) api("/geo/status").then((s) => setSynced(s.last_success_at)).catch(() => {});
@@ -128,64 +145,68 @@ export function LocationSearchModal({ visible, title, onClose, onSelect }: { vis
   );
 
   return (
-    <Modal visible={visible} animationType="slide" onRequestClose={onClose} transparent>
-      <Pressable style={{ flex: 1, backgroundColor: colors.scrim }} onPress={onClose} />
-      <View style={{ backgroundColor: colors.surface, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, paddingTop: insets.top + space.sm, paddingBottom: insets.bottom + space.xl, maxHeight: "90%" }}>
-        <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: space.lg, gap: space.md }}>
-          <Pressable testID="location-modal-close" onPress={onClose} hitSlop={12}>
-            <Ionicons name="close" size={26} color={colors.onSurface} />
-          </Pressable>
-          <T size={18} weight="700">{title}</T>
-        </View>
-        <View style={{ margin: space.lg, marginBottom: space.sm, flexDirection: "row", alignItems: "center", backgroundColor: colors.surfaceSecondary, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.md }}>
-          <Ionicons name="search" size={18} color={colors.muted} />
-          <TextInput testID="location-search-input" autoFocus value={q} onChangeText={setQ} placeholder={t("loc.search")} placeholderTextColor={colors.muted} style={{ flex: 1, height: 50, paddingHorizontal: space.sm, fontSize: 15, color: colors.onSurface }} />
-          {searching ? <ActivityIndicator testID="location-searching" size="small" color={colors.brandPrimary} /> : q ? (
-            <Pressable testID="location-clear" onPress={() => setQ("")} hitSlop={10}><Ionicons name="close-circle" size={18} color={colors.muted} /></Pressable>
-          ) : null}
-        </View>
-        <Pressable testID="location-map-button" onPress={() => setMapAt(rows[0] ? { lat: rows[0].lat, lng: rows[0].lng } : null)} style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: space.md, paddingHorizontal: space.lg, paddingVertical: space.md, backgroundColor: colors.brandPrimary, marginHorizontal: space.lg, marginTop: space.sm, borderRadius: radius.lg, minHeight: 56 }}>
-          <Ionicons name="map" size={24} color={colors.onBrandPrimary} />
-          <T weight="700" size={16} color={colors.onBrandPrimary}>{t("geo.choose_map")}</T>
-        </Pressable>
-        {row("location-current-button", "navigate-circle", t("loc.current"), current)}
-        {busy ? <ActivityIndicator color={colors.brandPrimary} /> : null}
-        {msg ? (
-          <View style={{ paddingHorizontal: space.lg, gap: space.sm }}>
-            <T testID="location-message" size={13} color={colors.muted}>{msg}</T>
-            {blocked ? <Btn small variant="outline" label={t("loc.settings")} onPress={() => Linking.openSettings()} testID="open-settings-button" /> : null}
+    <Modal visible={visible} animationType="none" presentationStyle="overFullScreen" onRequestClose={onClose}>
+      <View style={{ flex: 1, backgroundColor: colors.scrim }}>
+        <Animated.View style={{ transform: [{ translateY: slideAnim }], backgroundColor: colors.surface, borderBottomLeftRadius: radius.lg, borderBottomRightRadius: radius.lg, paddingTop: insets.top + space.sm, paddingBottom: insets.bottom + space.xl, maxHeight: "90%" }}>
+          <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: space.lg, gap: space.md }}>
+            <Pressable testID="location-modal-close" onPress={onClose} hitSlop={12}>
+              <Ionicons name="close" size={26} color={colors.onSurface} />
+            </Pressable>
+            <T size={18} weight="700">{title}</T>
           </View>
-        ) : null}
-        <FlatList
-          data={rows}
-          keyboardShouldPersistTaps="handled"
-          keyExtractor={(i) => i.loc_id}
-          contentContainerStyle={{ paddingBottom: insets.bottom + space.xl }}
-          renderItem={({ item }) => (
-            <Pressable testID={`location-option-${item.loc_id}`} onPress={() => pick(item)} style={({ pressed }) => ({ flexDirection: "row", gap: space.md, paddingLeft: space.lg, paddingRight: space.sm, paddingVertical: space.md, backgroundColor: pressed ? colors.surfaceTertiary : "transparent", alignItems: "center" })}>
-              <View style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: colors.brandSoft, alignItems: "center", justifyContent: "center" }}>
-                <Ionicons name={TYPE_ICON[item.type] ?? "location-outline"} size={18} color={colors.brandPrimary} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <T weight="700">{item.name}</T>
-                <T size={12} color={colors.muted} numberOfLines={1}>
-                  {[typeLabel(item.type), locSub(item)].filter(Boolean).join(" · ")}
+          <View style={{ margin: space.lg, marginBottom: space.sm, flexDirection: "row", alignItems: "center", backgroundColor: colors.surfaceSecondary, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.md }}>
+            <Ionicons name="search" size={18} color={colors.muted} />
+            <TextInput testID="location-search-input" autoFocus value={q} onChangeText={setQ} placeholder={t("loc.search")} placeholderTextColor={colors.muted} style={{ flex: 1, height: 50, paddingHorizontal: space.sm, fontSize: 15, color: colors.onSurface }} />
+            {searching ? <ActivityIndicator testID="location-searching" size="small" color={colors.brandPrimary} /> : q ? (
+              <Pressable testID="location-clear" onPress={() => setQ("")} hitSlop={10}><Ionicons name="close-circle" size={18} color={colors.muted} /></Pressable>
+            ) : null}
+          </View>
+          {row("location-current-button", "navigate-circle", t("loc.current"), current)}
+          {busy ? <ActivityIndicator color={colors.brandPrimary} /> : null}
+          {msg ? (
+            <View style={{ paddingHorizontal: space.lg, gap: space.sm }}>
+              <T testID="location-message" size={13} color={colors.muted}>{msg}</T>
+              {blocked ? <Btn small variant="outline" label={t("loc.settings")} onPress={() => Linking.openSettings()} testID="open-settings-button" /> : null}
+            </View>
+          ) : null}
+          <FlatList
+            data={rows}
+            keyboardShouldPersistTaps="handled"
+            keyExtractor={(i) => i.loc_id}
+            contentContainerStyle={{ paddingBottom: insets.bottom + space.xl }}
+            ListHeaderComponent={rows.length > 0 ? () => (
+              <Pressable testID="location-map-button" onPress={() => setMapAt(rows[0] ? { lat: rows[0].lat, lng: rows[0].lng } : null)} style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: space.md, paddingHorizontal: space.lg, paddingVertical: space.md, backgroundColor: colors.brandPrimary, marginHorizontal: space.lg, marginTop: space.sm, borderRadius: radius.lg, minHeight: 56 }}>
+                <Ionicons name="map" size={24} color={colors.onBrandPrimary} />
+                <T weight="700" size={16} color={colors.onBrandPrimary}>{t("geo.choose_map")}</T>
+              </Pressable>
+            ) : undefined}
+            renderItem={({ item }) => (
+              <Pressable testID={`location-option-${item.loc_id}`} onPress={() => pick(item)} style={({ pressed }) => ({ flexDirection: "row", gap: space.md, paddingLeft: space.lg, paddingRight: space.sm, paddingVertical: space.md, backgroundColor: pressed ? colors.surfaceTertiary : "transparent", alignItems: "center" })}>
+                <View style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: colors.brandSoft, alignItems: "center", justifyContent: "center" }}>
+                  <Ionicons name={TYPE_ICON[item.type] ?? "location-outline"} size={18} color={colors.brandPrimary} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <T weight="700">{item.name}</T>
+                  <T size={12} color={colors.muted} numberOfLines={1}>
+                    {[typeLabel(item.type), locSub(item)].filter(Boolean).join(" · ")}
+                  </T>
+                </View>
+                <Pressable testID={`location-preview-${item.loc_id}`} hitSlop={8} onPress={() => setMapAt({ lat: item.lat, lng: item.lng })} style={{ padding: space.sm }}>
+                  <Ionicons name="map-outline" size={20} color={colors.muted} />
+                </Pressable>
+              </Pressable>
+            )}
+            ListFooterComponent={
+              <View style={{ padding: space.lg, gap: space.sm }}>
+                {q.trim().length >= 2 ? <Btn small variant="ghost" icon="add-circle-outline" label={t("v2.cant_find")} onPress={() => { onClose(); router.push("/add-place"); }} testID="location-add-missing-button" /> : null}
+                <T size={10} color={colors.muted} center testID="location-attribution">
+                  Map data © OpenStreetMap contributors (ODbL) · PIN © India Post{synced ? ` · ${t("geo.updated")} ${fmtDate(synced.slice(0, 10))}` : ""}
                 </T>
               </View>
-              <Pressable testID={`location-preview-${item.loc_id}`} hitSlop={8} onPress={() => setMapAt({ lat: item.lat, lng: item.lng })} style={{ padding: space.sm }}>
-                <Ionicons name="map-outline" size={20} color={colors.muted} />
-              </Pressable>
-            </Pressable>
-          )}
-          ListFooterComponent={
-            <View style={{ padding: space.lg, gap: space.sm }}>
-              {q.trim().length >= 2 ? <Btn small variant="ghost" icon="add-circle-outline" label={t("v2.cant_find")} onPress={() => { onClose(); router.push("/add-place"); }} testID="location-add-missing-button" /> : null}
-              <T size={10} color={colors.muted} center testID="location-attribution">
-                Map data © OpenStreetMap contributors (ODbL) · PIN © India Post{synced ? ` · ${t("geo.updated")} ${fmtDate(synced.slice(0, 10))}` : ""}
-              </T>
-            </View>
-          }
-        />
+            }
+          />
+        </Animated.View>
+        <Pressable style={{ flex: 1 }} onPress={onClose} />
       </View>
       <MapPicker visible={mapAt !== undefined} title={title} initial={mapAt ?? null} onClose={() => setMapAt(undefined)} onConfirm={(l) => { setMapAt(undefined); onSelect(l); }} />
     </Modal>

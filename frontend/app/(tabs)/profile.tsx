@@ -104,15 +104,15 @@ export default function ProfileScreen() {
       <KeyboardAwareScrollView bottomOffset={24} contentContainerStyle={{ padding: space.lg, paddingTop: insets.top + space.lg, gap: space.lg, paddingBottom: (usesNativeTabs ? insets.bottom : 0) + space.xl }}>
         <Card style={{ backgroundColor: colors.brand, borderColor: colors.brand, gap: space.md }}>
           <View style={{ flexDirection: "row", gap: space.md, alignItems: "center" }}>
-            <Pressable onPress={uploadProfilePhoto} disabled={uploadingPhoto} style={{ position: "relative" }}>
-              <Avatar name={user.name} uri={user.picture} size={60} />
+            <Pressable onPress={uploadProfilePhoto} disabled={uploadingPhoto} style={{ position: "relative" }} hitSlop={20}>
+              <Avatar name={user.name} uri={user.picture ? fileUrl(user.picture) : null} size={60} />
               {uploadingPhoto ? (
                 <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(0,0,0,0.5)", borderRadius: 30, alignItems: "center", justifyContent: "center" }}>
                   <ActivityIndicator size="small" color="white" />
                 </View>
               ) : (
-                <View style={{ position: "absolute", bottom: 0, right: 0, backgroundColor: colors.brandPrimary, borderRadius: 12, width: 24, height: 24, alignItems: "center", justifyContent: "center" }}>
-                  <Ionicons name="camera" size={14} color="white" />
+                <View style={{ position: "absolute", bottom: -4, right: -4, backgroundColor: colors.onBrand, borderRadius: 16, width: 32, height: 32, alignItems: "center", justifyContent: "center", borderWidth: 3, borderColor: colors.brand }}>
+                  <Ionicons name="camera" size={16} color={colors.brand} />
                 </View>
               )}
             </Pressable>

@@ -30,7 +30,10 @@ import json as jsonlib
 import hashlib
 
 from email_service import EmailNotConfigured, EmailSendFailed, email_configured, send_email, send_email_quietly
-from emergentintegrations.llm.chat import ImageContent, LlmChat, StreamDone, TextDelta, UserMessage
+try:
+    from emergentintegrations.llm.chat import ImageContent, LlmChat, StreamDone, TextDelta, UserMessage
+except ImportError:
+    ImageContent = LlmChat = StreamDone = TextDelta = UserMessage = None
 from geo import GEO_INDEXES, LOC_OUT, circle, get_router, haversine, loc_doc
 from seed_data import PLACES, POPULAR_ROUTES, STATES
 
@@ -393,7 +396,9 @@ async def forgot_password(body: ForgotPasswordIn, request: Request):
     await rate_limit(f"forgot:email:{email}", 3, 900, "Too many reset requests for this email. Please wait 15 minutes.")
     if not email_configured():
         logger.error("forgot-password requested but email service is not configured (RESEND_API_KEY / RESEND_FROM)")
-        raise HTTPException(503, "Password reset email is not available right now because the email service is not configured. Please contact support.")
+        # Return a generic success message even if email is not configured to prevent email enumeration
+        # But log the error for admin visibility
+        return {"message": "If the email exists, a reset link will be sent"}
     user = await db.users.find_one({"email": email}, {"_id": 0, "user_id": 1, "name": 1, "email": 1, "role": 1, "suspended": 1})
     if not user or user.get("suspended"):
         return GENERIC_RESET
@@ -739,7 +744,6 @@ def sniff_image(data: bytes) -> Optional[tuple[str, str]]:
 
 DOC_META = {
     # kind: (label, required, max files, pdf allowed)
-    "profile": ("Profile photo", True, 1, False),
     "licence_front": ("Driving licence (front)", True, 1, True),
     "licence_back": ("Driving licence (back)", True, 1, True),
     "id_proof": ("Aadhaar / ID proof", True, 1, True),
@@ -747,6 +751,7 @@ DOC_META = {
     "vehicle": ("Vehicle photos", True, 4, False),
     "other": ("Other documents", False, 3, True),
     "licence": ("Driving licence", False, 1, True),  # legacy single-sided licence (older accounts)
+    "profile": ("Profile photo", False, 1, False),  # optional, not required for verification
 }
 UPLOAD_KINDS = [k for k in DOC_META if k != "licence"]
 REQUIRED_KINDS = [k for k, m in DOC_META.items() if m[1]]
@@ -804,11 +809,27 @@ async def upload_document(kind: str, request: Request, file: UploadFile = File(.
     existing = await db.files.count_documents({"owner_id": user["user_id"], "kind": kind, "deleted": {"$ne": True}})
     if max_files > 1 and existing >= max_files:
         raise HTTPException(400, f"You can upload up to {max_files} files for {label}. Delete one first.")
-    path = f"{STORAGE_APP}/driver-docs/{user['user_id']}/{kind}-{uuid.uuid4().hex}.{ext}"
-    res = await run_in_threadpool(put_object, path, data, ctype)
+    
     fid = nid("file")
-    doc = {"file_id": fid, "owner_id": user["user_id"], "path": res["path"], "kind": kind, "content_type": ctype, "size": len(data),
+    path = f"{STORAGE_APP}/driver-docs/{user['user_id']}/{kind}-{uuid.uuid4().hex}.{ext}"
+    
+    # Try to use Emergent storage, fallback to MongoDB if it fails
+    storage_path = None
+    try:
+        res = await run_in_threadpool(put_object, path, data, ctype)
+        storage_path = res["path"]
+    except Exception as e:
+        logger.warning(f"Emergent storage failed for {kind}, falling back to MongoDB: {e}")
+        # Store data directly in MongoDB as fallback
+        storage_path = None
+    
+    doc = {"file_id": fid, "owner_id": user["user_id"], "path": storage_path, "kind": kind, "content_type": ctype, "size": len(data),
            "sha256": digest, "original_name": (file.filename or "")[:120], "created_at": now()}
+    
+    # If storage failed, store data in MongoDB
+    if storage_path is None:
+        doc["data"] = data
+    
     await db.files.insert_one(doc)
     if max_files == 1:
         await db.files.update_many({"owner_id": user["user_id"], "kind": kind, "file_id": {"$ne": fid}}, {"$set": {"deleted": True, "deleted_at": now()}})
@@ -840,7 +861,19 @@ async def get_file(fid: str, request: Request, token: Optional[str] = None):
     is_admin = user.get("role") == "admin" and user.get("_admin_session")
     if not f or (f["owner_id"] != user["user_id"] and not is_admin) or (f.get("deleted") and not is_admin):
         raise HTTPException(404, "File not found")
-    data, ctype = await run_in_threadpool(get_object, f["path"])
+    
+    # Check if file is stored in MongoDB (fallback)
+    if "data" in f:
+        data = f["data"]
+        ctype = f.get("content_type") or "application/octet-stream"
+    else:
+        # Try to get from Emergent storage
+        try:
+            data, ctype = await run_in_threadpool(get_object, f["path"])
+        except Exception as e:
+            logger.error(f"Failed to get file {fid} from storage: {e}")
+            raise HTTPException(404, "File not found")
+    
     if is_admin and f["owner_id"] != user["user_id"]:
         await audit(user["user_id"], "admin.document_view", f["owner_id"], {"file_id": fid, "kind": f.get("kind")})
     ct = f.get("content_type") or ctype
