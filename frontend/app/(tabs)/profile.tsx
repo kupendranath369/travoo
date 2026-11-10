@@ -1,17 +1,20 @@
 import Ionicons from "@react-native-vector-icons/ionicons";
+import * as ImagePicker from "expo-image-picker";
+import { manipulateAsync, SaveFormat } from "expo-image-manipulator";
 import { useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useState } from "react";
-import { Pressable, View } from "react-native";
+import { ActivityIndicator, Pressable, View } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { api } from "@/src/api";
+import { api, fileUrl, getApiToken, API_BASE } from "@/src/api";
 import { useAuth } from "@/src/auth";
 import { useToast } from "@/src/components/toast";
 import { Avatar, Badge, Btn, Card, Field, IconName, Rating, T, space, statusTone } from "@/src/components/ui";
 import { LANGUAGES, useI18n } from "@/src/i18n";
 import { usesNativeTabs } from "@/src/navigation";
 import { useTheme } from "@/src/theme";
+import { uploadWithProgress } from "@/src/utils/upload";
 
 function Row({ icon, label, onPress, right, testID }: { icon: IconName; label: string; onPress: () => void; right?: React.ReactNode; testID: string }) {
   const { colors } = useTheme();
@@ -39,6 +42,8 @@ export default function ProfileScreen() {
   const [f, setF] = useState({ name: "", phone: "", upi_id: "", bio: "" });
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [photoProgress, setPhotoProgress] = useState(0);
 
   useFocusEffect(useCallback(() => { refresh(); }, [refresh]));
   if (!user) return null;
@@ -55,6 +60,41 @@ export default function ProfileScreen() {
     }
     setBusy(false);
   };
+
+  const uploadProfilePhoto = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images"],
+      quality: 1,
+      allowsEditing: true,
+      aspect: [1, 1],
+    });
+    if (result.canceled || !result.assets?.[0]) return;
+
+    setUploadingPhoto(true);
+    setPhotoProgress(0);
+    try {
+      const actions = result.assets[0].width && result.assets[0].width > 800 ? [{ resize: { width: 800 } }] : [];
+      const compressed = await manipulateAsync(result.assets[0].uri, actions, { compress: 0.8, format: SaveFormat.JPEG });
+      const picked = { uri: compressed.uri, name: `profile_${Date.now()}.jpg`, mimeType: "image/jpeg", isPdf: false };
+
+      const r = await uploadWithProgress(`${API_BASE}/driver/documents/profile`, picked, {
+        headers: { Authorization: `Bearer ${getApiToken()}` },
+        onProgress: (p) => setPhotoProgress(p),
+      });
+      let body: any = {};
+      try { body = JSON.parse(r.body || "{}"); } catch { body = {}; }
+      if (r.status >= 200 && r.status < 300) {
+        toast(body.duplicate ? "This photo was already uploaded" : "Profile photo updated successfully");
+        await refresh();
+      } else {
+        toast(body.detail || "Failed to upload photo", "error");
+      }
+    } catch (e: any) {
+      toast(e.message || "Failed to upload photo", "error");
+    }
+    setUploadingPhoto(false);
+    setPhotoProgress(0);
+  };
   const langName = LANGUAGES.find((l) => l.code === lang)?.native;
 
   return (
@@ -62,7 +102,18 @@ export default function ProfileScreen() {
       <KeyboardAwareScrollView bottomOffset={24} contentContainerStyle={{ padding: space.lg, paddingTop: insets.top + space.lg, gap: space.lg, paddingBottom: (usesNativeTabs ? insets.bottom : 0) + space.xl }}>
         <Card style={{ backgroundColor: colors.brand, borderColor: colors.brand, gap: space.md }}>
           <View style={{ flexDirection: "row", gap: space.md, alignItems: "center" }}>
-            <Avatar name={user.name} uri={user.picture} size={60} />
+            <Pressable onPress={uploadProfilePhoto} disabled={uploadingPhoto} style={{ position: "relative" }}>
+              <Avatar name={user.name} uri={user.picture} size={60} />
+              {uploadingPhoto ? (
+                <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(0,0,0,0.5)", borderRadius: 30, alignItems: "center", justifyContent: "center" }}>
+                  <ActivityIndicator size="small" color="white" />
+                </View>
+              ) : (
+                <View style={{ position: "absolute", bottom: 0, right: 0, backgroundColor: colors.brandPrimary, borderRadius: 12, width: 24, height: 24, alignItems: "center", justifyContent: "center" }}>
+                  <Ionicons name="camera" size={14} color="white" />
+                </View>
+              )}
+            </Pressable>
             <View style={{ flex: 1, gap: 2 }}>
               <T testID="profile-name" size={18} weight="800" color={colors.onBrand}>{user.name}</T>
               <T size={13} color={colors.onBrand} style={{ opacity: 0.8 }}>{user.email}</T>

@@ -617,7 +617,6 @@ async def public_settings():
 
 # ---------------------------------------------------------------- driver verification & vehicles
 class VerificationIn(BaseModel):
-    legal_name: str = Field(min_length=3, max_length=100)
     vehicle_name: str = Field(min_length=2, max_length=80)
     phone: str = Field(pattern=r"^[6-9]\d{9}$")
     licence_no: str = Field(min_length=8, max_length=20)
@@ -707,7 +706,6 @@ DOC_META = {
     "licence_back": ("Driving licence (back)", True, 1, True),
     "id_proof": ("Aadhaar / ID proof", True, 1, True),
     "rc": ("Registration certificate (RC)", True, 1, True),
-    "insurance": ("Vehicle insurance", True, 1, True),
     "vehicle": ("Vehicle photos", True, 4, False),
     "other": ("Other documents", False, 3, True),
     "licence": ("Driving licence", False, 1, True),  # legacy single-sided licence (older accounts)
@@ -855,7 +853,7 @@ async def submit_verification(body: VerificationIn, user: dict = Depends(get_use
 
 AI_EXTRACT_PROMPT = (
     "You read Indian driving documents. Image 1 is a driving licence, image 2 is a vehicle Registration Certificate (RC). "
-    "Return ONLY a JSON object with keys: legal_name (licence holder's full name), licence_no (no spaces), "
+    "Return ONLY a JSON object with keys: licence_no (no spaces), "
     "licence_expiry (DD-MM-YYYY, the non-transport validity date), rc_no (vehicle registration number, no spaces), "
     "vehicle_name (maker and model from RC). Use an empty string for anything you cannot read clearly. No extra text."
 )
@@ -895,7 +893,7 @@ async def ai_extract(user: dict = Depends(get_user)):
         parsed = jsonlib.loads(m.group(0)) if m else {}
     except ValueError:
         parsed = {}
-    keys = ("legal_name", "licence_no", "licence_expiry", "rc_no", "vehicle_name")
+    keys = ("licence_no", "licence_expiry", "rc_no", "vehicle_name")
     res = {k: str(parsed.get(k) or "").strip() for k in keys}
     res["licence_no"] = res["licence_no"].replace(" ", "").upper()
     res["rc_no"] = res["rc_no"].replace(" ", "").upper()

@@ -11,7 +11,7 @@ import { Btn, Card, Field, Header, Loading, T, radius, space } from "@/src/compo
 import { useI18n } from "@/src/i18n";
 import { useTheme } from "@/src/theme";
 
-const EMPTY = { legal_name: "", vehicle_name: "", phone: "", licence_no: "", licence_expiry: "", rc_no: "" };
+const EMPTY = { vehicle_name: "", phone: "", licence_no: "", licence_expiry: "", rc_no: "" };
 
 /** Upload the 4 verification photos, fill details (optionally AI pre-filled) and submit for review. */
 export function DriverVerificationForm({ ai }: { ai: boolean }) {
@@ -46,7 +46,6 @@ export function DriverVerificationForm({ ai }: { ai: boolean }) {
       const r = await api("/driver/ai-extract", { method: "POST" });
       setF((cur) => ({
         ...cur,
-        legal_name: r.legal_name || cur.legal_name,
         vehicle_name: r.vehicle_name || cur.vehicle_name,
         licence_no: r.licence_no || cur.licence_no,
         licence_expiry: r.licence_expiry || cur.licence_expiry,
@@ -62,7 +61,6 @@ export function DriverVerificationForm({ ai }: { ai: boolean }) {
 
   const submit = async () => {
     if (missing.length) return setErr(`Please upload: ${missing.map(labelOf).join(", ")}`);
-    if (f.legal_name.trim().length < 3) return setErr("Legal name required");
     if (f.vehicle_name.trim().length < 2) return setErr("Vehicle name required");
     if (!/^[6-9]\d{9}$/.test(f.phone)) return setErr("Valid 10-digit phone number required");
     if (f.licence_no.replace(/\s/g, "").length < 8) return setErr("Licence number required");
@@ -107,7 +105,6 @@ export function DriverVerificationForm({ ai }: { ai: boolean }) {
 
         <Card style={{ gap: space.md }}>
           <T weight="800">Document details</T>
-          <Field testID="verify-legal-name" label="Legal Name" value={f.legal_name} onChangeText={(x) => setF({ ...f, legal_name: x })} />
           <Field testID="verify-vehicle-name" label="Vehicle Name" value={f.vehicle_name} onChangeText={(x) => setF({ ...f, vehicle_name: x })} placeholder="Maruti Suzuki Dzire" />
           <Field testID="verify-phone" label="Phone" value={f.phone} onChangeText={(x) => setF({ ...f, phone: x.replace(/\D/g, "") })} keyboardType="phone-pad" maxLength={10} />
           <Field testID="verify-licence-no" label="Licence Number" value={f.licence_no} onChangeText={(x) => setF({ ...f, licence_no: x.toUpperCase() })} autoCapitalize="characters" placeholder="KA0120200001234" />

@@ -22,7 +22,7 @@ export default function DriverScreen() {
   const { user, refresh } = useAuth();
   const toast = useToast();
   const [p, setP] = useState<any>(null);
-  const [f, setF] = useState({ legal_name: "", vehicle_name: "", phone: "", licence_no: "", licence_expiry: "", rc_no: "" });
+  const [f, setF] = useState({ vehicle_name: "", phone: "", licence_no: "", licence_expiry: "", rc_no: "" });
   const [v, setV] = useState({ make: "", model: "", vtype: "sedan", color: "", reg_no: "", seats: 3, ac: true, luggage: "medium", fuel_type: "petrol", mileage: "" });
   const [vOpen, setVOpen] = useState(false);
   const [err, setErr] = useState("");
@@ -51,7 +51,6 @@ export default function DriverScreen() {
   const canSubmit = ["not_submitted", "rejected", "resubmit"].includes(p.status);
 
   const submit = async () => {
-    if (f.legal_name.trim().length < 3) return setErr(`${t("verify.legal_name")} *`);
     if (f.vehicle_name.trim().length < 2) return setErr(`${t("verify.vehicle_name")} *`);
     if (!/^[6-9]\d{9}$/.test(f.phone)) return setErr(`${t("verify.phone")} *`);
     if (f.licence_no.replace(/\s/g, "").length < 8) return setErr(`${t("verify.licence")} *`);
@@ -73,7 +72,6 @@ export default function DriverScreen() {
     if (!licenceFront || !licenceBack) return setErr("Please upload both front and back of licence");
     if (f.licence_no.replace(/\s/g, "").length < 8) return setErr(`${t("verify.licence")} *`);
     if (!/^\d{2}-\d{2}-\d{4}$/.test(f.licence_expiry)) return setErr(`${t("verify.licence_exp")} *`);
-    if (f.legal_name.trim().length < 3) return setErr(`${t("verify.legal_name")} *`);
     setBusy("licence");
     setErr("");
     try {
@@ -83,7 +81,6 @@ export default function DriverScreen() {
           licence_back: licenceBack,
           manual_licence_no: f.licence_no,
           manual_expiry: f.licence_expiry,
-          manual_name: f.legal_name,
         }
       });
       toast("Licence verification submitted");
@@ -132,10 +129,6 @@ export default function DriverScreen() {
         ) : p.documents?.licence_no ? (
           <Card style={{ gap: 4 }}>
             <DocPhotos files={p.files ?? []} kinds={p.kinds ?? []} editable={false} onChanged={() => {}} />
-            <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-              <T size={13} color={colors.muted}>{t("verify.legal_name")}:</T>
-              <T size={13} weight="700">{p.documents.legal_name}</T>
-            </View>
             {p.documents.vehicle_name ? (
               <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
                 <T size={13} color={colors.muted}>{t("verify.vehicle_name")}:</T>
