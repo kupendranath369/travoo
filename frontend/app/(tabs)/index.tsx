@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { api, Loc, pictureUrl } from "@/src/api";
 import { DateField } from "@/src/components/Calendar";
+import { HireDriverArt } from "@/src/components/HireDriverArt";
 import { LocationField } from "@/src/components/LocationField";
 import { Logo } from "@/src/components/Logo";
 import { RideCard } from "@/src/components/RideCard";
@@ -47,11 +48,13 @@ export default function Home() {
     </Pressable>
   );
 
-  const shortcut = (testID: string, ic: IconName, title: string, bg: string, fg: string, onPress: () => void) => (
-    <Pressable testID={testID} onPress={onPress} style={({ pressed }) => ({ flex: 1, minHeight: 52, backgroundColor: bg, borderRadius: radius.lg, paddingHorizontal: space.md, flexDirection: "row", alignItems: "center", gap: space.sm, opacity: pressed ? 0.85 : 1, transform: [{ scale: pressed ? 0.98 : 1 }] })}>
-      <View style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: colors.surfaceSecondary, alignItems: "center", justifyContent: "center" }}>
-        <Ionicons name={ic} size={17} color={fg} />
-      </View>
+  const shortcut = (testID: string, ic: IconName | null, title: string, bg: string, fg: string, onPress: () => void) => (
+    <Pressable testID={testID} onPress={onPress} style={({ pressed }) => ({ flex: 1, minHeight: 56, backgroundColor: bg, borderRadius: radius.lg, paddingHorizontal: space.md, flexDirection: "row", alignItems: "center", gap: space.sm, opacity: pressed ? 0.85 : 1, transform: [{ scale: pressed ? 0.98 : 1 }] })}>
+      {ic ? (
+        <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: colors.surfaceSecondary, alignItems: "center", justifyContent: "center" }}>
+          <Ionicons name={ic} size={18} color={fg} />
+        </View>
+      ) : <HireDriverArt size={40} />}
       <T weight="800" size={14} color={fg} numberOfLines={1} style={{ flex: 1 }}>{title}</T>
     </Pressable>
   );
@@ -108,7 +111,7 @@ export default function Home() {
         </Animated.View>
 
         <Animated.View entering={FadeInDown.delay(80).duration(400)} style={{ flexDirection: "row", gap: space.md }}>
-          {shortcut("home-hire-driver-button", "key", t("v2.hire"), colors.brandSoft, colors.brandPrimary, () => router.push("/hire"))}
+          {shortcut("home-hire-driver-button", null, t("v2.hire"), colors.brandSoft, colors.brandPrimary, () => router.push("/hire"))}
           {shortcut("home-offer-ride-button", "add-circle", t("btn.offer"), colors.accentSoft, colors.brandTertiary, () => router.push("/offer"))}
         </Animated.View>
 

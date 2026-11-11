@@ -1,0 +1,50 @@
+{
+  "summary": "Iteration 13 retest of the iteration-12 fixes. Backend: the iter12 and iter9 regression suites passed (39 passed, 1 skipped as before). The new test_iter13_retest_fixes.py passed 10/10: PUT /me phone validation and the verified-phone lock, pricing at 143 km (recommended 501, max 752; price 752 accepted, 753 rejected), system messages not counted as unread, and uploads going to object storage (files have 'path' and no 'data'; owner and admin can view, outsider gets 404). The fuel UI and /fuel-prices request are gone from trip detail and admin settings. UI (375x667): the auth screen shows the OTP-disabled notice, the Send OTP button is disabled and email login works. The Messages badge counts only the driver's message (2 system messages ignored) and clears after opening the chat and going back. Offer publish shows recommended 501 and max 752, warns over the cap and publishes. The new wording is in place. NEW HIGH REGRESSION from the phone fix: Profile > Edit profile always sends 'phone' in the PUT body, so (a) a user with no phone (every email signup) cannot save name, bio or UPI ('Enter a valid 10-digit mobile number'), and (b) a phone-verified user can never save their profile because the backend rejects any 'phone' key, even when the number has not changed. Reproduced in the UI and the API.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "PUT /api/me", "issue": "When phone_verified=true, the backend rejects any request that contains 'phone', even if it equals the stored number. app/profile.tsx always sends {name, phone, upi_id, bio} with phone=user.phone, so verified (OTP) users get 400 'Your mobile number is verified...' on every profile save. Reference: server.py:748-750", "priority": "HIGH"},
+      {"endpoint": "PUT /api/me", "issue": "An empty phone '' is not allowed: re.sub gives '' and the regex fails, so the API returns 400 'Enter a valid 10-digit mobile number'. Users without a phone (all email registrations) cannot save their profile unless they add a phone. The iter12 action item said empty should be allowed. Reference: server.py:751-753", "priority": "HIGH"}
+    ],
+    "minor": [
+      {"endpoint": "POST /api/trips (return leg)", "issue": "The return trip gets no price_suggestion, and the dead cost_breakdown copy is still there (server.py:1324-1325). The return price is not checked against its own maximum."},
+      {"endpoint": "server.py dead code", "issue": "MILEAGE_DEFAULTS (1124), cost_breakdown() (1230), GET /fuel-prices (2656) and POST /admin/fuel-prices (2668) are still present. The UI no longer uses them."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Profile edit form", "issue": "Saving with an empty mobile field shows 'Enter a valid 10-digit mobile number', so the phone is effectively required just to change name or bio. Verified users would get the 'number is verified' error, because f.phone is still sent while the field is hidden. Fix in the frontend (leave phone out of the body when it is empty or unchanged, or when phone_verified) and/or in the backend (ignore an unchanged phone, allow '' for unverified users). Reference: app/profile.tsx:55, 164", "testID": "profile-save-button", "priority": "HIGH"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Offer", "issues": ["The over-cap text says '₹752 per seat' but everything else says 'per person'. Use one wording."]},
+      {"screen": "Profile verify-phone card", "issues": ["The country-code chips (+91, +971...) still show although OTP is disabled. Consider hiding them while it is disabled."]}
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter13_retest_fixes.py",
+    "/app/backend/tests/test_iter13_profile_save_verified.py",
+    "/app/backend/tests/ui_setup_iter13.py",
+    "/app/test_reports/pytest/iter13_fixes.xml",
+    "/app/test_reports/pytest/iter13_regression.xml"
+  ],
+  "action_items": [
+    "HIGH: PUT /api/me: ignore 'phone' if it equals the stored phone (verified or not), allow '' to clear it for unverified users, and reject changes only for verified users",
+    "HIGH: app/profile.tsx save: leave phone out of the body when user.phone_verified is true (or when it is unchanged), so profile edits work for verified users and for users without a phone",
+    "Add price_suggestion to the return leg in POST /api/trips, check the return price against its own maximum, and remove the cost_breakdown copy",
+    "Optional cleanup: remove MILEAGE_DEFAULTS, cost_breakdown() and the /fuel-prices endpoints from server.py",
+    "Minor wording: offer over-cap text 'per seat' -> 'per person'"
+  ],
+  "critical_code_review_comments": [
+    "server.py is well over 700 lines (2700+). Split it into routers (auth, trips, admin, chat, files).",
+    "update_me treats a 'phone' key as a change request. Compare it with user['phone'] first.",
+    "The upload fallback to MongoDB on a storage error is fine, but get_file returns 404 when the storage read fails. 502/503 would make outages easier to tell apart."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter13_retest_fixes.py", "/app/backend/tests/test_iter13_profile_save_verified.py", "/app/backend/tests/ui_setup_iter13.py"],
+  "success_rate": {"backend": "49/51 targeted + regression tests passed (96%); the 2 failures are the new profile-save regression", "frontend": "~90%: auth OTP-disabled + email login, Messages badge/chat, offer recommended price/publish, wording and fuel removal all pass; Profile Edit save fails without a phone"},
+  "seed_data_creation": "TEST_ users created by the test files (Pax13, Drv13, Out13, Ver13, Emp13, UiDrv13, UiPax13). Their trips and bookings were cancelled. phone_verified/phone_e164 flags set directly in Mongo on TEST users were reset afterwards. Admin pricing settings were restored to sedan 7, hatchback 6, suv 9, muv 9, base 0, min 50, factor 1.5 (the iter12 test restores them).",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "The public URL is EXPO_PUBLIC_BACKEND_URL in frontend/.env (not EXPO_BACKEND_URL). Run pytest with -c /dev/null -p no:xdist. Admin token is cached in /tmp/admtok (admin_token() helper). Do not run test_travoo_api.py. The Bengaluru->Mysuru route is 143 km via OSRM (sedan, 2 seats: rec 501 / max 752). test_iter13_profile_save_verified.py should pass once the PUT /me fix lands. UI login: Continue on the language screen, /auth, auth-toggle-mode for email login.",
+  "rca_of_issue": "The iter12 HIGH fix added the phone checks to PUT /api/me but did not account for how the frontend sends the form. profile.tsx initialises f = {name, phone: user.phone ?? '', upi_id, bio} and PUTs the whole object. ProfileIn only drops None values, so phone='' or an unchanged phone is always present. With phone='' the regex fails and the API returns 400. With phone_verified=true the lock fires before any comparison and the API returns 400. Repro: register an email user, go to Profile > Edit profile, change the name, tap Save, and the error appears. Fix: in the backend, skip the phone handling when upd['phone'] == user.get('phone') and allow '' to unset it for unverified users; in the frontend, leave phone out of the body when it is unchanged or verified."
+}

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="9" time="9.932" timestamp="2026-11-11T13:26:38.682781+00:00" hostname="agent-env-e7596eb2-9094-4449-a6fb-d3a749e86a45"><testcase classname="test_iter14_profile_return_pricing.TestProfilePhone" name="test_no_phone_user_saves_name_bio_upi" time="1.328" /><testcase classname="test_iter14_profile_return_pricing.TestProfilePhone" name="test_unverified_change_and_clear_phone" time="1.155" /><testcase classname="test_iter14_profile_return_pricing.TestProfilePhone" name="test_alpha_phone_rejected" time="0.762"><failure message="AssertionError: (200, '')&#10;assert (200 == 400)&#10; +  where 200 = &lt;Response [200]&gt;.status_code">self = &lt;test_iter14_profile_return_pricing.TestProfilePhone object at 0xfea036e1b950&gt;
+
+    def test_alpha_phone_rejected(self):
+        # non-digit garbage should be a 400, not silently treated as empty
+        tok, uid, _ = reg("Alp14")
+        p1 = ph()
+        requests.put(f"{API}/me", headers=h(tok), json={"phone": p1})
+        r = requests.put(f"{API}/me", headers=h(tok), json={"phone": "abcdefghij"})
+        me = requests.get(f"{API}/auth/me", headers=h(tok)).json()
+        stored = (me.get("user") or me).get("phone")
+        print("alpha phone on user with phone:", r.status_code, "stored:", stored)
+&gt;       assert r.status_code == 400 and stored == p1, (r.status_code, stored)
+E       AssertionError: (200, '')
+E       assert (200 == 400)
+E        +  where 200 = &lt;Response [200]&gt;.status_code
+
+test_iter14_profile_return_pricing.py:48: AssertionError</failure></testcase><testcase classname="test_iter14_profile_return_pricing.TestProfilePhone" name="test_verified_user" time="1.125" /><testcase classname="test_iter14_profile_return_pricing.TestReturnLeg" name="test_setup_driver" time="2.476" /><testcase classname="test_iter14_profile_return_pricing.TestReturnLeg" name="test_over_cap_rejected" time="0.391" /><testcase classname="test_iter14_profile_return_pricing.TestReturnLeg" name="test_return_trip_has_suggestion" time="1.247" /><testcase classname="test_iter14_profile_return_pricing.TestReturnLeg" name="test_return_cap_enforced" time="0.768" /><testcase classname="test_iter14_profile_return_pricing.TestReturnLeg" name="test_cleanup" time="0.517" /></testsuite></testsuites>

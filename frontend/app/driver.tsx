@@ -120,11 +120,9 @@ export default function DriverScreen() {
 
         {canSubmit ? (
           <Card style={{ gap: space.md }}>
-            <T weight="800">Choose Verification Method</T>
-            <T size={12} color={colors.muted}>Select how you want to verify your driving documents</T>
-            
-            <Btn testID="driver-ai-verification-button" icon="sparkles" label="AI Verification" onPress={() => router.push("/driver/ai-verification")} />
-            <Btn testID="driver-manual-verification-button" variant="outline" icon="person-circle" label="Manual Verification" onPress={() => router.push("/driver/manual-verification")} />
+            <T weight="800">Verify your documents</T>
+            <T size={12} color={colors.muted}>Upload your driving licence (front and back), Aadhaar card and vehicle RC, then type four details. Our team checks everything by hand.</T>
+            <Btn testID="driver-manual-verification-button" icon="cloud-upload-outline" label="Upload documents" onPress={() => router.push("/driver/manual-verification")} />
             {err ? <T testID="verify-error" color={colors.error}>{err}</T> : null}
           </Card>
         ) : p.documents?.licence_no ? (

@@ -138,16 +138,14 @@ export default function TripScreen() {
 
         {trip.is_driver && trip.status === "scheduled" && trip.seats_available > 0 ? <FeatureCard tripId={trip.trip_id} /> : null}
 
-        {trip.cost_breakdown ? (
-          <Card testID="trip-cost-breakdown" style={{ gap: 2 }}>
-            <T weight="800">{t("v2.breakdown")}</T>
-            <T size={13}>{t("v2.fuel_cost")}: {trip.cost_breakdown.distance_km} km ÷ {trip.cost_breakdown.mileage} × ₹{trip.cost_breakdown.fuel_price} = {inr(trip.cost_breakdown.fuel_cost)}</T>
-            <T size={13}>{t("v2.tolls")}: {inr(trip.cost_breakdown.tolls)}{trip.cost_breakdown.tolls_estimated ? ` (${t("ride.est")})` : ""}{trip.cost_breakdown.maintenance_cost ? ` · ${t("v2.maintenance")}: ${inr(trip.cost_breakdown.maintenance_cost)}` : ""}</T>
-            <T size={13} weight="700">{t("v2.total_cost")}: {inr(trip.cost_breakdown.total)} ÷ {trip.cost_breakdown.sharers} = {inr(trip.cost_breakdown.recommended)} ({t("v2.recommended")})</T>
-            <T size={13} weight="800" color={colors.brandPrimary}>{t("v2.your_price")}: {inr(trip.price)}</T>
-            <T size={11} color={colors.muted}>{t("v2.cost_note")}</T>
+        {trip.price_suggestion || trip.cost_breakdown ? (
+          <Card testID="trip-price-suggestion" style={{ gap: 2 }}>
+            <T size={13} weight="800" color={colors.brandPrimary}>{t("trip.suggested_price")}: {inr(trip.price)}</T>
+            {trip.is_driver && trip.price_suggestion ? <T size={12} color={colors.muted}>{t("offer.suggested_label")}: {inr(trip.price_suggestion.recommended)} {t("offer.per_person_short")}</T> : null}
+            <T size={11} color={colors.muted}>Set by the driver to share travel costs. Not a fuel bill or a fixed fare.</T>
           </Card>
         ) : null}
+
 
         <Card style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
           <View>

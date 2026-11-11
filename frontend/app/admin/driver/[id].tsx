@@ -63,8 +63,8 @@ export default function AdminDriverDetail() {
             <Badge testID="admin-driver-status" label={t(`verify.status.${status}`)} tone={statusTone(status)} />
           </View>
           {row("Email", u.email)}{row("Phone", u.phone)}{row("Driver ID", u.user_id)}{row("Legal name", doc.legal_name)}{row("Vehicle", doc.vehicle_name)}
-          {row("Licence no.", doc.licence_no)}{row("Name on licence", doc.licence_name)}{row("Date of birth", doc.licence_dob)}{row("Licence issued", doc.licence_issue)}
-          {row("Licence expiry", doc.licence_expiry)}{row("Vehicle class", doc.vehicle_class)}{row("RC no.", doc.rc_no)}{row("Trips published", d.trips)}
+          {row("Licence no.", doc.licence_no)}{row("RC no.", doc.rc_no)}{row("Licence expiry", doc.licence_expiry)}{row("Vehicle name", doc.vehicle_name)}
+          {row("Registered mobile", d.user?.phone_e164 ? `+${d.user.phone_e164}${d.user.phone_verified ? " (verified)" : ""}` : doc.phone)}{row("Trips published", d.trips)}
           {row("Submitted", doc.submitted_at && new Date(doc.submitted_at + "Z").toLocaleString())}
           {u.suspended ? <T color={colors.error} weight="700">Account suspended</T> : null}
           {d.missing.length ? <T size={12} color={colors.error}>Missing: {d.missing.map((k: string) => d.labels[k]).join(", ")}</T> : null}

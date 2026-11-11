@@ -12,6 +12,7 @@ Map data © OpenStreetMap contributors (ODbL). PIN data © India Post.
 import asyncio
 import logging
 import math
+import os
 import re
 import time
 from datetime import datetime, timedelta, timezone
@@ -234,7 +235,7 @@ def get_router(db, get_admin: Callable) -> APIRouter:
     def dedupe(rows: list) -> list:
         out: list = []
         for x in rows:
-            if any(o["loc_id"] == x["loc_id"] or (norm(o["name"]) == norm(x["name"]) and (haversine(o, x) < 1.5 or (
+            if any(o["loc_id"] == x["loc_id"] or (norm(o["name"]) == norm(x["name"]) and (haversine(o, x) < 3 or (
                     o.get("type") == x.get("type") in ("district", "state", "union_territory") and o.get("state") == x.get("state")))) for o in out):
                 continue
             out.append(x)
@@ -253,6 +254,40 @@ def get_router(db, get_admin: Callable) -> APIRouter:
                                                                         "limit": 8, "accept-language": "en", **params})
         return [from_nominatim(it) for it in data]
 
+    async def google_search(q: str, limit: int, lat=None, lng=None) -> list:
+        """Google Places (New) Text Search, India only. Returns [] when no key is configured."""
+        key = os.environ.get("GOOGLE_PLACES_API_KEY", "").strip()
+        if not key:
+            return []
+        body = {"textQuery": q, "pageSize": min(limit, 10), "languageCode": "en", "regionCode": "IN",
+                "locationRestriction": {"rectangle": {"low": {"latitude": 6.4, "longitude": 68.1}, "high": {"latitude": 37.6, "longitude": 97.4}}}}
+        headers = {"X-Goog-Api-Key": key, "X-Goog-FieldMask": "places.id,places.displayName,places.formattedAddress,places.location,places.types,places.addressComponents"}
+        async with httpx.AsyncClient(timeout=8) as c:
+            res = await c.post("https://places.googleapis.com/v1/places:searchText", json=body, headers=headers)
+        if res.status_code != 200:
+            raise RuntimeError(f"google places {res.status_code}: {res.text[:160]}")
+        out = []
+        for p in res.json().get("places", []):
+            comps = {t: c.get("longText") for c in p.get("addressComponents", []) for t in c.get("types", [])}
+            if comps.get("country") and comps.get("country") != "India":
+                continue
+            types = p.get("types", [])
+            otype = next((v for k, v in (("airport", "airport"), ("train_station", "railway_station"), ("transit_station", "railway_station"),
+                                          ("bus_station", "bus_terminal"), ("locality", "city"), ("sublocality", "locality"), ("neighborhood", "locality"),
+                                          ("administrative_area_level_3", "district"), ("administrative_area_level_2", "district"),
+                                          ("administrative_area_level_1", "state"), ("postal_code", "pin_area"), ("tourist_attraction", "landmark"),
+                                          ("hospital", "hospital"), ("university", "university"), ("hindu_temple", "religious"), ("route", "road")) if k in types), "landmark")
+            loc = p.get("location") or {}
+            if "latitude" not in loc:
+                continue
+            out.append(loc_doc((p.get("displayName") or {}).get("text") or q, otype,
+                               clean_district(comps.get("administrative_area_level_3") or comps.get("administrative_area_level_2") or ""),
+                               comps.get("administrative_area_level_1", ""), comps.get("postal_code"), loc["latitude"], loc["longitude"], [],
+                               source="google", loc_id=f"gpl_{p['id'].lower()[:60]}", google_place_id=p["id"],
+                               locality=comps.get("locality") or comps.get("sublocality") or "",
+                               address=p.get("formattedAddress", ""), synced_at=now()))
+        return out
+
     async def online_search(q: str, limit: int, lat=None, lng=None) -> tuple[list, str]:
         key = f"s:{norm(q)}:{round(lat, 1) if lat else ''}:{round(lng, 1) if lng else ''}"
         cached = await cache_get(key)
@@ -260,16 +295,22 @@ def get_router(db, get_admin: Callable) -> APIRouter:
             return cached, "cache"
         rows, src = [], "photon"
         try:
-            rows = await photon_search(q, limit, lat, lng)
+            rows = await google_search(q, limit, lat, lng)
+            src = "google" if rows else src
+        except Exception as exc:
+            logger.warning("google places failed (%s), using OpenStreetMap", exc)
+        try:
+            rows += await photon_search(q, limit, lat, lng)
         except Exception as exc:
             logger.warning("photon failed (%s), falling back to nominatim", exc)
-            src = "nominatim"
             try:
-                rows = await nominatim_search({"q": q})
+                rows += await nominatim_search({"q": q})
+                src = src if src == "google" else "nominatim"
             except Exception as exc2:
                 logger.warning("nominatim failed: %s", exc2)
-                return [], "unavailable"
-        rows = [public(await store(d)) for d in rows]
+                if not rows:
+                    return [], "unavailable"
+        rows = [public(await store(d)) for d in dedupe(rows)]
         await cache_set(key, rows, timedelta(days=7))
         return rows, src
 

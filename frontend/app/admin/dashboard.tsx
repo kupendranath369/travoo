@@ -40,7 +40,6 @@ export default function AdminScreen() {
   const [rPrice, setRPrice] = useState("");
   const [note, setNote] = useState("");
   const [preview, setPreview] = useState<string | null>(null);
-  const [fuel, setFuel] = useState<Record<string, string>>({});
   const [fStatus, setFStatus] = useState("pending");
   const [featPrice, setFeatPrice] = useState("");
   const [featUpi, setFeatUpi] = useState("");
@@ -49,8 +48,9 @@ export default function AdminScreen() {
     if (dataTab === "settings" && data) {
       setFeatPrice(String(data.featured_price ?? 199));
       setFeatUpi(data.featured_upi_id ?? "");
-      const m = { hatchback: 18, sedan: 16, suv: 12, muv: 13, ...(data.mileage_defaults ?? {}) } as Record<string, number>;
-      setMil(Object.fromEntries(Object.entries(m).map(([k, v]) => [k, String(v)])));
+      const pr = data.pricing ?? {};
+      const m = { hatchback: 6, sedan: 7, suv: 9, muv: 9, ...(pr.rate_per_km ?? {}) } as Record<string, number>;
+      setMil({ ...Object.fromEntries(Object.entries(m).map(([k, v]) => [k, String(v)])), base_fare: String(pr.base_fare ?? 0), min_fare: String(pr.min_fare ?? 50) });
     }
   }, [dataTab, data]);
   const [reviewDriver, setReviewDriver] = useState<any | null>(null);
@@ -66,7 +66,6 @@ export default function AdminScreen() {
   const [parivahanUrl, setParivahanUrl] = useState<string | null>(null);
   const [digilockerStatus, setDigilockerStatus] = useState<any>(null);
   useEffect(() => {
-    if (tab === "settings") api("/fuel-prices").then((r) => setFuel(Object.fromEntries(Object.entries(r.prices).map(([k, v]: any) => [k, String(v.price)])))).catch(() => {});
   }, [tab]);
 
   const load = useCallback(async () => {
@@ -557,35 +556,22 @@ export default function AdminScreen() {
               <Stepper testID="admin-driver-cancel-hours" min={0} max={72} value={data.driver_cancel_hours ?? 12} onChange={(v) => act("/admin/settings", { driver_cancel_hours: v }, "PUT")} />
             </View>
             <View style={{ gap: space.sm }}>
-              <T weight="800">{t("v2.fuel_prices")} (₹)</T>
-              {["petrol", "diesel", "cng", "electric"].map((ft) => (
-                <View key={ft} style={{ flexDirection: "row", gap: space.sm, alignItems: "center" }}>
-                  <T style={{ width: 80 }}>{ft.toUpperCase()}</T>
-                  <View style={{ flex: 1 }}><Field testID={`admin-fuel-${ft}`} placeholder={ft === "electric" ? "₹/kWh" : ft === "cng" ? "₹/kg" : "₹/litre"} value={fuel[ft] ?? ""} onChangeText={(v) => setFuel({ ...fuel, [ft]: v.replace(/[^\d.]/g, "") })} keyboardType="decimal-pad" /></View>
-                  <Btn small testID={`admin-fuel-save-${ft}`} label={t("common.save")} disabled={!fuel[ft]} onPress={() => act("/admin/fuel-prices", { state: "default", fuel_type: ft, price: Number(fuel[ft]) })} />
-                </View>
-              ))}
-              <T size={11} color={colors.muted}>National default. Update regularly from official oil-company / state rates.</T>
-            </View>
-            <View style={{ gap: space.sm }}>
-              <T size={13} weight="600">{t("v2.maintenance")}</T>
-              <Stepper testID="admin-maint" min={0} max={20} value={Math.round(data.maintenance_per_km ?? 2)} onChange={(v) => act("/admin/settings", { maintenance_per_km: v }, "PUT")} />
-            </View>
-            <View style={{ gap: space.sm }}>
               <T weight="800">Admin account</T>
               <Btn small variant="outline" icon="key-outline" testID="admin-change-password-button" label="Change admin password" onPress={() => router.push("/admin/change-password")} />
             </View>
-            <View style={{ gap: space.sm }}>
-              <T weight="800">Typical mileage by vehicle (km/l)</T>
-              <T size={12} color={colors.muted}>Used for the ride price when a driver has not entered their own car's mileage (petrol/diesel). Fuel prices are set in the Fuel prices tab.</T>
+            <View testID="admin-pricing-section" style={{ gap: space.sm }}>
+              <T weight="800">Recommended price rules</T>
+              <T size={12} color={colors.muted}>Suggested contribution per person = road km × rate for the vehicle type ÷ passenger seats + base fare (never below the minimum). Drivers can set their own price up to 1.5× the suggestion.</T>
               <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.sm }}>
                 {["hatchback", "sedan", "suv", "muv"].map((k) => (
                   <View key={k} style={{ width: "47%" }}>
-                    <Field testID={`admin-mileage-${k}`} label={k.toUpperCase()} value={mil[k] ?? ""} onChangeText={(x) => setMil({ ...mil, [k]: x.replace(/[^\d.]/g, "") })} keyboardType="decimal-pad" />
+                    <Field testID={`admin-rate-${k}`} label={`${k.toUpperCase()} ₹/km`} value={mil[k] ?? ""} onChangeText={(x) => setMil({ ...mil, [k]: x.replace(/[^\d.]/g, "") })} keyboardType="decimal-pad" />
                   </View>
                 ))}
+                <View style={{ width: "47%" }}><Field testID="admin-base-fare" label="Base fare ₹" value={mil.base_fare ?? ""} onChangeText={(x) => setMil({ ...mil, base_fare: x.replace(/\D/g, "") })} keyboardType="number-pad" /></View>
+                <View style={{ width: "47%" }}><Field testID="admin-min-fare" label="Minimum ₹" value={mil.min_fare ?? ""} onChangeText={(x) => setMil({ ...mil, min_fare: x.replace(/\D/g, "") })} keyboardType="number-pad" /></View>
               </View>
-              <Btn small testID="admin-mileage-save" label={t("common.save")} onPress={() => act("/admin/settings", { mileage_defaults: Object.fromEntries(Object.entries(mil).map(([k, x]) => [k, Number(x)])) }, "PUT")} />
+              <Btn small testID="admin-pricing-save" label={t("common.save")} onPress={() => act("/admin/settings", { pricing: { rate_per_km: Object.fromEntries(["hatchback", "sedan", "suv", "muv"].map((k) => [k, Number(mil[k])])), base_fare: Number(mil.base_fare || 0), min_fare: Number(mil.min_fare || 0) } }, "PUT")} />
             </View>
             <View style={{ gap: space.sm }}>
               <T weight="800">Featured rides</T>

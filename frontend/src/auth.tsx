@@ -23,6 +23,9 @@ export type User = {
   driver_status: "not_submitted" | "under_review" | "approved" | "rejected" | "resubmit";
   rating_avg: number;
   rating_count: number;
+  phone_verified?: boolean;
+  phone_e164?: string;
+  account_type?: "passenger" | "driver";
 };
 
 type Ctx = {
@@ -34,6 +37,7 @@ type Ctx = {
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
   setUser: (u: User) => void;
+  signInWith: (token: string, u: User) => Promise<void>;
 };
 
 const AuthContext = createContext<Ctx | null>(null);
@@ -163,7 +167,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, googleLogin, logout, refresh, setUser }}>
+    <AuthContext.Provider value={{ user, loading, login, register, googleLogin, logout, refresh, setUser, signInWith: saveSession }}>
       {children}
     </AuthContext.Provider>
   );

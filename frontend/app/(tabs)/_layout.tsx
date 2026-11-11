@@ -1,16 +1,35 @@
 import Ionicons from "@react-native-vector-icons/ionicons";
-import { Tabs } from "expo-router";
+import { Tabs, usePathname } from "expo-router";
 import { NativeTabs } from "expo-router/unstable-native-tabs";
-import React from "react";
-import { Platform, View } from "react-native";
+import React, { useEffect, useState } from "react";
+import { AppState, Platform, View } from "react-native";
 
+import { api } from "@/src/api";
+import { useAuth } from "@/src/auth";
 import { useI18n } from "@/src/i18n";
 import { usesNativeTabs } from "@/src/navigation";
 import { useTheme } from "@/src/theme";
 
+/** Total unread booking messages for the Messages tab badge (refreshes every 15 s while the app is open). */
+function useUnreadMessages() {
+  const { user } = useAuth();
+  const path = usePathname();
+  const [n, setN] = useState(0);
+  useEffect(() => {
+    if (!user) return;
+    let alive = true;
+    const load = () => api("/conversations").then((r) => alive && setN(r.items.reduce((s: number, c: any) => s + (c.unread || 0), 0))).catch(() => {});
+    load();
+    const h = setInterval(() => AppState.currentState === "active" && load(), 15000);
+    return () => { alive = false; clearInterval(h); };
+  }, [user, path]);
+  return n;
+}
+
 export default function TabsLayout() {
   const { t } = useI18n();
   const { colors } = useTheme();
+  const unread = useUnreadMessages();
 
   if (usesNativeTabs) {
     return (
@@ -27,9 +46,10 @@ export default function TabsLayout() {
           <NativeTabs.Trigger.Icon sf="ticket.fill" />
           <NativeTabs.Trigger.Label>{t("tab.bookings")}</NativeTabs.Trigger.Label>
         </NativeTabs.Trigger>
-        <NativeTabs.Trigger name="profile">
-          <NativeTabs.Trigger.Icon sf="person.crop.circle" />
-          <NativeTabs.Trigger.Label>{t("tab.profile")}</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger name="messages">
+          <NativeTabs.Trigger.Icon sf="bubble.left.and.bubble.right.fill" />
+          <NativeTabs.Trigger.Label>{t("v2.messages")}</NativeTabs.Trigger.Label>
+          {unread ? <NativeTabs.Trigger.Badge>{String(unread)}</NativeTabs.Trigger.Badge> : null}
         </NativeTabs.Trigger>
       </NativeTabs>
     );
@@ -65,7 +85,7 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen name="bookings" options={{ title: t("tab.bookings"), tabBarButtonTestID: "tab-bookings", tabBarIcon: icon("ticket", "ticket-outline") }} />
-      <Tabs.Screen name="profile" options={{ title: t("tab.profile"), tabBarButtonTestID: "tab-profile", tabBarIcon: icon("person-circle", "person-circle-outline") }} />
+      <Tabs.Screen name="messages" options={{ title: t("v2.messages"), tabBarButtonTestID: "tab-messages", tabBarIcon: icon("chatbubbles", "chatbubbles-outline"), tabBarBadge: unread ? unread : undefined, tabBarBadgeStyle: { backgroundColor: colors.brandTertiary, color: colors.onBrandTertiary, fontSize: 10 } }} />
     </Tabs>
   );
 }

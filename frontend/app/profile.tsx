@@ -10,9 +10,9 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { api, pictureUrl, getApiToken, API_BASE } from "@/src/api";
 import { useAuth } from "@/src/auth";
 import { useToast } from "@/src/components/toast";
-import { Avatar, Badge, Btn, Card, Field, IconName, Rating, T, space, statusTone } from "@/src/components/ui";
+import { Avatar, Badge, Btn, Card, Field, Header, IconName, Rating, T, space, statusTone } from "@/src/components/ui";
+import { PhoneOtp } from "@/src/components/PhoneOtp";
 import { LANGUAGES, useI18n } from "@/src/i18n";
-import { usesNativeTabs } from "@/src/navigation";
 import { useTheme } from "@/src/theme";
 import { uploadWithProgress } from "@/src/utils/upload";
 
@@ -52,7 +52,9 @@ export default function ProfileScreen() {
     setBusy(true);
     setErr("");
     try {
-      setUser(await api("/me", { method: "PUT", body: f }));
+      const { phone, ...rest } = f;
+      const body = user?.phone_verified || (phone ?? "") === (user?.phone ?? "") ? rest : f;
+      setUser(await api("/me", { method: "PUT", body }));
       setEdit(false);
       toast(t("profile.saved"));
     } catch (e: any) {
@@ -111,7 +113,8 @@ export default function ProfileScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.surface }}>
-      <KeyboardAwareScrollView bottomOffset={24} contentContainerStyle={{ padding: space.lg, paddingTop: insets.top + space.lg, gap: space.lg, paddingBottom: (usesNativeTabs ? insets.bottom : 0) + space.xl }}>
+      <Header title={t("tab.profile")} />
+      <KeyboardAwareScrollView bottomOffset={24} contentContainerStyle={{ padding: space.lg, gap: space.lg, paddingBottom: insets.bottom + space.xl }}>
         <Card style={{ backgroundColor: colors.brand, borderColor: colors.brand, gap: space.md }}>
           <View style={{ flexDirection: "row", gap: space.md, alignItems: "center" }}>
             <Pressable testID="profile-photo-button" accessibilityLabel="Change profile photo" onPress={uploadProfilePhoto} disabled={uploadingPhoto} style={{ position: "relative" }} hitSlop={20}>
@@ -128,7 +131,7 @@ export default function ProfileScreen() {
             </Pressable>
             <View style={{ flex: 1, gap: 2 }}>
               <T testID="profile-name" size={18} weight="800" color={colors.onBrand}>{user.name}</T>
-              <T size={13} color={colors.onBrand} style={{ opacity: 0.8 }}>{user.email}</T>
+              <T size={13} color={colors.onBrand} style={{ opacity: 0.8 }}>{user.email ?? (user.phone_e164 ? `+${user.phone_e164}` : "")}</T>
               <View style={{ flexDirection: "row", gap: space.sm, marginTop: 4 }}>
                 <Badge testID="profile-driver-status" icon="shield-checkmark" label={t(`verify.status.${user.driver_status}`)} tone={user.driver_status === "approved" ? "success" : statusTone(user.driver_status)} />
                 {user.role === "admin" ? <Badge label="Admin" tone="accent" /> : null}
@@ -140,10 +143,18 @@ export default function ProfileScreen() {
           </View>
         </Card>
 
+        {!user.phone_verified ? (
+          <Card testID="profile-verify-phone-card" style={{ gap: space.md }}>
+            <T weight="800">Verify your mobile number</T>
+            <T size={12} color={colors.muted}>Sign in with OTP next time and use it for driver verification. Your email login keeps working.</T>
+            <PhoneOtp testPrefix="link" sendPath="/me/phone/send" verifyPath="/me/phone/verify" submitLabel="Verify number" onVerified={async () => { await refresh(); toast("Mobile number verified"); }} />
+          </Card>
+        ) : null}
+
         {edit ? (
           <Card style={{ gap: space.md }}>
             <Field testID="profile-name-input" label={t("auth.name")} value={f.name} onChangeText={(v) => setF({ ...f, name: v })} />
-            <Field testID="profile-phone-input" label={t("auth.phone")} value={f.phone} onChangeText={(v) => setF({ ...f, phone: v })} keyboardType="phone-pad" maxLength={10} />
+            {user.phone_verified ? <T testID="profile-verified-phone" size={13} color={colors.muted}>Verified mobile: +{(user as any).phone_e164}</T> : <Field testID="profile-phone-input" label={t("auth.phone")} value={f.phone} onChangeText={(v) => setF({ ...f, phone: v })} keyboardType="phone-pad" maxLength={10} />}
             <Field testID="profile-upi-input" label={t("profile.upi")} value={f.upi_id} onChangeText={(v) => setF({ ...f, upi_id: v })} autoCapitalize="none" placeholder="name@bank" />
             <Field testID="profile-bio-input" label={`${t("v2.about_me")} (${f.bio.length}/500)`} placeholder={t("v2.about_me_ph")} value={f.bio} onChangeText={(v) => setF({ ...f, bio: v })} multiline maxLength={500} />
             {err ? <T color={colors.error}>{err}</T> : null}

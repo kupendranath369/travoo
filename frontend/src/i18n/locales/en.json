@@ -414,7 +414,7 @@
   "v2.fuel_prices": "Fuel prices",
   "v2.days": "Mon,Tue,Wed,Thu,Fri,Sat,Sun",
   "v2.customer": "Customer",
-  "v2.over_cap": "Above the cost-sharing limit of ₹{n} per seat",
+  "v2.over_cap": "Above the allowed maximum of ₹{n} per person",
   "notif.hire_request": "New driver-hire request: {route}",
   "notif.hire_confirmed": "Your driver booking is confirmed: {route}",
   "notif.hire_rejected": "Your driver request was declined: {route}",
@@ -531,5 +531,12 @@
   "vehicle.passenger_seats": "Passenger seats (driver not counted)",
   "vehicle.seats_hint_small": "Hatchback and sedan: maximum 3 passengers.",
   "vehicle.seats_hint_big": "Enter the RC-approved seating capacity minus the driver (maximum 8).",
-  "search.none_any": "No rides found for this route yet"
+  "search.none_any": "No rides found for this route yet",
+  "offer.suggested_title": "Recommended price per person",
+  "offer.suggested_label": "Recommended contribution",
+  "offer.per_person_short": "per person",
+  "offer.suggested_note": "Suggested contribution from Travoo's pricing guide for {km} km, this vehicle type and your seats — not a fuel bill or market rate. You can set any price up to ₹{n}.",
+  "offer.suggested_wait": "Choose a route and vehicle to see the suggested price.",
+  "offer.your_price_pp": "Your price per person (₹)",
+  "trip.suggested_price": "Driver's price per person (suggested contribution)"
 }

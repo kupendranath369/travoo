@@ -1,0 +1,56 @@
+{
+  "summary": "Iteration 12 (OTP-disabled auth, admin pricing rules, manual driver verification, Messages tab, India place search). Backend: new suite test_iter12 23/25 pass; iter9 featured/reviews regression 14/14 pass after updating its obsolete setup. Frontend (375x667): auth OTP default mode + disabled notice + email toggle/login, tabs Home/Offer/Bookings/Messages with badge, messages list -> chat send/receive, /profile verify-phone card (link-* disabled), Offer recommended price (auto-follow, edit keeps, use-recommended resets, over-cap), trip-price-suggestion w/o fuel/toll, /driver single upload button, manual verification form (4 docs, inline errors, upload preview), /driver/ai-verification renders same form, admin driver review fields + approve, admin pricing editor save/restore, admin users search by phone, Hire a Driver animated SVG -> /hire, booking end-to-end all WORK. Failures: PUT /api/me has no phone validation; Kohima search duplicate; rounding mismatch between UI and API price cap. No deprecated Expo packages detected. No SafeAreaView issues detected.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "PUT /api/me", "issue": "No phone validation: {phone:'12345'} returns 200 and is saved (spec: 10-digit validation). Also API lets phone-verified users overwrite `phone` (desyncs from phone_e164; UI hides field but API is open). Reference: server.py:736-752 (ProfileIn/update_me)", "priority": "HIGH"}
+    ],
+    "minor": [
+      {"endpoint": "price_suggestion / POST,PUT /api/trips", "issue": "Python round() is banker's rounding, frontend uses Math.round. 143 km sedan 2 seats: API recommended 500/max 750, Offer UI shows 501/max 752, so UI accepts 751-752 that backend rejects with 400. Use math.floor(x+0.5) in server.py:1213-1215 (or have UI call /api/pricing/suggest)."},
+      {"endpoint": "GET /api/geo/search?q=Kohima", "issue": "Duplicate city: local 'in_kohima_nagaland' (Kohima, Kohima, Nagaland) + OSM 'osm_n3613137018' (Kohima, '', Nagaland, ~1.5 km apart, both type city). Dedupe should merge same name+state+type within a few km even when district is blank. Other queries (Kempegowda bus station, Port Blair, Leh, 560001, Mumbai CSMT) OK."},
+      {"endpoint": "GET /api/conversations", "issue": "System messages (sys_message booking created/confirmed, sender_id 'system') count as unread: passenger badge showed 3 for 1 real message. Consider excluding sender_id 'system' from unread."},
+      {"endpoint": "POST /api/trips (return trip)", "issue": "Return leg gets no price_suggestion; still copies trip['cost_breakdown'] (dead). cost_breakdown(), MILEAGE_DEFAULTS and /api/fuel-prices are dead code now. server.py:1117,1223-1234,1317-1318"},
+      {"endpoint": "Object storage", "issue": "EMERGENT_LLM_KEY not present in backend/.env -> 'object storage init failed' at startup; uploads silently fall back to storing binary in MongoDB files.data. Works, but not intended storage."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Messages tab badge", "issue": "Badge stays at 3 after opening and reading the chat and returning (only 15s polling in (tabs)/_layout.tsx:20). Refresh on tab focus / after chat read.", "testID": "tab-messages", "priority": "MEDIUM"},
+      {"component": "Profile verify phone card", "issue": "Disabled notice reuses auth copy 'Existing users can sign in with email below.' - wrong in Profile context.", "testID": "link-disabled", "priority": "LOW"},
+      {"component": "DriverVerificationForm phone row", "issue": "Says 'Verify it in Profile' but OTP is off; user must use Edit profile (backend says 'Profile -> Edit profile').", "testID": "verify-registered-phone", "priority": "LOW"}
+    ],
+    "integration_issues": [
+      {"flow": "Offer price cap", "issue": "UI max (Math.round) can exceed backend max by 1-2 rupees -> publish 400 at boundary.", "affected_testIDs": ["offer-price-input", "offer-over-cap", "offer-publish-button"]}
+    ],
+    "design_issues": [
+      {"screen": "Driver verification", "issues": ["Each doc tile ~245px tall -> 4 tiles need ~1000px scroll before fields", "Tile testID doc-photo-<kind> disappears after upload (inconsistent testIDs)"]},
+      {"screen": "Admin driver review", "issues": ["Duplicate rows: Phone + Registered mobile, Vehicle + Vehicle name", "Documents listed RC first instead of licence front/back, Aadhaar, RC"]},
+      {"screen": "Booking confirmation", "issues": ["Booking ID wraps onto two lines ('TRV-' / 'D29D7271') at 375px"]}
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/test_iter12_otp_pricing_verification.py", "/app/backend/tests/ui_setup_iter12.py", "/app/test_reports/pytest/iter12.xml"],
+  "action_items": [
+    "Add phone validation to PUT /api/me (10 digits [6-9]xxxxxxxxx after stripping, or empty) and block phone changes when phone_verified is true",
+    "Fix rounding parity in price_suggestion (math.floor(x+0.5)) so UI and API max match",
+    "Improve geo dedupe (Kohima: local + OSM city duplicate)",
+    "Refresh Messages unread badge on focus/after reading; consider excluding system messages from unread",
+    "Fix Profile link-disabled copy and verification-form phone hint copy",
+    "Remove dead fuel/cost_breakdown code (server.py cost_breakdown, MILEAGE_DEFAULTS, return-trip cost_breakdown copy; trip/[id].tsx {false ? ...} block; admin dashboard /fuel-prices fetch) and add price_suggestion to return leg",
+    "Configure EMERGENT_LLM_KEY for object storage (uploads currently fall back to MongoDB)",
+    "Remove duplicate rows on admin driver review; order docs licence front/back, Aadhaar, RC",
+    "Update/retire obsolete tests: test_travoo_api.py logs in admin with old password (burns 5/15min rate limit); iter10/iter11 tests use fuel/mileage/ai-extract/'vehicle' doc kind"
+  ],
+  "critical_code_review_comments": [
+    "server.py is 2904 lines and admin/dashboard.tsx 712 lines - split into modules",
+    "trip/[id].tsx:145 hardcoded English string (not i18n); :148 dead `{false ? ...}` block",
+    "admin/dashboard.tsx:70 still calls /fuel-prices on Settings tab (unused state)",
+    "update_trip fetches vehicle twice (server.py:1336 and 1346)"
+  ],
+  "updated_files": ["/app/backend/tests/test_iter9_featured_reviews.py (removed obsolete 'vehicle' doc kind and fuel/mileage fields from setup)", "/app/backend/tests/test_iter12_otp_pricing_verification.py (new)", "/app/backend/tests/ui_setup_iter12.py (new)"],
+  "success_rate": {"backend": "92% (23/25 new suite; 14/14 iter9 regression)", "frontend": "90% (all tested flows functional; minor UI/copy issues)"},
+  "seed_data_creation": "TEST_ users created via /api/auth/register (TEST_Pax12, TEST_Drv12, TEST_Outsider12, TEST_UiDrv12, TEST_UiPax12, TEST_UiRev12 (approved via UI), TEST_UiNew12) with TEST trips/bookings; trips and bookings cancelled. Admin pricing changed during tests and restored (sedan 7, base 0, min 50); instant_driver_approval untouched (false).",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run pytest with `-c /dev/null` (pytest.ini adds xdist flags). Admin token cached in /tmp/admtok via admin_token() helper; do NOT run test_travoo_api.py (old admin password burns rate limit). Admin UI can be entered by setting localStorage travoo_admin_session=JSON token and travoo_lang='\"en\"'. Fresh browser lands on language picker; click 'Continue'. Auth screen default is OTP; click auth-toggle-mode for email login. Location picker: location-search-input then click result text.",
+  "rca_of_issue": "PUT /me: ProfileIn.phone only has max_length=15 and update_me performs no phone check. Price mismatch: Python round(500.5)=500 vs JS Math.round(500.5)=501. Kohima duplicate: dedupe key includes district, local record has district 'Kohima' while OSM has ''."
+}

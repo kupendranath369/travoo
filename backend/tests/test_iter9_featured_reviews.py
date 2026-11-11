@@ -34,7 +34,7 @@ def reg(name):
 def mk_trip(tok, days, vid):
     d = (datetime.now() + timedelta(days=days)).strftime("%Y-%m-%d")
     r = requests.post(f"{API}/trips", headers=h(tok), json={"origin": loc("Bengaluru"), "destination": loc("Chennai"), "pickup_point": "TEST pickup",
-                      "drop_point": "TEST drop", "date": d, "time": "10:00", "seats": 3, "price": 600, "vehicle_id": vid, "instant_booking": True, "fuel_price": 100, "mileage": 15})
+                      "drop_point": "TEST drop", "date": d, "time": "10:00", "seats": 3, "price": 100, "vehicle_id": vid, "instant_booking": True})
     assert r.status_code == 200, r.text
     return r.json()["trip_id"]
 
@@ -46,7 +46,7 @@ class TestSetup:
         assert requests.get(f"{API}/admin/settings", headers=h(S["adm"])).status_code == 200
         S["orig_settings"] = requests.get(f"{API}/admin/settings", headers=h(S["adm"])).json()
         S["drv"], S["drv_id"], S["drv_email"] = reg("FeatDriver")
-        for i, k in enumerate(["licence_front", "licence_back", "id_proof", "vehicle"]):
+        for i, k in enumerate(["licence_front", "licence_back", "id_proof"]):
             r = requests.post(f"{API}/driver/documents/{k}", headers=h(S["drv"]), files={"file": ("a.jpg", real_image(200 + i + uuid.uuid4().int % 500), "image/jpeg")}, timeout=120)
             assert r.status_code == 200, r.text
         r = requests.post(f"{API}/driver/documents/rc", headers=h(S["drv"]), files={"file": ("rc.pdf", real_pdf(900 + uuid.uuid4().int % 500), "application/pdf")}, timeout=120)

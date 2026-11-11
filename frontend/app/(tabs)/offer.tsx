@@ -1,6 +1,6 @@
 import Ionicons from "@react-native-vector-icons/ionicons";
 import { useFocusEffect, useRouter } from "expo-router";
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, Switch, View } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -47,23 +47,15 @@ export default function OfferScreen() {
   const [vid, setVid] = useState<string | null>(null);
   const [instant, setInstant] = useState(true);
   const [notes, setNotes] = useState("");
-  const [fuelPrice, setFuelPrice] = useState("");
-  const [mileage, setMileage] = useState("");
-  const [tolls, setTolls] = useState("0");
-  const [fuelInfo, setFuelInfo] = useState<{ state: string; updated_at?: string } | null>(null);
-  const [caps, setCaps] = useState<Record<string, number>>({ hatchback: 3, sedan: 3, suv: 8, muv: 8, other: 3 });
-  const [milDefaults, setMilDefaults] = useState<Record<string, number>>({});
+  const [caps] = useState<Record<string, number>>({ hatchback: 3, sedan: 3, suv: 8, muv: 8, other: 3 });
+  const [rules, setRules] = useState<{ rate_per_km: Record<string, number>; base_fare: number; min_fare: number; max_price_factor: number } | null>(null);
   const [priceTouched, setPriceTouched] = useState(false);
-  const fuelTouched = useRef(false);
-  const milTouched = useRef(false);
   const [pin, setPin] = useState<{ kind: "pickup" | "drop" } | null>(null);
   const [pickupPin, setPickupPin] = useState<{ lat: number; lng: number } | null>(null);
   const [dropPin, setDropPin] = useState<{ lat: number; lng: number } | null>(null);
   const [routes, setRoutes] = useState<{ source: string; routes: any[] } | null>(null);
   const [choice, setChoice] = useState(0);
-  const [tollsTouched, setTollsTouched] = useState(false);
   const road = routes?.routes[choice] ? { ...routes.routes[choice], source: routes.source.startsWith("osrm") ? "osrm" : "estimate" } : null;
-  const [cap, setCap] = useState(1.5);
   const [retOn, setRetOn] = useState(false);
   const [retDate, setRetDate] = useState<string | null>(null);
   const [retTime, setRetTime] = useState("17:00");
@@ -108,36 +100,17 @@ export default function OfferScreen() {
     api(`/geo/route?points=${pts}`).then(setRoutes).catch(() => setRoutes(null));
   }, [o, d, stops]);
   useEffect(() => {
-    if (!tollsTouched && road && road.source === "osrm") setTolls(String(road.toll_estimate ?? 0));
-  }, [road?.toll_estimate, road?.source, tollsTouched]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => {
-    api(`/fuel-prices?state=${encodeURIComponent(o?.state ?? "")}`).then((r) => {
-      setCaps(r.seat_caps);
-      setMilDefaults(r.mileage_defaults);
-      setMileage((cur) => (milTouched.current && cur ? cur : veh0?.mileage ? String(veh0.mileage) : veh0 && ["petrol", "diesel"].includes(veh0.fuel_type) && r.mileage_defaults[veh0.vtype] ? String(r.mileage_defaults[veh0.vtype]) : ""));
-      const fp = r.prices[veh0?.fuel_type ?? "petrol"];
-      if (fuelTouched.current && fp === undefined) return setCap(r.max_price_factor);
-      if (!fuelTouched.current || fp) {
-        setFuelPrice(fp ? String(fp.price) : "");
-        setFuelInfo(fp ? { state: fp.state === "default" ? "India" : fp.state, updated_at: fp.updated_at } : null);
-        fuelTouched.current = false;
-      }
-      setCap(r.max_price_factor);
-    }).catch(() => {});
-  }, [o?.state, veh0?.vehicle_id, veh0?.fuel_type, veh0?.mileage, veh0?.vtype]);
-  useEffect(() => {
-    milTouched.current = false;
-  }, [vid]);
+    api("/settings").then((s) => setRules(s.pricing)).catch(() => {});
+  }, []);
 
+  // Suggested contribution per person: road km x vehicle-category rate / passenger seats (+ base fare), set by Travoo admin
   const cost = useMemo(() => {
     const km = road?.distance_km ?? est?.road;
-    const mil = Number(mileage), fp = Number(fuelPrice);
-    if (!km || !mil || !fp || !seats) return null;
-    // Fuel (l) = km ÷ mileage; fuel cost = litres × price; total = fuel + tolls; per person = total ÷ passenger seats (driver excluded)
-    const fuelUnits = km / mil, fuelCost = fuelUnits * fp, total = fuelCost + Number(tolls || 0);
-    const rec = Math.max(50, Math.round(total / seats));
-    return { km, fuelUnits, fuelCost, total, sharers: seats, rec, max: Math.round(rec * cap) };
-  }, [road, est, mileage, fuelPrice, tolls, seats, cap]);
+    if (!km || !seats || !rules) return null;
+    const rate = rules.rate_per_km[veh0?.vtype ?? "sedan"] ?? rules.rate_per_km.sedan;
+    const rec = Math.max(rules.min_fare, Math.round((km * rate) / seats + rules.base_fare));
+    return { km, rate, rec, max: Math.max(rec, Math.round(rec * rules.max_price_factor)) };
+  }, [road, est, seats, rules, veh0?.vtype]);
   useEffect(() => {
     if (cost && !priceTouched) setPrice(String(cost.rec));
   }, [cost?.rec, priceTouched]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -180,7 +153,7 @@ export default function OfferScreen() {
     try {
       const trip = await api("/trips", {
         body: { origin: locPayload(o!), destination: locPayload(d!), stops: stops.map(locPayload), pickup_point: pickup.trim(), drop_point: drop.trim(), date, time, seats, price: Number(price), vehicle_id: vid, instant_booking: instant, notes: notes.trim(),
-          fuel_price: Number(fuelPrice) || null, mileage: Number(mileage) || null, tolls: Number(tolls) || 0, tolls_estimated: !tollsTouched, maintenance_per_km: 0, share_mode: "passenger", route_choice: stops.length ? 0 : choice,
+          route_choice: stops.length ? 0 : choice,
           pickup_pin: pickupPin, drop_pin: dropPin,
           return_date: retOn ? retDate ?? date : null, return_time: retOn ? retTime : null },
       });
@@ -195,8 +168,6 @@ export default function OfferScreen() {
   };
 
   const veh = vehicles.find((v) => v.vehicle_id === vid);
-  const unit = veh?.fuel_type === "electric" ? "kWh" : veh?.fuel_type === "cng" ? "kg" : "l";
-  const unitPer = `km/${unit}`;
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.surface }}>
@@ -215,13 +186,8 @@ export default function OfferScreen() {
             <T color={colors.muted}>{veh?.make} {veh?.model} · {veh?.vtype?.toUpperCase()} · {veh?.ac ? t("ride.ac") : t("ride.nonac")}</T>
             <T color={colors.muted}>~{est.road} km · {fmtDur(est.mins)}</T>
             {cost ? (
-              <View testID="offer-preview-breakdown" style={{ gap: 2, backgroundColor: colors.surfaceTertiary, borderRadius: 12, padding: space.md }}>
-                <T weight="800">{t("offer.breakdown")}</T>
-                <T size={13}>{t("v2.road_distance")}: {cost.km} km</T>
-                <T size={13}>{t("offer.fuel_needed")}: {cost.km} ÷ {mileage} = {cost.fuelUnits.toFixed(2)} {unit}</T>
-                <T size={13}>{t("v2.fuel_cost")}: {cost.fuelUnits.toFixed(2)} × ₹{fuelPrice} = {inr(cost.fuelCost)}</T>
-                <T size={13}>{t("v2.tolls")}: {inr(Number(tolls))}{!tollsTouched ? ` (${t("ride.est")})` : ""}</T>
-                <T size={13} weight="700">{t("v2.total_cost")}: {inr(cost.total)} ÷ {seats} = {inr(cost.rec)}</T>
+              <View testID="offer-preview-suggestion" style={{ gap: 2, backgroundColor: colors.surfaceTertiary, borderRadius: 12, padding: space.md }}>
+                <T size={13} color={colors.muted}>{t("offer.suggested_label")}: {inr(cost.rec)} {t("offer.per_person_short")}</T>
               </View>
             ) : null}
             <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
@@ -298,34 +264,19 @@ export default function OfferScreen() {
               </View>
               {veh ? <T testID="offer-seat-limit" size={12} color={colors.muted}>{t("offer.seat_limit", { type: (veh.vtype ?? "").toUpperCase(), n: maxSeats })}</T> : null}
             </View>
-            <Card testID="offer-cost-calculator" style={{ gap: space.sm }}>
-              <T weight="800">{t("v2.cost_title")}</T>
-              {road ? <T testID="offer-road-distance" size={12} color={colors.muted}>{t("v2.road_distance")}: {road.distance_km} km{road.source !== "osrm" ? ` (${t("ride.est")})` : " (OpenStreetMap)"}</T> : null}
-              <View style={{ flexDirection: "row", gap: space.sm }}>
-                <View style={{ flex: 1 }}><Field testID="offer-mileage-input" label={`${t("v2.mileage")} (${unitPer})`} value={mileage} onChangeText={(v) => { milTouched.current = true; setMileage(v.replace(/[^\d.]/g, "")); }} keyboardType="decimal-pad" /></View>
-                <View style={{ flex: 1 }}><Field testID="offer-fuel-price-input" label={`${t("v2.fuel_price")} (₹/${unit})`} value={fuelPrice} onChangeText={(v) => { fuelTouched.current = true; setFuelPrice(v.replace(/[^\d.]/g, "")); setFuelInfo(null); }} keyboardType="decimal-pad" /></View>
-              </View>
-              <T testID="offer-fuel-source" size={11} color={fuelInfo ? colors.muted : colors.brandTertiary}>
-                {fuelInfo ? t("offer.fuel_src_admin", { state: fuelInfo.state, date: fuelInfo.updated_at ? new Date(fuelInfo.updated_at).toLocaleDateString() : "—" }) : t("offer.fuel_src_none")}
-              </T>
-              {!veh0?.mileage && veh0 && milDefaults[veh0.vtype] && ["petrol", "diesel"].includes(veh0.fuel_type) ? <T size={11} color={colors.muted}>{`Typical ${veh0.vtype} mileage (${milDefaults[veh0.vtype]} km/l, set by Travoo) used — add your car's real mileage in Driver → Vehicles.`}</T> : null}
-              <Field testID="offer-tolls-input" label={t("v2.tolls")} value={tolls} onChangeText={(v) => { setTollsTouched(true); setTolls(v.replace(/\D/g, "")); }} keyboardType="number-pad" />
-              <T size={11} color={colors.brandTertiary}>{!tollsTouched && road?.source === "osrm" ? t("geo.toll_auto", { n: road.toll_km }) : tollsTouched ? t("v2.tolls")+": entered by you" : t("v2.tolls_est")}</T>
+            <Card testID="offer-price-suggestion" style={{ gap: space.sm }}>
+              <T weight="800">{t("offer.suggested_title")}</T>
               {cost ? (
-                <View style={{ gap: 2 }}>
-                  <T size={13}>{t("offer.fuel_needed")}: {cost.km} km ÷ {mileage} = {cost.fuelUnits.toFixed(2)} {unit}</T>
-                  <T size={13}>{t("v2.fuel_cost")}: {cost.fuelUnits.toFixed(2)} × ₹{fuelPrice} = {inr(cost.fuelCost)}</T>
-                  <T size={13}>{t("v2.tolls")}: {inr(Number(tolls))}</T>
-                  <T size={13} weight="700">{t("v2.total_cost")}: {inr(cost.total)} ÷ {seats} {t("search.passengers").toLowerCase()}</T>
+                <>
                   <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: space.sm }}>
-                    <T weight="800" color={colors.brandPrimary} testID="offer-recommended" style={{ flex: 1 }}>{t("offer.per_person")}: {inr(cost.rec)}</T>
+                    <T testID="offer-recommended" size={22} weight="800" color={colors.brandPrimary} style={{ flex: 1 }}>{inr(cost.rec)} <T size={13} color={colors.muted}>{t("offer.per_person_short")}</T></T>
                     {priceTouched ? <Btn small variant="outline" label={t("v2.use_recommended")} onPress={() => { setPriceTouched(false); setPrice(String(cost.rec)); }} testID="offer-use-recommended" /> : null}
                   </View>
-                  <T size={11} color={colors.muted}>{t("offer.auto_price", { n: cost.max })} · {t("v2.cost_note")}</T>
-                </View>
-              ) : null}
+                  <T size={11} color={colors.muted}>{t("offer.suggested_note", { km: cost.km, n: cost.max })}</T>
+                </>
+              ) : <T size={12} color={colors.muted}>{t("offer.suggested_wait")}</T>}
             </Card>
-            <Field testID="offer-price-input" label={t("v2.your_price")} value={price} onChangeText={(v) => { setPriceTouched(true); setPrice(v.replace(/\D/g, "")); }} keyboardType="number-pad" placeholder="700" />
+            <Field testID="offer-price-input" label={t("offer.your_price_pp")} value={price} onChangeText={(v) => { setPriceTouched(true); setPrice(v.replace(/\D/g, "")); }} keyboardType="number-pad" placeholder="700" />
             {cost && Number(price) > cost.max ? <T testID="offer-over-cap" size={12} color={colors.error}>{t("v2.over_cap", { n: cost.max })}</T> : null}
             {Number(price) ? <T size={13} color={colors.brandPrimary} weight="700">{t("offer.max_earn")}: {inr(seats * Number(price))}</T> : null}
             <View style={{ gap: space.sm }}>

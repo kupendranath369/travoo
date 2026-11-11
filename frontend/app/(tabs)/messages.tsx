@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { api } from "@/src/api";
 import { Avatar, Badge, Card, Empty, Header, Loading, T, space } from "@/src/components/ui";
 import { useI18n } from "@/src/i18n";
+import { usesNativeTabs } from "@/src/navigation";
 import { useTheme } from "@/src/theme";
 
 export default function MessagesScreen() {
@@ -20,14 +21,14 @@ export default function MessagesScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.surface }}>
-      <Header title={t("v2.messages")} />
+      <Header title={t("v2.messages")} back={false} />
       {items === null ? <Loading /> : (
         <FlatList
           testID="conversations-list"
           data={items}
           keyExtractor={(c) => c.booking_id}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); await load(); setRefreshing(false); }} />}
-          contentContainerStyle={{ padding: space.lg, gap: space.sm, paddingBottom: insets.bottom + space.xl }}
+          contentContainerStyle={{ padding: space.lg, gap: space.sm, paddingBottom: (usesNativeTabs ? insets.bottom : 0) + space.xl }}
           ListEmptyComponent={<Empty icon="chatbubbles-outline" title={t("v2.messages_empty")} />}
           renderItem={({ item }) => (
             <Card testID={`conversation-${item.booking_id}`} onPress={() => router.push(`/chat/${item.booking_id}`)} style={{ flexDirection: "row", gap: space.md, alignItems: "center", padding: space.md }}>

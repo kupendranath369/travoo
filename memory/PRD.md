@@ -98,3 +98,12 @@ Pan-India intercity paid carpooling app (BlaBlaCar model) called TRAVOO, tagline
 - Tested iteration_10 + 11: all pass.
 ### Backlog
 - No live fuel-price/toll API connected (admin-maintained estimates). Translate new strings to 22 languages. Pluralisation ("1 seats"). Split server.py.
+
+## 2026-06 — Phone OTP, recommended price, manual verification, Messages tab
+- Phone OTP login/registration via MSG91 (backend /auth/otp/send|verify|complete, /me/phone/send|verify); country codes (+91 default); auto-link existing account by saved phone; email login + forgot password kept; phone_e164 unique, email partial-unique index. Keys NOT provided yet → OTP disabled with notice.
+- Fuel/toll/mileage calculation removed → admin-configurable recommended price per person (km × rate[vtype] ÷ seats + base, min); /pricing/suggest; admin Settings pricing editor.
+- Place search: Google Places (New) when GOOGLE_PLACES_API_KEY set, else OSM Photon/Nominatim + India Post PIN + local DB (key not provided).
+- Driver verification: 4 docs (licence front/back, Aadhaar, RC) + 4 manual fields; AI extract removed.
+- Tabs: Home, Offer, Bookings, Messages (unread badge, system msgs excluded); Profile at /profile via home avatar.
+- Hire a Driver: animated SVG driver illustration (react-native-svg + reanimated).
+- Added missing EMERGENT_LLM_KEY to backend .env (object storage was falling back to Mongo).

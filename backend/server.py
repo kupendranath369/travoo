@@ -57,7 +57,8 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(level
 logger = logging.getLogger("travoo")
 
 INDEXES: dict[str, list[IndexModel]] = {
-    "users": [IndexModel([("email", ASCENDING)], name="email", unique=True),
+    "users": [IndexModel([("email", ASCENDING)], name="email_partial", unique=True, partialFilterExpression={"email": {"$type": "string"}}),
+              IndexModel([("phone_e164", ASCENDING)], name="phone_e164", unique=True, partialFilterExpression={"phone_e164": {"$type": "string"}}),
               IndexModel([("user_id", ASCENDING)], name="user_id", unique=True),
               IndexModel([("driver_status", ASCENDING)], name="driver_status")],
     "user_sessions": [IndexModel([("session_token", ASCENDING)], name="token", unique=True),
@@ -85,6 +86,7 @@ INDEXES: dict[str, list[IndexModel]] = {
     "reviews": [IndexModel([("booking_id", ASCENDING), ("reviewer_id", ASCENDING), ("target_id", ASCENDING)], name="uniq_review", unique=True),
                 IndexModel([("target_id", ASCENDING)], name="target")],
     "messages": [IndexModel([("booking_id", ASCENDING), ("created_at", ASCENDING)], name="booking_time")],
+    "phone_tickets": [IndexModel([("ticket_hash", ASCENDING)], name="ticket", unique=True), IndexModel([("expires_at", ASCENDING)], name="ttl", expireAfterSeconds=0)],
     "featured": [IndexModel([("feature_id", ASCENDING)], name="feaid", unique=True), IndexModel([("trip_id", ASCENDING)], name="trip"),
                  IndexModel([("status", ASCENDING), ("expires_at", ASCENDING)], name="status_exp")],
     "notifications": [IndexModel([("user_id", ASCENDING), ("created_at", DESCENDING)], name="user_time")],
@@ -117,6 +119,14 @@ for _c, _m in GEO_INDEXES.items():
 
 
 async def ensure_indexes() -> None:
+    try:  # phone-only accounts have no email: replace the old full unique email index with a partial one
+        if "email_1" in await db.users.index_information() or "email" in await db.users.index_information():
+            info = await db.users.index_information()
+            for name in ("email", "email_1"):
+                if name in info and not info[name].get("partialFilterExpression"):
+                    await db.users.drop_index(name)
+    except Exception as exc:
+        logger.error("email index migration: %s", exc)
     for collection, models in INDEXES.items():
         for model in models:
             try:
@@ -240,7 +250,7 @@ def email_shell(title: str, body_html: str) -> str:
 
 async def notify_driver_status_email(uid: str, decision: str, note: str):
     u = await db.users.find_one({"user_id": uid}, {"_id": 0, "email": 1, "name": 1})
-    if not u or not email_configured():
+    if not u or not u.get("email") or not email_configured():
         return
     msgs = {"approved": ("You're verified on Travoo", "Your documents were approved. You can now publish rides."),
             "rejected": ("Your Travoo verification was rejected", "Your documents could not be approved."),
@@ -313,12 +323,173 @@ async def get_admin(user: dict = Depends(get_admin_any)) -> dict:
     return user
 
 
-def new_user_doc(email: str, name: str, **extra) -> dict:
-    return {"user_id": nid("user"), "email": email.lower(), "name": name, "phone": extra.get("phone", ""),
+def new_user_doc(email: Optional[str], name: str, **extra) -> dict:
+    doc = {"user_id": nid("user"), "name": name, "phone": extra.get("phone", ""),
             "role": extra.get("role", "user"), "language": extra.get("language", "en"), "picture": extra.get("picture"),
             "upi_id": "", "bio": "", "driver_status": extra.get("driver_status", "not_submitted"),
             "rating_avg": 0, "rating_count": 0, "suspended": False, "consent_at": now(), "created_at": now(),
-            "auth_provider": extra.get("auth_provider", "password"), "is_demo": extra.get("is_demo", False)}
+            "auth_provider": extra.get("auth_provider", "password"), "is_demo": extra.get("is_demo", False),
+            "account_type": extra.get("account_type", "passenger")}
+    if email:
+        doc["email"] = email.lower()
+    if extra.get("phone_e164"):
+        doc.update(phone_e164=extra["phone_e164"], phone_verified=True, phone_verified_at=now())
+    return doc
+
+
+# ---------------------------------------------------------------- mobile number + OTP (MSG91)
+MSG91_BASE = "https://control.msg91.com/api/v5/otp"
+COUNTRY_CODES = {"91": 10, "971": 9, "1": 10, "44": 10, "65": 8, "977": 10, "880": 10, "94": 9, "61": 9, "966": 9, "974": 8, "968": 8, "973": 8, "965": 8}
+
+
+def otp_configured() -> bool:
+    return bool(os.environ.get("MSG91_AUTH_KEY", "").strip() and os.environ.get("MSG91_TEMPLATE_ID", "").strip())
+
+
+def e164(cc: str, number: str) -> str:
+    cc, number = re.sub(r"\D", "", cc or "91"), re.sub(r"\D", "", number or "")
+    if cc == "91":
+        number = number[-10:] if len(number) > 10 and number.startswith(("0", "91")) else number
+        if not re.fullmatch(r"[6-9]\d{9}", number):
+            raise HTTPException(400, "Enter a valid 10-digit Indian mobile number")
+    elif cc not in COUNTRY_CODES or not re.fullmatch(r"\d{6,12}", number):
+        raise HTTPException(400, "Enter a valid mobile number for the selected country")
+    return cc + number
+
+
+async def msg91(method: str, path: str, params: dict) -> dict:
+    async with httpx.AsyncClient(timeout=15) as c:
+        r = await c.request(method, f"{MSG91_BASE}{path}", params=params, headers={"authkey": os.environ["MSG91_AUTH_KEY"].strip()})
+    try:
+        data = r.json()
+    except Exception:
+        data = {"type": "error", "message": r.text[:200]}
+    if r.status_code >= 500:
+        raise HTTPException(502, "The SMS service is not responding. Please try again in a minute.")
+    return data
+
+
+class OtpSendIn(BaseModel):
+    country_code: str = Field(default="91", max_length=4)
+    phone: str = Field(min_length=6, max_length=15)
+    resend: bool = False
+
+
+class OtpVerifyIn(BaseModel):
+    country_code: str = Field(default="91", max_length=4)
+    phone: str = Field(min_length=6, max_length=15)
+    otp: str = Field(pattern=r"^\d{4,8}$")
+
+
+class OtpCompleteIn(BaseModel):
+    ticket: str = Field(min_length=20, max_length=100)
+    name: str = Field(min_length=2, max_length=80)
+    account_type: Literal["passenger", "driver"] = "passenger"
+    language: str = "en"
+    consent: bool
+
+
+async def send_otp(full: str, resend: bool, ip: str):
+    if not otp_configured():
+        raise HTTPException(503, "Mobile OTP sign-in isn't switched on yet (SMS service not configured). Please use email sign-in for now.")
+    await rate_limit(f"otp:ip:{ip}", 20, 3600, "Too many OTP requests from this network. Please try again later.")
+    await rate_limit(f"otp:phone:{full}", 5, 3600, "Too many OTPs sent to this number. Please wait an hour and try again.")
+    if resend:
+        data = await msg91("GET", "/retry", {"mobile": full, "retrytype": "text"})
+    else:
+        data = await msg91("POST", "", {"template_id": os.environ["MSG91_TEMPLATE_ID"].strip(), "mobile": full, "otp_length": 6, "otp_expiry": 10})
+    if data.get("type") != "success":
+        logger.warning("msg91 send failed for %s: %s", full[-4:], data.get("message"))
+        raise HTTPException(502, "We couldn't send the OTP. Check the number and try again.")
+
+
+async def check_otp(full: str, otp: str):
+    if not otp_configured():
+        raise HTTPException(503, "Mobile OTP sign-in isn't switched on yet.")
+    await rate_limit(f"otpverify:{full}", 8, 900, "Too many wrong codes. Please request a new OTP after 15 minutes.")
+    data = await msg91("GET", "/verify", {"mobile": full, "otp": otp})
+    if data.get("type") != "success":
+        msg = str(data.get("message", "")).lower()
+        raise HTTPException(400, "This OTP has expired. Please request a new one." if "expire" in msg else "Incorrect OTP. Please check the code and try again.")
+
+
+@api.get("/auth/otp/status")
+async def otp_status():
+    return {"enabled": otp_configured(), "countries": sorted(COUNTRY_CODES, key=lambda c: c != "91")}
+
+
+@api.post("/auth/otp/send")
+async def otp_send(body: OtpSendIn, request: Request):
+    full = e164(body.country_code, body.phone)
+    await send_otp(full, body.resend, client_ip(request))
+    return {"sent": True, "phone": f"+{full}", "expires_in_min": 10}
+
+
+@api.post("/auth/otp/verify")
+async def otp_verify(body: OtpVerifyIn):
+    """Verified number → sign in. Existing account found by verified number, or (once) by matching saved number.
+    Unknown number → returns a short sign-up ticket so the account is only created after the OTP is verified."""
+    full = e164(body.country_code, body.phone)
+    await check_otp(full, body.otp)
+    user = await db.users.find_one({"phone_e164": full})
+    if not user and full.startswith("91"):
+        local = full[2:]
+        matches = await db.users.find({"phone_e164": {"$exists": False}, "role": {"$ne": "admin"},
+                                       "phone": {"$in": [local, f"+91{local}", f"91{local}", f"0{local}"]}}).to_list(3)
+        if len(matches) == 1:  # safe automatic link of an existing email account
+            user = matches[0]
+            await db.users.update_one({"user_id": user["user_id"]}, {"$set": {"phone_e164": full, "phone": local, "phone_verified": True, "phone_verified_at": now()}})
+            await audit(user["user_id"], "auth.phone_linked_auto", user["user_id"])
+    if user:
+        if user.get("suspended"):
+            raise HTTPException(403, "Account suspended. Contact support.")
+        if user.get("role") == "admin":
+            raise HTTPException(403, "Administrators must sign in through the Travoo Admin Portal.")
+        return {"token": make_token(user["user_id"]), "user": await db.users.find_one({"user_id": user["user_id"]}, USER_PRIVATE)}
+    ticket = secrets.token_urlsafe(32)
+    await db.phone_tickets.insert_one({"ticket_hash": sha256(ticket), "phone_e164": full, "expires_at": now() + timedelta(minutes=15)})
+    return {"needs_profile": True, "ticket": ticket, "phone": f"+{full}"}
+
+
+@api.post("/auth/otp/complete")
+async def otp_complete(body: OtpCompleteIn):
+    if not body.consent:
+        raise HTTPException(400, "Consent is required")
+    t = await db.phone_tickets.find_one_and_delete({"ticket_hash": sha256(body.ticket), "expires_at": {"$gt": now()}})
+    if not t:
+        raise HTTPException(400, "Your verification expired. Please request a new OTP.")
+    full = t["phone_e164"]
+    doc = new_user_doc(None, body.name.strip(), phone=full[2:] if full.startswith("91") else full, phone_e164=full,
+                       language=body.language, auth_provider="phone", account_type=body.account_type)
+    try:
+        await db.users.insert_one(doc)
+    except DuplicateKeyError:
+        raise HTTPException(409, "This mobile number is already registered. Please sign in with OTP.")
+    await admin_alert("registration", f"New {body.account_type} registration: {doc['name']} (+{full})", doc["user_id"])
+    return {"token": make_token(doc["user_id"]), "user": await db.users.find_one({"user_id": doc["user_id"]}, USER_PRIVATE)}
+
+
+@api.post("/me/phone/send")
+async def me_phone_send(body: OtpSendIn, request: Request, user: dict = Depends(get_user)):
+    full = e164(body.country_code, body.phone)
+    other = await db.users.find_one({"phone_e164": full, "user_id": {"$ne": user["user_id"]}}, {"_id": 1})
+    if other:
+        raise HTTPException(409, "This mobile number is already linked to another Travoo account")
+    await send_otp(full, body.resend, client_ip(request))
+    return {"sent": True, "phone": f"+{full}"}
+
+
+@api.post("/me/phone/verify")
+async def me_phone_verify(body: OtpVerifyIn, user: dict = Depends(get_user)):
+    full = e164(body.country_code, body.phone)
+    await check_otp(full, body.otp)
+    try:
+        await db.users.update_one({"user_id": user["user_id"]}, {"$set": {"phone_e164": full, "phone": full[2:] if full.startswith("91") else full,
+                                                                          "phone_verified": True, "phone_verified_at": now()}})
+    except DuplicateKeyError:
+        raise HTTPException(409, "This mobile number is already linked to another Travoo account")
+    await audit(user["user_id"], "auth.phone_linked", user["user_id"])
+    return await db.users.find_one({"user_id": user["user_id"]}, USER_PRIVATE)
 
 
 class RegisterIn(BaseModel):
@@ -574,6 +745,17 @@ class ProfileIn(BaseModel):
 @api.put("/me")
 async def update_me(body: ProfileIn, user: dict = Depends(get_user)):
     upd = {k: v for k, v in body.model_dump().items() if v is not None}
+    if "phone" in upd:
+        raw = upd["phone"].strip()
+        digits = re.sub(r"\D", "", raw)[-10:]
+        if raw and not re.fullmatch(r"[6-9]\d{9}", digits):
+            raise HTTPException(400, "Enter a valid 10-digit mobile number")
+        if digits == re.sub(r"\D", "", user.get("phone") or "")[-10:]:
+            upd.pop("phone")  # unchanged
+        elif user.get("phone_verified"):
+            raise HTTPException(400, "Your mobile number is verified. Change it with OTP from your Profile.")
+        else:
+            upd["phone"] = digits
     if upd.get("upi_id") and not re.fullmatch(r"[\w.\-]{2,}@[a-zA-Z]{2,}", upd["upi_id"]):
         raise HTTPException(400, "Enter a valid UPI ID like name@bank")
     if upd:
@@ -657,6 +839,7 @@ async def public_settings():
                                  "featured_upi_id")}
     out["featured_price"] = s.get("featured_price", FEATURED_DEFAULT_PRICE)
     out["featured_days"] = FEATURED_DAYS
+    out["pricing"] = pricing_rules(s)
     return out
 
 
@@ -675,11 +858,7 @@ def valid_dmy(s: str) -> bool:
 class VerificationIn(BaseModel):
     vehicle_name: str = Field(min_length=2, max_length=80)
     licence_no: str = Field(min_length=8, max_length=20)
-    licence_name: str = Field(min_length=2, max_length=80)
-    licence_dob: str = Field(default="", max_length=10)
-    licence_issue: str = Field(default="", max_length=10)
     licence_expiry: str = Field(pattern=DMY)
-    vehicle_class: str = Field(min_length=2, max_length=80)
     rc_no: str = Field(min_length=6, max_length=15)
 
 
@@ -762,10 +941,8 @@ DOC_META = {
     # kind: (label, required, max files, pdf allowed)
     "licence_front": ("Driving licence (front)", True, 1, True),
     "licence_back": ("Driving licence (back)", True, 1, True),
-    "id_proof": ("Aadhaar / ID proof", True, 1, True),
-    "rc": ("Registration certificate (RC)", True, 1, True),
-    "vehicle": ("Vehicle photos", True, 4, False),
-    "other": ("Other documents", False, 3, True),
+    "id_proof": ("Aadhaar card", True, 1, True),
+    "rc": ("Vehicle registration certificate (RC)", True, 1, True),
     "licence": ("Driving licence", False, 1, True),  # legacy single-sided licence (older accounts)
 }
 # The personal photo is managed only from the Profile screen (users.picture), never in driver verification.
@@ -924,16 +1101,15 @@ async def submit_verification(body: VerificationIn, user: dict = Depends(get_use
     phone = re.sub(r"\D", "", user.get("phone") or "")[-10:]
     if not re.fullmatch(r"[6-9]\d{9}", phone):
         raise HTTPException(400, "Add a valid 10-digit mobile number in Profile → Edit profile first. We use your registered number for verification.")
-    for label, val, required in (("Licence expiry", body.licence_expiry, True), ("Date of birth", body.licence_dob, False), ("Licence issue date", body.licence_issue, False)):
-        if (val or required) and not (re.fullmatch(DMY, val) and valid_dmy(val)):
-            raise HTTPException(400, f"{label}: enter a real date as DD-MM-YYYY")
+    if not (re.fullmatch(DMY, body.licence_expiry) and valid_dmy(body.licence_expiry)):
+        raise HTTPException(400, "Licence expiry: enter a real date as DD-MM-YYYY")
     if datetime.strptime(body.licence_expiry, "%d-%m-%Y").date() < datetime.now(IST).date():
         raise HTTPException(400, "Your driving licence has expired. Please renew it before applying.")
     prev = user.get("driver_status", "not_submitted")
     settings = await get_settings()
     status = "approved" if settings.get("instant_driver_approval") else "under_review"
     doc = {**body.model_dump(), "licence_no": body.licence_no.upper().replace(" ", ""), "rc_no": body.rc_no.upper().replace(" ", ""),
-           "licence_name": body.licence_name.strip(), "vehicle_class": body.vehicle_class.strip().upper(), "phone": phone,
+           "vehicle_name": body.vehicle_name.strip(), "phone": phone,
            "user_id": user["user_id"], "submitted_at": now(), "admin_note": "", "reviewed_at": None}
     await db.driver_documents.update_one({"user_id": user["user_id"]}, {"$set": doc}, upsert=True)
     await db.users.update_one({"user_id": user["user_id"]}, {"$set": {"driver_status": status}})
@@ -945,67 +1121,6 @@ async def submit_verification(body: VerificationIn, user: dict = Depends(get_use
         await notify(user["user_id"], "driver_approved", {})
     await audit(user["user_id"], "driver.submit", user["user_id"], {"status": status})
     return {"status": status}
-
-
-AI_EXTRACT_PROMPT = (
-    "You read Indian driving documents (OCR). Image 1 is the FRONT of a driving licence{rc}. "
-    "Return ONLY a JSON object with keys: licence_no (no spaces), licence_name (holder's name exactly as printed), "
-    "licence_dob (date of birth DD-MM-YYYY), licence_issue (date of issue DD-MM-YYYY), "
-    "licence_expiry (DD-MM-YYYY, the non-transport validity date), vehicle_class (classes of vehicle as printed, e.g. 'LMV, MCWG')"
-    "{rc_keys}, readable (true if the licence photo is clear enough to read, else false). "
-    "Copy only what is printed and clearly legible. Never guess, infer or invent: use an empty string for anything missing, cut off or blurry. No extra text."
-)
-
-
-@api.post("/driver/ai-extract")
-async def ai_extract(user: dict = Depends(get_user)):
-    """Read the uploaded licence + RC photos with an AI vision model and return the fields to pre-fill."""
-    if user.get("driver_status") in LOCKED_STATUSES:
-        raise HTTPException(400, "Verification already submitted")
-    await rate_limit(f"ai:{user['user_id']}", 10, 3600)
-    files = {f["kind"]: f for f in await active_files(user["user_id"])}
-    lic = files.get("licence_front") or files.get("licence")
-    if not lic:
-        raise HTTPException(400, "Please upload a photo of the front of your driving licence first")
-    if lic["content_type"] not in ("image/jpeg", "image/png", "image/webp"):
-        raise HTTPException(400, "Automatic reading needs a photo (JPG or PNG) of the licence, not a PDF. Upload a photo or type the details.")
-    rc = files.get("rc") if files.get("rc", {}).get("content_type") in ("image/jpeg", "image/png", "image/webp") else None
-    images = []
-    for f in [lic, *([rc] if rc else [])]:
-        full = await db.files.find_one({"file_id": f["file_id"]}, {"_id": 0})
-        images.append(ImageContent(image_base64=base64.b64encode(await read_file_bytes(full)).decode()))
-    prompt = AI_EXTRACT_PROMPT.format(
-        rc=", image 2 is the vehicle Registration Certificate (RC)" if rc else "",
-        rc_keys=", rc_no (registration number from RC, no spaces), vehicle_name (maker and model from RC)" if rc else "")
-    chat = LlmChat(api_key=os.environ["EMERGENT_LLM_KEY"], session_id=f"ai-extract-{user['user_id']}-{uuid.uuid4().hex[:8]}",
-                   system_message="You extract fields from document photos and answer with strict JSON.").with_model("openai", "gpt-5.4")
-    out = ""
-    try:
-        async for ev in chat.stream_message(UserMessage(text=prompt, file_contents=images)):
-            if isinstance(ev, TextDelta):
-                out += ev.content
-            elif isinstance(ev, StreamDone):
-                break
-    except Exception as exc:
-        logger.error("AI extract failed: %s", exc)
-        raise HTTPException(502, "AI could not read the photos right now. Please fill the details yourself.")
-    m = re.search(r"\{.*\}", out, re.S)
-    try:
-        parsed = jsonlib.loads(m.group(0)) if m else {}
-    except ValueError:
-        parsed = {}
-    keys = ("licence_no", "licence_name", "licence_dob", "licence_issue", "licence_expiry", "vehicle_class", "rc_no", "vehicle_name")
-    res = {k: str(parsed.get(k) or "").strip() for k in keys}
-    res["licence_no"] = res["licence_no"].replace(" ", "").upper()
-    res["rc_no"] = res["rc_no"].replace(" ", "").upper()
-    for k in ("licence_dob", "licence_issue", "licence_expiry"):
-        if not (re.fullmatch(DMY, res[k]) and valid_dmy(res[k])):
-            res[k] = ""  # never pass on a date we could not read as a real date
-    found = [k for k in keys if res[k]]
-    res["unclear"] = parsed.get("readable") is False or not (res["licence_no"] or res["licence_expiry"])
-    res["missing"] = [k for k in keys[:6] if not res[k]]
-    await audit(user["user_id"], "driver.ai_extract", user["user_id"], {"found": found})
-    return res
 
 
 # Maximum passenger seats (driver excluded). SUV/MUV: driver enters the RC-approved seating minus the driver, up to 8.
@@ -1092,6 +1207,30 @@ async def road_route(pts: list, choice: int = 0) -> Optional[dict]:
     return res["routes"][min(choice, len(res["routes"]) - 1)]
 
 
+PRICING_DEFAULTS = {"rate_per_km": {"hatchback": 6.0, "sedan": 7.0, "suv": 9.0, "muv": 9.0}, "base_fare": 0, "min_fare": 50}
+
+
+def pricing_rules(settings: dict) -> dict:
+    p = settings.get("pricing") or {}
+    return {"rate_per_km": {**PRICING_DEFAULTS["rate_per_km"], **(p.get("rate_per_km") or {})},
+            "base_fare": p.get("base_fare", PRICING_DEFAULTS["base_fare"]), "min_fare": p.get("min_fare", PRICING_DEFAULTS["min_fare"]),
+            "max_price_factor": settings.get("max_price_factor", 1.5)}
+
+
+def price_suggestion(km: float, vtype: Optional[str], seats: int, settings: dict) -> dict:
+    """Suggested contribution per person (not a fuel cost): distance × vehicle rate ÷ passenger seats + base fare, admin-configurable."""
+    r = pricing_rules(settings)
+    rate = r["rate_per_km"].get(vtype or "sedan", r["rate_per_km"]["sedan"])
+    rec = max(r["min_fare"], math.floor(km * rate / max(1, seats) + r["base_fare"] + 0.5))
+    return {"kind": "suggested", "distance_km": km, "vtype": vtype, "seats": seats, "rate_per_km": rate, "base_fare": r["base_fare"],
+            "recommended": rec, "max": max(rec, math.floor(rec * r["max_price_factor"] + 0.5))}
+
+
+@api.get("/pricing/suggest")
+async def pricing_suggest(km: float = Query(gt=0, le=5000), vtype: str = "sedan", seats: int = Query(ge=1, le=8)):
+    return price_suggestion(km, vtype, seats, await get_settings())
+
+
 def cost_breakdown(km: float, mileage: float, fuel_price: float, tolls: float, maint: float, seats: int, mode: str, fuel_type: str) -> dict:
     """Fuel = km / mileage × price; total = fuel + tolls; per person = total / passenger seats offered (driver never counted)."""
     fuel_units = km / mileage
@@ -1175,17 +1314,10 @@ async def create_trip(body: TripIn, user: dict = Depends(get_user)):
     if trip["departure_at"] < now():
         raise HTTPException(400, "Departure must be in the future")
     settings = await get_settings()
-    mileage = body.mileage or vehicle.get("mileage")
-    if not (body.fuel_price and mileage):
-        raise HTTPException(400, "Enter vehicle mileage and fuel price so the cost-sharing contribution can be calculated")
-    if body.fuel_price and mileage:
-        maint = body.maintenance_per_km if body.maintenance_per_km is not None else settings.get("maintenance_per_km", 2)
-        cb = cost_breakdown(trip["distance_km"], mileage, body.fuel_price, body.tolls, maint, body.seats, body.share_mode, vehicle.get("fuel_type", "petrol"))
-        cb["tolls_estimated"] = body.tolls_estimated
-        cap = round(cb["recommended"] * settings.get("max_price_factor", 1.5))
-        if body.price > cap:
-            raise HTTPException(400, f"Price exceeds the cost-sharing limit of ₹{cap} per seat for this trip")
-        trip["cost_breakdown"] = cb
+    sug = price_suggestion(trip["distance_km"], vehicle.get("vtype"), body.seats, settings)
+    if body.price > sug["max"]:
+        raise HTTPException(400, f"Price is above the allowed maximum of ₹{sug['max']} per person for this ride")
+    trip["price_suggestion"] = sug
     trips = [trip]
     if body.return_date and body.return_time:
         rb = body.model_copy(update={"origin": body.destination, "destination": body.origin, "stops": list(reversed(body.stops)),
@@ -1193,8 +1325,9 @@ async def create_trip(body: TripIn, user: dict = Depends(get_user)):
         rt = await build_trip(rb, user, vehicle)
         if rt["departure_at"] <= trip["departure_at"]:
             raise HTTPException(400, "Return must be after the outbound departure")
-        if trip.get("cost_breakdown"):
-            rt["cost_breakdown"] = trip["cost_breakdown"]
+        rt["price_suggestion"] = price_suggestion(rt["distance_km"], vehicle.get("vtype"), body.seats, settings)
+        if body.price > rt["price_suggestion"]["max"]:
+            raise HTTPException(400, f"Price is above the allowed maximum of ₹{rt['price_suggestion']['max']} per person for the return ride")
         rt["return_of"] = trip["trip_id"]
         trips.append(rt)
     await db.trips.insert_many(trips)
@@ -1220,16 +1353,14 @@ async def update_trip(tid: str, body: TripUpdate, user: dict = Depends(get_user)
         upd["seats_available"] = body.seats - booked
     if "price" in upd and await db.bookings.count_documents({"trip_id": tid, "status": {"$in": ["pending", "confirmed"]}}):
         raise HTTPException(400, "Price cannot change after bookings are made")
-    cb = trip.get("cost_breakdown")
-    if cb and (body.seats is not None or body.price is not None):
+    if body.seats is not None or body.price is not None:
         seats = upd.get("seats_total", trip["seats_total"])
-        cb = {**cb, "sharers": seats, "recommended": max(50, round(cb["total"] / seats))}
-        cap = round(cb["recommended"] * (await get_settings()).get("max_price_factor", 1.5))
+        veh = await db.vehicles.find_one({"vehicle_id": trip["vehicle"]["vehicle_id"]}, {"_id": 0, "vtype": 1}) or {}
+        sug = price_suggestion(trip["distance_km"], veh.get("vtype") or trip["vehicle"].get("vtype"), seats, await get_settings())
         price = upd.get("price", trip["price"])
-        if price > cap:
-            raise HTTPException(400, f"Price exceeds the cost-sharing limit of ₹{cap} per seat for {seats} seat(s)."
-                                + (" Lower the price first." if body.price is None and not await db.bookings.count_documents({"trip_id": tid, "status": {"$in": ["pending", "confirmed"]}}) else ""))
-        upd["cost_breakdown"] = cb
+        if price > sug["max"]:
+            raise HTTPException(400, f"Price is above the allowed maximum of ₹{sug['max']} per person for {seats} seat(s).")
+        upd["price_suggestion"] = sug
     await db.trips.update_one({"trip_id": tid}, {"$set": upd})
     async for b in db.bookings.find({"trip_id": tid, "status": {"$in": ["pending", "confirmed"]}}, {"_id": 0}):
         await notify(b["passenger_id"], "trip_updated", {"route": b["route"]}, b["booking_id"])
@@ -1749,7 +1880,7 @@ async def admin_stats(_: dict = Depends(get_admin)):
 
 @api.get("/admin/users")
 async def admin_users(q: str = "", _: dict = Depends(get_admin)):
-    filt = {"$or": [{"name": {"$regex": re.escape(q), "$options": "i"}}, {"email": {"$regex": re.escape(q), "$options": "i"}}]} if q else {}
+    filt = {"$or": [{"name": {"$regex": re.escape(q), "$options": "i"}}, {"email": {"$regex": re.escape(q), "$options": "i"}}, {"phone": {"$regex": re.escape(re.sub(r"\D", "", q) or q)}}, {"phone_e164": {"$regex": re.escape(re.sub(r"\D", "", q) or q)}}]} if q else {}
     users = await db.users.find(filt, USER_PRIVATE).sort("created_at", -1).to_list(200)
     # Enrich with additional stats
     for u in users:
@@ -1796,7 +1927,7 @@ async def admin_drivers(status: str = "under_review", q: str = "", _: dict = Dep
 @api.get("/admin/passengers")
 async def admin_passengers(q: str = "", _: dict = Depends(get_admin)):
     """Get all passengers with their booking history and stats"""
-    filt = {"$or": [{"name": {"$regex": re.escape(q), "$options": "i"}}, {"email": {"$regex": re.escape(q), "$options": "i"}}]} if q else {}
+    filt = {"$or": [{"name": {"$regex": re.escape(q), "$options": "i"}}, {"email": {"$regex": re.escape(q), "$options": "i"}}, {"phone": {"$regex": re.escape(re.sub(r"\D", "", q) or q)}}, {"phone_e164": {"$regex": re.escape(re.sub(r"\D", "", q) or q)}}]} if q else {}
     users = await db.users.find(filt, USER_PRIVATE).to_list(200)
     for u in users:
         u["booking_count"] = await db.bookings.count_documents({"passenger_id": u["user_id"]})
@@ -2181,6 +2312,19 @@ async def admin_del_route(rid: str, admin: dict = Depends(get_admin)):
     return {"ok": True}
 
 
+class PricingIn(BaseModel):
+    rate_per_km: Dict[Literal["hatchback", "sedan", "suv", "muv"], float]
+    base_fare: int = Field(default=0, ge=0, le=2000)
+    min_fare: int = Field(default=50, ge=0, le=2000)
+
+    @field_validator("rate_per_km")
+    @classmethod
+    def _rates(cls, v):
+        if any(not (0.5 <= x <= 100) for x in v.values()):
+            raise ValueError("Rate per km must be between 0.5 and 100")
+        return v
+
+
 class SettingsIn(BaseModel):
     instant_driver_approval: Optional[bool] = None
     passenger_cancel_hours: Optional[int] = Field(default=None, ge=0, le=72)
@@ -2190,6 +2334,7 @@ class SettingsIn(BaseModel):
     featured_price: Optional[int] = Field(default=None, ge=0, le=100000)
     featured_upi_id: Optional[str] = Field(default=None, max_length=80)
     mileage_defaults: Optional[Dict[Literal["hatchback", "sedan", "suv", "muv"], float]] = None
+    pricing: Optional[PricingIn] = None
 
     @field_validator("mileage_defaults")
     @classmethod
@@ -2207,6 +2352,8 @@ async def admin_get_settings(_: dict = Depends(get_admin)):
 @api.put("/admin/settings")
 async def admin_put_settings(body: SettingsIn, admin: dict = Depends(get_admin)):
     upd = {k: v for k, v in body.model_dump().items() if v is not None}
+    if body.pricing:
+        upd["pricing"] = body.pricing.model_dump()
     await db.settings.update_one({"key": "platform"}, {"$set": upd}, upsert=True)
     await audit(admin["user_id"], "settings.update", "platform", upd)
     return await get_settings()
@@ -2427,7 +2574,7 @@ async def conversations(user: dict = Depends(get_user)):
             continue
         other_id = b["driver_id"] if uid == b["passenger_id"] else b["passenger_id"]
         other = await db.users.find_one({"user_id": other_id}, {"_id": 0, "user_id": 1, "name": 1, "picture": 1})
-        unread = await db.messages.count_documents({"booking_id": b["booking_id"], "sender_id": {"$ne": uid}, "read_by": {"$ne": uid}})
+        unread = await db.messages.count_documents({"booking_id": b["booking_id"], "sender_id": {"$nin": [uid, "system"]}, "read_by": {"$ne": uid}})
         out.append({"booking_id": b["booking_id"], "kind": b["kind"], "route": b.get("route"), "date": b.get("date"), "status": b["status"],
                     "other": other, "last": last, "unread": unread, "sort": (last or {}).get("created_at") or b["created_at"]})
     out.sort(key=lambda x: x["sort"], reverse=True)
