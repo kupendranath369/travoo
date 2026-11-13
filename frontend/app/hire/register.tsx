@@ -1,4 +1,4 @@
-import { useFocusEffect } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useState } from "react";
 import { ScrollView, View } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
@@ -8,6 +8,7 @@ import { api, Loc, locPayload } from "@/src/api";
 import { useAuth } from "@/src/auth";
 import { TimeChips } from "@/src/components/DateChips";
 import { DocFile, DocKind, DocPhotos } from "@/src/components/DocPhotos";
+import { Area, ServiceAreasEditor, ServicesPicker, Toggle, Vehicle, VehiclesEditor } from "@/src/components/LocalDriverParts";
 import { LocationField } from "@/src/components/LocationField";
 import { HomeLoc, TalukPicker } from "@/src/components/TalukPicker";
 import { useToast } from "@/src/components/toast";
@@ -24,6 +25,7 @@ export default function ProRegister() {
   const { t } = useI18n();
   const { user } = useAuth();
   const toast = useToast();
+  const router = useRouter();
   const [me, setMe] = useState<any>(null);
   const [city, setCity] = useState<Loc | null>(null);
   const [f, setF] = useState({ areas: "", licence_no: "", licence_expiry: "", bio: user?.bio ?? "", rate_hourly: "", rate_half_day: "", rate_full_day: "", rate_one_way: "" });
@@ -38,10 +40,21 @@ export default function ProRegister() {
   const [home, setHome] = useState<HomeLoc>({ taluk: null, city: "", city_code: null, village_code: null, village_name: null });
   const [docs, setDocs] = useState<{ files: DocFile[]; kinds: DocKind[] } | null>(null);
   const [avail, setAvail] = useState<boolean | null>(null);
+  const [services, setServices] = useState<string[]>(["rent"]);
+  const [areas, setAreas] = useState<Area[]>([]);
+  const [cities, setCities] = useState("");
+  const [outstation, setOutstation] = useState(false);
+  const [outside, setOutside] = useState(false);
+  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const [carpoolVehicles, setCarpoolVehicles] = useState<Vehicle[]>([]);
   const set = (k: keyof typeof f) => (v: string) => setF({ ...f, [k]: k.startsWith("rate") ? v.replace(/\D/g, "") : v });
   const toggle = <X,>(arr: X[], x: X, fn: (a: X[]) => void) => fn(arr.includes(x) ? arr.filter((y) => y !== x) : [...arr, x]);
   const load = useCallback(() => {
-    api("/driver/profile").then((r) => setDocs({ files: r.files ?? [], kinds: (r.kinds ?? []).filter((k: DocKind) => k.kind.startsWith("licence")) })).catch(() => {});
+    api("/driver/profile").then((r) => {
+      setDocs({ files: r.files ?? [], kinds: (r.kinds ?? []).filter((k: DocKind) => k.kind.startsWith("licence")) });
+      // Reuse vehicles already registered for Carpool
+      setCarpoolVehicles((r.vehicles ?? []).filter((v: any) => v.reg_no && !String(v.reg_no).includes("•")).map((v: any) => ({ name: `${v.make} ${v.model}`.trim(), reg_no: String(v.reg_no).replace(/[\s-]/g, "").toUpperCase(), category: v.vtype ?? "sedan", seats: v.seats ?? 4, day_rate: 0, available: true })));
+    }).catch(() => {});
     return api("/pro/me").then((r) => { setMe(r); setAvail(r.profile ? r.profile.available !== false : null); }).catch((e) => setErr(e.message));
   }, []);
   useFocusEffect(useCallback(() => { load(); }, [load]));
@@ -53,17 +66,19 @@ export default function ProRegister() {
 
   const submit = async () => {
     setErr("");
-    if (!city) return setErr(`${t("v2.city")} *`);
+    if (!city) return setErr("Choose your main city on the map search (below Service areas)");
     if (!home.taluk) return setErr("Choose your home State, District and Taluk / Sub-district");
     if (home.city.trim().length < 2) return setErr("Choose or type your City / Town");
     if (!langs.length) return setErr(`${t("v2.languages")} *`);
     if (f.bio.trim().length < 20) return setErr(`${t("v2.about_me")} * (20+)`);
     if (!f.rate_hourly || !f.rate_half_day || !f.rate_full_day) return setErr(`${t("v2.rate_hourly")} *`);
+    if (services.includes("book") && !vehicles.length) return setErr("Add at least one vehicle to offer Book a Driver");
     setBusy(true);
     try {
-      const r = await api("/pro/register", { body: { city: locPayload(city), home: { subdistrict_code: home.taluk.code, city: home.city.trim(), city_code: home.city_code, village_code: home.village_code }, areas: f.areas.split(",").map((x) => x.trim()).filter(Boolean), languages: langs, experience_years: exp, licence_no: f.licence_no.replace(/\s/g, ""), licence_expiry: f.licence_expiry, vehicle_types: vt, days, start_time: from, end_time: to, bio: f.bio.trim(), rate_hourly: Number(f.rate_hourly), rate_half_day: Number(f.rate_half_day), rate_full_day: Number(f.rate_full_day), rate_one_way: f.rate_one_way ? Number(f.rate_one_way) : null } });
+      const r = await api("/pro/register", { body: { services, service_taluks: areas.map((a) => a.code), cities_covered: cities.split(",").map((x) => x.trim()).filter(Boolean), accepts_outstation: outstation, accepts_outside_area: outside, vehicles: services.includes("book") ? vehicles : [], city: locPayload(city), home: { subdistrict_code: home.taluk.code, city: home.city.trim(), city_code: home.city_code, village_code: home.village_code }, areas: f.areas.split(",").map((x) => x.trim()).filter(Boolean), languages: langs, experience_years: exp, licence_no: f.licence_no.replace(/\s/g, ""), licence_expiry: f.licence_expiry, vehicle_types: vt, days, start_time: from, end_time: to, bio: f.bio.trim(), rate_hourly: Number(f.rate_hourly), rate_half_day: Number(f.rate_half_day), rate_full_day: Number(f.rate_full_day), rate_one_way: f.rate_one_way ? Number(f.rate_one_way) : null } });
       toast(t(`verify.status.${r.status}`));
-      load();
+      await load();
+      router.replace("/hire/driver");
     } catch (e: any) {
       setErr(e.message);
     }
@@ -102,14 +117,34 @@ export default function ProRegister() {
             <T weight="700">{me.profile.city?.name} · {t("v2.years", { n: me.profile.experience_years })}</T>
             <T size={13}>{me.profile.bio}</T>
             <T size={12} color={colors.muted}>{me.profile.languages.join(", ")} · ₹{me.profile.rate_hourly}/h</T>
+            <Btn small testID="pro-open-dashboard" icon="speedometer-outline" label="Open Local Driver dashboard" onPress={() => router.push("/hire/driver")} />
           </Card>
         ) : (
           <>
+            <T weight="800">Services you offer (one registration for both)</T>
+            <ServicesPicker testPrefix="pro-svc" value={services} onChange={setServices} />
             <Card style={{ paddingVertical: space.xs, gap: 0 }}>
-              <T weight="800" style={{ paddingTop: space.sm }}>Home location (used to match local hire requests)</T>
+              <T weight="800" style={{ paddingTop: space.sm }}>Home location</T>
               <TalukPicker testPrefix="pro-home" withCity value={home} onChange={setHome} />
             </Card>
-            <Card style={{ paddingVertical: space.xs }}><LocationField testID="pro-city-field" label={t("v2.city")} value={city} onChange={setCity} icon="business-outline" /></Card>
+            <Card style={{ gap: space.sm }}>
+              <T weight="800">Service areas</T>
+              <ServiceAreasEditor testPrefix="pro-areas" areas={areas} onChange={setAreas} homeCode={home.taluk?.code} />
+              <Field testID="pro-cities-input" label="Cities / towns you cover (comma separated)" value={cities} onChangeText={setCities} />
+              <Toggle testID="pro-outstation" label="Accept outstation trips" value={outstation} onChange={setOutstation} />
+              <Toggle testID="pro-outside" label="Accept trips outside my service areas" value={outside} onChange={setOutside} />
+            </Card>
+            {services.includes("book") ? (
+              <Card style={{ gap: space.sm }}>
+                <T weight="800">Vehicles for Book a Driver</T>
+                <T size={12} color={colors.muted}>Your own vehicle or one you are authorised to provide.</T>
+                {carpoolVehicles.filter((c) => !vehicles.some((v) => v.reg_no === c.reg_no)).map((c) => (
+                  <Btn key={c.reg_no} small variant="outline" icon="add" testID={`pro-use-carpool-${c.reg_no}`} label={`Use my Carpool vehicle: ${c.name} (${c.reg_no})`} onPress={() => setVehicles([...vehicles, c])} />
+                ))}
+                <VehiclesEditor testPrefix="pro-veh" vehicles={vehicles} onChange={setVehicles} />
+              </Card>
+            ) : null}
+            <Card style={{ paddingVertical: space.xs }}><LocationField testID="pro-city-field" label="Main city (map location)" value={city} onChange={setCity} icon="business-outline" /></Card>
             <Field testID="pro-areas-input" label={t("v2.areas")} value={f.areas} onChangeText={set("areas")} />
             <T size={13} weight="600" color={colors.muted}>{t("v2.languages")}</T>
             <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.sm }}>{LANGS.map((l) => <Chip key={l} testID={`pro-lang-${l}`} label={l} active={langs.includes(l)} onPress={() => toggle(langs, l, setLangs)} />)}</View>

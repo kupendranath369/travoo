@@ -117,3 +117,12 @@ Pan-India intercity paid carpooling app (BlaBlaCar model) called TRAVOO, tagline
 - Fixes (iter15-16): whole-hire time window incl. overnight; >12h hires need start-in-window only; multi-clash check; request expiry; per-driver accept lock (hire_locks TTL); pickup text + formatted date in notifications. 48 backend tests pass; race stress: exactly one winner each round.
 ### Backlog
 - FCM push for local hire requests (needs google-services.json + native build). Urban towns (ULBs) in City/Town picker. Move LGD/hire block out of server.py. Translations.
+
+## 2026-06 — Unified Local Driver: Rent a Driver + Book a Driver (iteration 17)
+- One local-driver profile (pro_drivers) offers Rent a Driver (customer's car) and/or Book a Driver (driver's vehicle). Old profiles count as Rent only; nobody registers again.
+- Matching uses the DESTINATION taluk (driver's home taluk or declared service-area taluks). Nearby fallback only for drivers who accept trips outside their area. Outstation needs the outstation preference. Pickup is shown to drivers.
+- Availability: Available/Busy/Offline, working days/hours, unavailable dates, service toggles, vehicles (Book only: name, reg no, category, seats, per-day charge, available).
+- Requests: broadcast or direct to one driver, accept/reject, atomic single accept, all-declined → customer notified, cancel (with confirm), arriving/start/complete, favourites, report driver.
+- New screens: hire chooser + forms (hire/index), Local Driver dashboard (hire/driver), registration updated; admin tabs Local drivers (service filter), Driver hire bookings, Driver reports.
+- Notifications are in-app (notifications collection). Real phone push (FCM) still needs google-services.json + a native build.
+- Tests: iter17 14/14, iter18 edge cases 14/14, iter16 17/17, carpool regression OK.

@@ -15,11 +15,11 @@ import { Badge, Btn, Card, Chip, Empty, ErrorBox, Field, Header, Loading, Sectio
 import { inr, useI18n } from "@/src/i18n";
 import { useTheme } from "@/src/theme";
 
-const TABS = ["overview", "notifications", "drivers", "passengers", "rides", "activity", "licence_verifications", "pro", "places", "users", "trips", "bookings", "tickets", "reviews", "featured", "routes", "settings"] as const;
+const TABS = ["overview", "notifications", "drivers", "passengers", "rides", "activity", "licence_verifications", "pro", "hire_bookings", "hire_reports", "places", "users", "trips", "bookings", "tickets", "reviews", "featured", "routes", "settings"] as const;
 type Tab = (typeof TABS)[number];
-const PATH: Record<Tab, string> = { overview: "/admin/stats", notifications: "/admin/notifications", rides: "/admin/rides", activity: "/admin/activity", drivers: "/admin/drivers", passengers: "/admin/passengers", licence_verifications: "/admin/licence-verifications", pro: "/admin/pro-drivers", places: "/admin/locations/missing", users: "/admin/users", trips: "/admin/trips", bookings: "/admin/bookings", tickets: "/admin/tickets", reviews: "/admin/reviews", featured: "/admin/featured", routes: "/routes/popular", settings: "/admin/settings" };
+const PATH: Record<Tab, string> = { overview: "/admin/stats", notifications: "/admin/notifications", rides: "/admin/rides", activity: "/admin/activity", drivers: "/admin/drivers", passengers: "/admin/passengers", licence_verifications: "/admin/licence-verifications", pro: "/admin/pro-drivers", hire_bookings: "/admin/hire-bookings", hire_reports: "/admin/hire-reports", places: "/admin/locations/missing", users: "/admin/users", trips: "/admin/trips", bookings: "/admin/bookings", tickets: "/admin/tickets", reviews: "/admin/reviews", featured: "/admin/featured", routes: "/routes/popular", settings: "/admin/settings" };
 
-const TAB_LABEL: Partial<Record<string, string>> = { notifications: "Alerts", rides: "Rides", activity: "Activity log", passengers: "Passengers", licence_verifications: "Licence checks", featured: "Featured" };
+const TAB_LABEL: Partial<Record<string, string>> = { notifications: "Alerts", rides: "Rides", activity: "Activity log", passengers: "Passengers", licence_verifications: "Licence checks", featured: "Featured", pro: "Local drivers", hire_bookings: "Driver hire bookings", hire_reports: "Driver reports" };
 const RIDE_TONE: Record<string, any> = { scheduled: "info", started: "warning", completed: "success", cancelled: "error" };
 
 export default function AdminScreen() {
@@ -41,6 +41,7 @@ export default function AdminScreen() {
   const [note, setNote] = useState("");
   const [preview, setPreview] = useState<string | null>(null);
   const [fStatus, setFStatus] = useState("pending");
+  const [svc, setSvc] = useState("all");
   const [featPrice, setFeatPrice] = useState("");
   const [featUpi, setFeatUpi] = useState("");
   const [mil, setMil] = useState<Record<string, string>>({});
@@ -71,14 +72,14 @@ export default function AdminScreen() {
   const load = useCallback(async () => {
     setErr("");
     try {
-      const path = tab === "drivers" ? `${PATH.drivers}?status=${dStatus}&q=${encodeURIComponent(q)}` : tab === "pro" ? `${PATH[tab]}?status=${dStatus}` : tab === "rides" ? `${PATH.rides}?status=${rStatus}&q=${encodeURIComponent(q)}` : tab === "featured" ? `${PATH.featured}?status=${fStatus}` : tab === "users" || tab === "passengers" ? `${PATH[tab]}?q=${encodeURIComponent(q)}` : PATH[tab];
+      const path = tab === "drivers" ? `${PATH.drivers}?status=${dStatus}&q=${encodeURIComponent(q)}` : tab === "pro" ? `${PATH[tab]}?status=${dStatus}&service=${svc}` : tab === "hire_bookings" ? `${PATH[tab]}?service=${svc}` : tab === "rides" ? `${PATH.rides}?status=${rStatus}&q=${encodeURIComponent(q)}` : tab === "featured" ? `${PATH.featured}?status=${fStatus}` : tab === "users" || tab === "passengers" ? `${PATH[tab]}?q=${encodeURIComponent(q)}` : PATH[tab];
       const res = await api(path);
       setData(res);
       setDataTab(tab);
     } catch (e: any) {
       setErr(e.message);
     }
-  }, [tab, dStatus, rStatus, fStatus, q]);
+  }, [tab, dStatus, rStatus, fStatus, q, svc]);
   useEffect(() => { setData(null); load(); }, [load]);
 
   const act = async (path: string, body: any = {}, method = "POST") => {
@@ -394,6 +395,9 @@ export default function AdminScreen() {
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: space.sm }}>
               {["under_review", "approved", "rejected", "resubmit"].map((s) => <Chip key={s} testID={`admin-pro-filter-${s}`} label={t(`verify.status.${s}`)} active={dStatus === s} onPress={() => setDStatus(s)} />)}
             </ScrollView>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: space.sm }}>
+              {[["all", "All services"], ["rent", "Rent a Driver"], ["book", "Book a Driver"]].map(([k, l]) => <Chip key={k} testID={`admin-svc-filter-${k}`} label={l} active={svc === k} onPress={() => setSvc(k)} />)}
+            </ScrollView>
             {data.length === 0 ? <Empty title={t("admin.empty")} /> : null}
             {data.map((p: any) => (
               <Card key={p.user_id} testID={`admin-pro-${p.user_id}`} style={{ gap: space.sm }}>
@@ -408,6 +412,16 @@ export default function AdminScreen() {
                 <T size={12}>{p.city?.name} · {p.experience_years}y · {p.languages.join(", ")} · {p.vehicle_types.join(", ")}</T>
                 <T size={12}>{t("verify.licence")}: {p.licence_no} ({p.licence_expiry})</T>
                 <T size={12} color={colors.muted}>₹{p.rate_hourly}/h · ₹{p.rate_half_day} · ₹{p.rate_full_day} · {p.bio}</T>
+                <View style={{ flexDirection: "row", gap: space.sm, flexWrap: "wrap" }}>
+                  {(p.services ?? ["rent"]).map((s: string) => <Badge key={s} testID={`admin-pro-service-${s}-${p.user_id}`} label={s === "book" ? "Book a Driver" : "Rent a Driver"} tone="info" />)}
+                  <Badge testID={`admin-pro-avail-${p.user_id}`} label={(p.availability_status ?? "available").toUpperCase()} tone={p.availability_status === "available" ? "success" : "muted"} />
+                  {p.accepts_outstation ? <Badge label="Outstation" tone="muted" /> : null}
+                  {p.accepts_outside_area ? <Badge label="Outside area" tone="muted" /> : null}
+                </View>
+                <T size={12}>Home: {p.home ? `${p.home.subdistrict_name} ${p.home.sub_label}, ${p.home.district_name}, ${p.home.state_name}` : "not set"}</T>
+                {p.service_areas?.length ? <T size={12}>Service areas: {p.service_areas.map((a: any) => `${a.name} (${a.district_name})`).join(", ")}</T> : null}
+                {p.cities_covered?.length ? <T size={12}>Cities: {p.cities_covered.join(", ")}</T> : null}
+                {(p.vehicles ?? []).map((v: any) => <T key={v.vehicle_id} size={12} color={colors.muted}>🚗 {v.name} · {v.reg_no} · {v.category} · {v.seats} seats · ₹{v.day_rate}/day {v.available ? "" : "· unavailable"}</T>)}
                 {p.status === "under_review" ? (
                   <View style={{ flexDirection: "row", gap: space.sm }}>
                     <Btn small testID={`admin-pro-approve-${p.user_id}`} label={t("admin.approve")} onPress={() => act(`/admin/pro-drivers/${p.user_id}/review`, { decision: "approved", note })} />
@@ -470,6 +484,49 @@ export default function AdminScreen() {
             </View>
             <T size={12} color={colors.muted}>{b.route} · {b.date} · {b.seats} seats · {inr(b.fare_total)} · {b.settlement?.status}</T>
             {b.status === "cancelled" ? <T size={12} color={colors.error}>{b.cancelled_by}: {b.cancel_reason}</T> : null}
+          </Card>
+        ));
+      case "hire_bookings":
+        return (
+          <>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: space.sm }}>
+              {[["all", "All services"], ["rent", "Rent a Driver"], ["book", "Book a Driver"]].map(([k, l]) => <Chip key={k} testID={`admin-svc-filter-${k}`} label={l} active={svc === k} onPress={() => setSvc(k)} />)}
+            </ScrollView>
+            <T weight="800">Bookings ({data.bookings?.length ?? 0})</T>
+            {(data.bookings ?? []).length === 0 ? <Empty title={t("admin.empty")} /> : null}
+            {(data.bookings ?? []).map((b: any) => (
+              <Card key={b.booking_id} testID={`admin-hire-${b.booking_id}`} onPress={() => router.push(`/hire/${b.booking_id}`)} style={{ gap: 4, padding: space.md }}>
+                <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+                  <T weight="700">{b.booking_id} · {b.service === "book" ? "Book a Driver" : "Rent a Driver"}</T>
+                  <Badge label={t(`status.${b.status}`)} tone={statusTone(b.status)} />
+                </View>
+                <T size={12}>{b.route} · {b.date} {b.time} · {inr(b.service_fee)}</T>
+                <T size={12} color={colors.muted}>Driver: {b.driver_name} · Customer: {b.customer_name}{b.dest_taluk ? ` · Dest. taluk: ${b.dest_taluk.name}` : ""}{b.vehicle ? ` · ${b.vehicle.name} ${b.vehicle.reg_no}` : ""}</T>
+              </Card>
+            ))}
+            <T weight="800">Customer requests ({data.requests?.length ?? 0})</T>
+            {(data.requests ?? []).map((r: any) => (
+              <Card key={r.request_id} testID={`admin-hire-req-${r.request_id}`} style={{ gap: 4, padding: space.md }}>
+                <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+                  <T weight="700">{r.request_id} · {r.service === "book" ? "Book a Driver" : "Rent a Driver"}</T>
+                  <Badge label={r.status} tone={r.status === "fulfilled" ? "success" : r.status === "open" ? "warning" : "muted"} />
+                </View>
+                <T size={12}>{r.pickup} → {r.destination || "—"} · {r.date} {r.time}</T>
+                <T size={12} color={colors.muted}>{r.customer_name} · Dest. taluk: {r.dest_taluk?.name ?? r.pickup_taluk?.name ?? "—"} · notified {r.notified}, declined {r.declined}</T>
+              </Card>
+            ))}
+          </>
+        );
+      case "hire_reports":
+        return data.length === 0 ? <Empty title="No driver complaints or reports" /> : data.map((k: any) => (
+          <Card key={k.ticket_id} testID={`admin-hire-report-${k.ticket_id}`} style={{ gap: 4, padding: space.md }}>
+            <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+              <T weight="700" style={{ flex: 1 }}>{k.ticket_id} · {k.subject}</T>
+              <Badge label={k.status} tone={k.status === "resolved" ? "success" : "warning"} />
+            </View>
+            <T size={12}>{k.message}</T>
+            <T size={11} color={colors.muted}>{k.booking_id ?? ""} {k.reported_user_id ? `· reported ${k.reported_user_id}` : ""}</T>
+            {k.status === "open" ? <Btn small variant="outline" testID={`admin-resolve-${k.ticket_id}`} label={t("admin.resolve")} onPress={() => act(`/admin/tickets/${k.ticket_id}/resolve`)} /> : null}
           </Card>
         ));
       case "tickets":

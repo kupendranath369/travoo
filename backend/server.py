@@ -90,6 +90,7 @@ INDEXES: dict[str, list[IndexModel]] = {
     "phone_tickets": [IndexModel([("ticket_hash", ASCENDING)], name="ticket", unique=True), IndexModel([("expires_at", ASCENDING)], name="ttl", expireAfterSeconds=0)],
     "hire_requests": [IndexModel([("request_id", ASCENDING)], name="rid", unique=True), IndexModel([("passenger_id", ASCENDING), ("created_at", DESCENDING)], name="pax")],
     "hire_dispatches": [IndexModel([("request_id", ASCENDING), ("driver_id", ASCENDING)], name="req_driver", unique=True), IndexModel([("driver_id", ASCENDING)], name="driver")],
+    "favourite_drivers": [IndexModel([("user_id", ASCENDING), ("driver_id", ASCENDING)], name="uniq", unique=True)],
     "hire_locks": [IndexModel([("driver_id", ASCENDING)], name="driver", unique=True), IndexModel([("expires_at", ASCENDING)], name="ttl", expireAfterSeconds=0)],
 
     "featured": [IndexModel([("feature_id", ASCENDING)], name="feaid", unique=True), IndexModel([("trip_id", ASCENDING)], name="trip"),
@@ -99,6 +100,7 @@ INDEXES: dict[str, list[IndexModel]] = {
     "files": [IndexModel([("file_id", ASCENDING)], name="fid", unique=True), IndexModel([("owner_id", ASCENDING)], name="owner")],
     "pro_drivers": [IndexModel([("user_id", ASCENDING)], name="uid", unique=True), IndexModel([("city.geo", GEOSPHERE)], name="city_geo"),
                     IndexModel([("home.subdistrict_code", ASCENDING), ("status", ASCENDING)], name="home_taluk"),
+                    IndexModel([("service_taluk_codes", ASCENDING), ("status", ASCENDING)], name="service_taluks"),
                     IndexModel([("status", ASCENDING)], name="status")],
     "hires": [IndexModel([("booking_id", ASCENDING)], name="bid", unique=True), IndexModel([("driver_id", ASCENDING), ("date", ASCENDING)], name="driver_date"),
               IndexModel([("passenger_id", ASCENDING)], name="customer")],
@@ -2521,7 +2523,8 @@ async def log_contact(viewer: str, owner: str, bid: str):
 
 
 SYS_EVENTS = {"booking_confirmed", "booking_rejected", "booking_cancelled", "trip_cancelled", "trip_started", "trip_completed",
-              "booking_request", "new_booking", "hire_request", "hire_confirmed", "hire_rejected", "hire_cancelled", "hire_completed", "trip_updated"}
+              "booking_request", "new_booking", "hire_request", "hire_confirmed", "hire_rejected", "hire_cancelled", "hire_completed", "trip_updated",
+              "hire_arriving"}
 
 
 async def sys_message(bid: str, ntype: str, params: dict):
@@ -2705,6 +2708,49 @@ class ProDriverIn(BaseModel):
     rate_half_day: int = Field(ge=100, le=20000)
     rate_full_day: int = Field(ge=200, le=40000)
     rate_one_way: Optional[int] = Field(default=None, ge=100, le=40000)
+    # Unified local-driver profile: one registration, either or both services
+    services: List[Literal["rent", "book"]] = Field(default_factory=lambda: ["rent"], min_length=1, max_length=2)
+    service_taluks: List[str] = Field(default_factory=list, max_length=30)  # extra LGD sub-district codes served (home is always served)
+    cities_covered: List[str] = Field(default_factory=list, max_length=20)
+    accepts_outstation: bool = False
+    accepts_outside_area: bool = False
+    vehicles: List["ProVehicleIn"] = Field(default_factory=list, max_length=5)  # only needed for Book a Driver
+
+
+VEHICLE_CATS = ("hatchback", "sedan", "suv", "muv", "van", "luxury", "other")
+
+
+class ProVehicleIn(BaseModel):
+    vehicle_id: Optional[str] = Field(default=None, max_length=30)
+    name: str = Field(min_length=2, max_length=60)
+    reg_no: str = Field(min_length=6, max_length=14)
+    category: Literal["hatchback", "sedan", "suv", "muv", "van", "luxury", "other"]
+    seats: int = Field(ge=1, le=20)  # passenger seats
+    day_rate: int = Field(default=0, ge=0, le=20000)  # vehicle charge per day, added to the driver fee
+    available: bool = True
+
+
+def vehicles_snapshot(vs: list) -> list:
+    out = []
+    for v in vs:
+        reg = re.sub(r"[\s-]", "", v.reg_no.upper())
+        if not re.fullmatch(r"[A-Z0-9]{6,12}", reg):
+            raise HTTPException(400, f"Invalid registration number: {v.reg_no}")
+        out.append({**v.model_dump(), "reg_no": reg, "name": v.name.strip(), "vehicle_id": v.vehicle_id or nid("pv")})
+    return out
+
+
+async def areas_snapshot(codes: list, home_code: str) -> tuple:
+    codes = list(dict.fromkeys(c for c in codes if c and c != home_code))
+    rows = await db.lgd_subdistricts.find({"code": {"$in": codes}}, {"_id": 0, "norm": 0}).to_list(40) if codes else []
+    if len(rows) != len(codes):
+        raise HTTPException(400, "Unknown service-area taluk / sub-district")
+    areas = [{**{k: r[k] for k in ("code", "name", "district_code", "district_name", "state_code", "state_name")}, "sub_label": lgd_sub_label(r["state_name"])} for r in rows]
+    return areas, [home_code] + [a["code"] for a in areas]
+
+
+def pro_status(p: dict) -> str:
+    return p.get("availability_status") or ("available" if p.get("available", True) else "offline")
 
 
 @api.get("/pro/me")
@@ -2733,8 +2779,14 @@ async def pro_register(body: ProDriverIn, user: dict = Depends(get_user)):
     missing = [k for k in ("profile", "licence") if not photos.get(k) and not (k == "licence" and photos.get("licence_front"))]
     if missing:
         raise HTTPException(400, "Please add your " + " and ".join("profile photo (Profile screen)" if k == "profile" else "licence photo" for k in missing))
+    if "book" in body.services and not body.vehicles:
+        raise HTTPException(400, "Add at least one vehicle to offer Book a Driver")
     status = "approved" if (await get_settings()).get("instant_driver_approval") else "under_review"
-    rec = {**body.model_dump(), "city": loc_snapshot(body.city), "home": await home_snapshot(body.home), "available": True,
+    home = await home_snapshot(body.home)
+    areas, codes = await areas_snapshot(body.service_taluks, home["subdistrict_code"])
+    rec = {**body.model_dump(exclude={"service_taluks"}), "city": loc_snapshot(body.city), "home": home, "available": True, "availability_status": "available",
+           "service_areas": areas, "service_taluk_codes": codes, "vehicles": vehicles_snapshot(body.vehicles),
+           "cities_covered": [c.strip() for c in body.cities_covered if c.strip()], "services": sorted(set(body.services)),
            "licence_no": body.licence_no.upper(), "user_id": user["user_id"],
            "name": user["name"], "status": status, "submitted_at": now(), "admin_note": ""}
     await db.pro_drivers.update_one({"user_id": user["user_id"]}, {"$set": rec}, upsert=True)
@@ -2835,16 +2887,24 @@ async def hire_get(bid: str, user: dict = Depends(get_user)):
         h[role] = u
     h["driver"]["has_photo"] = await has_badge_photo(h["driver_id"])
     h["is_driver"] = user["user_id"] == h["driver_id"]
+    h["favourite"] = bool(await db.favourite_drivers.find_one({"user_id": user["user_id"], "driver_id": h["driver_id"]}, {"_id": 1}))
     h["my_reviews"] = await db.reviews.find({"booking_id": bid, "reviewer_id": user["user_id"]}, {"_id": 0}).to_list(5)
     return h
 
 
 @api.post("/hire/bookings/{bid}/{action}")
-async def hire_action(bid: str, action: Literal["accept", "reject", "start", "complete", "cancel"], body: ReasonIn, user: dict = Depends(get_user)):
+async def hire_action(bid: str, action: Literal["accept", "reject", "start", "complete", "cancel", "arriving"], body: ReasonIn, user: dict = Depends(get_user)):
     h = await db.hires.find_one({"booking_id": bid}, {"_id": 0})
     if not h or user["user_id"] not in (h["passenger_id"], h["driver_id"]):
         raise HTTPException(404, "Booking not found")
     is_driver = user["user_id"] == h["driver_id"]
+    if action == "arriving":  # status stays confirmed; customer is told the driver is on the way
+        if not is_driver:
+            raise HTTPException(403, "Only the driver can do this")
+        if not (await db.hires.update_one({"booking_id": bid, "status": "confirmed"}, {"$set": {"arriving_at": now()}})).modified_count:
+            raise HTTPException(400, "Cannot mark arriving for this booking now")
+        await notify(h["passenger_id"], "hire_arriving", {"pickup": h["pickup"], "route": h["route"]}, bid)
+        return {"ok": True}
     rules = {"accept": (["pending"], "confirmed", True), "reject": (["pending"], "rejected", True), "start": (["confirmed"], "started", True),
              "complete": (["started"], "completed", True), "cancel": (["pending", "confirmed"], "cancelled", None)}
     allowed, new, driver_only = rules[action]
@@ -2948,6 +3008,108 @@ class HomeLocIn(BaseModel):
 ProDriverIn.model_rebuild()
 
 
+class ProSettingsIn(BaseModel):
+    services: Optional[List[Literal["rent", "book"]]] = Field(default=None, min_length=1, max_length=2)
+    service_taluks: Optional[List[str]] = Field(default=None, max_length=30)
+    cities_covered: Optional[List[str]] = Field(default=None, max_length=20)
+    accepts_outstation: Optional[bool] = None
+    accepts_outside_area: Optional[bool] = None
+    availability_status: Optional[Literal["available", "busy", "offline"]] = None
+    days: Optional[List[int]] = Field(default=None, min_length=1, max_length=7)
+    start_time: Optional[str] = Field(default=None, pattern=r"^\d{2}:\d{2}$")
+    end_time: Optional[str] = Field(default=None, pattern=r"^\d{2}:\d{2}$")
+    blocked_dates: Optional[List[str]] = Field(default=None, max_length=60)
+
+
+@api.put("/pro/settings")
+async def pro_settings(body: ProSettingsIn, user: dict = Depends(get_user)):
+    """Services, service areas, preferences and availability for the single local-driver profile (no re-verification)."""
+    p = await db.pro_drivers.find_one({"user_id": user["user_id"]}, {"_id": 0})
+    if not p:
+        raise HTTPException(404, "Register as a local driver first")
+    upd = {k: v for k, v in body.model_dump(exclude={"service_taluks"}).items() if v is not None}
+    if body.services is not None:
+        if "book" in body.services and not [v for v in p.get("vehicles") or []]:
+            raise HTTPException(400, "Add at least one vehicle before offering Book a Driver")
+        upd["services"] = sorted(set(body.services))
+    if body.service_taluks is not None:
+        if not p.get("home"):
+            raise HTTPException(400, "Set your home taluk first")
+        upd["service_areas"], upd["service_taluk_codes"] = await areas_snapshot(body.service_taluks, p["home"]["subdistrict_code"])
+    if body.cities_covered is not None:
+        upd["cities_covered"] = [c.strip()[:60] for c in body.cities_covered if c.strip()]
+    if body.blocked_dates is not None:
+        if any(not re.fullmatch(r"\d{4}-\d{2}-\d{2}", d) for d in body.blocked_dates):
+            raise HTTPException(400, "Invalid date")
+        upd["blocked_dates"] = sorted(set(body.blocked_dates))
+    if body.availability_status:
+        upd["available"] = body.availability_status == "available"
+    if not upd:
+        raise HTTPException(400, "Nothing to update")
+    await db.pro_drivers.update_one({"user_id": user["user_id"]}, {"$set": {**upd, "availability_updated_at": now()}})
+    await audit(user["user_id"], "pro.settings", user["user_id"], {"keys": sorted(upd)})
+    return await pro_me(user)
+
+
+class ProVehiclesIn(BaseModel):
+    vehicles: List[ProVehicleIn] = Field(max_length=5)
+
+
+@api.put("/pro/vehicles")
+async def pro_vehicles(body: ProVehiclesIn, user: dict = Depends(get_user)):
+    p = await db.pro_drivers.find_one({"user_id": user["user_id"]}, {"_id": 0, "services": 1})
+    if not p:
+        raise HTTPException(404, "Register as a local driver first")
+    if "book" in (p.get("services") or []) and not body.vehicles:
+        raise HTTPException(400, "Keep at least one vehicle while offering Book a Driver (or turn Book a Driver off first)")
+    vs = vehicles_snapshot(body.vehicles)
+    await db.pro_drivers.update_one({"user_id": user["user_id"]}, {"$set": {"vehicles": vs}})
+    return {"vehicles": vs}
+
+
+@api.get("/pro/dashboard")
+async def pro_dashboard(user: dict = Depends(get_user)):
+    uid = user["user_id"]
+    me = await pro_me(user)
+    if not me["profile"]:
+        return {**me, "upcoming": [], "history": [], "earnings": None, "open_requests": 0}
+    me["profile"]["availability_status"] = pro_status(me["profile"])
+    rows = await db.hires.find({"driver_id": uid}, {"_id": 0, "city.geo": 0}).sort("starts_at", -1).to_list(300)
+    upcoming = sorted([h for h in rows if h["status"] in ("confirmed", "started")], key=lambda h: h["starts_at"])
+    history = [h for h in rows if h["status"] not in ("confirmed", "started", "pending")]
+    done = [h for h in rows if h["status"] == "completed"]
+    month = now().astimezone(IST).strftime("%Y-%m")
+    earnings = {"completed": len(done), "total": sum(h.get("service_fee", 0) for h in done),
+                "this_month": sum(h.get("service_fee", 0) for h in done if (h.get("date") or "").startswith(month)),
+                "upcoming_value": sum(h.get("service_fee", 0) for h in upcoming),
+                "rent": sum(1 for h in done if h.get("service", "rent") == "rent"), "book": sum(1 for h in done if h.get("service") == "book")}
+    open_ids = [d["request_id"] for d in await db.hire_dispatches.find({"driver_id": uid, "response": None}, {"_id": 0, "request_id": 1}).to_list(200)]
+    open_requests = await db.hire_requests.count_documents({"request_id": {"$in": open_ids}, "status": "open", "starts_at": {"$gt": now()}})
+    return {**me, "upcoming": upcoming, "history": history[:50], "earnings": earnings, "open_requests": open_requests}
+
+
+@api.get("/hire/favourites")
+async def hire_favourites(user: dict = Depends(get_user)):
+    out = []
+    for f in await db.favourite_drivers.find({"user_id": user["user_id"]}, {"_id": 0}).sort("created_at", -1).to_list(50):
+        p = await db.pro_drivers.find_one({"user_id": f["driver_id"]}, {"_id": 0, "user_id": 1, "services": 1, "home": 1, "experience_years": 1, "status": 1})
+        if p:
+            u = await public_user(f["driver_id"])
+            out.append({**p, "services": p.get("services") or ["rent"], "user": {**u, "has_photo": await has_badge_photo(f["driver_id"])}})
+    return out
+
+
+@api.post("/hire/favourites/{driver_id}")
+async def hire_favourite_toggle(driver_id: str, user: dict = Depends(get_user)):
+    if not await db.pro_drivers.find_one({"user_id": driver_id}, {"_id": 1}):
+        raise HTTPException(404, "Driver not found")
+    if (await db.favourite_drivers.delete_one({"user_id": user["user_id"], "driver_id": driver_id})).deleted_count:
+        return {"favourite": False}
+    with suppress(DuplicateKeyError):
+        await db.favourite_drivers.insert_one({"user_id": user["user_id"], "driver_id": driver_id, "created_at": now()})
+    return {"favourite": True}
+
+
 async def home_snapshot(h: HomeLocIn) -> dict:
     sd = await subdistrict_doc(h.subdistrict_code)
     out = {"state_code": sd["state_code"], "state_name": sd["state_name"], "district_code": sd["district_code"], "district_name": sd["district_name"],
@@ -2992,6 +3154,8 @@ async def pro_availability(body: AvailabilityIn, user: dict = Depends(get_user))
     upd = {k: v for k, v in body.model_dump().items() if v is not None}
     if not upd:
         raise HTTPException(400, "Nothing to update")
+    if "available" in upd:
+        upd["availability_status"] = "available" if upd["available"] else "offline"
     res = await db.pro_drivers.update_one({"user_id": user["user_id"]}, {"$set": {**upd, "availability_updated_at": now()}})
     if not res.matched_count:
         raise HTTPException(404, "Register as a hire driver first")
@@ -3016,7 +3180,7 @@ def fits_window(p: dict, time: str, hours: int) -> bool:
 
 async def has_clash(driver_id: str, start: datetime, end: datetime, exclude_booking: Optional[str] = None) -> bool:
     q = {"driver_id": driver_id, "status": {"$in": ["confirmed", "started"]},
-         "starts_at": {"$lt": end.astimezone(timezone.utc), "$gte": (start - timedelta(hours=72)).astimezone(timezone.utc)}}
+         "starts_at": {"$lt": end.astimezone(timezone.utc), "$gte": (start - timedelta(days=31)).astimezone(timezone.utc)}}
     if exclude_booking:
         q["booking_id"] = {"$ne": exclude_booking}
     async for h in db.hires.find(q, {"_id": 0, "starts_at": 1, "hours": 1}):
@@ -3025,17 +3189,62 @@ async def has_clash(driver_id: str, start: datetime, end: datetime, exclude_book
     return False
 
 
-async def eligible_local_drivers(sub_codes: list, date: str, time: str, hours: int, vehicle_type: Optional[str], exclude: str) -> list:
-    weekday = datetime.strptime(date, "%Y-%m-%d").weekday()
-    start = datetime.strptime(f"{date} {time}", "%Y-%m-%d %H:%M").replace(tzinfo=IST)
-    end = start + timedelta(hours=hours)
-    q = {"status": "approved", "home.subdistrict_code": {"$in": sub_codes}, "available": {"$ne": False}, "days": weekday, "user_id": {"$ne": exclude}}
-    if vehicle_type:
-        q["vehicle_types"] = vehicle_type
+# Rent a Driver = customer's own car; Book a Driver = driver supplies the car too
+RENT_TYPES = ("hourly", "half_day", "full_day", "multi_day", "outstation")
+BOOK_TYPES = ("one_way", "round_trip", "multi_day", "outstation")
+SERVICE_NAME = {"rent": "Rent a Driver", "book": "Book a Driver"}
+
+
+def total_hours(service_type: str, hours: int, days: int) -> int:
+    if service_type == "half_day":
+        return 4
+    if service_type == "full_day":
+        return 8
+    if service_type in ("multi_day", "outstation"):
+        return max(1, days) * 24
+    return max(1, hours)
+
+
+def svc_q(service: str) -> dict:
+    return {"services": "book"} if service == "book" else {"$or": [{"services": "rent"}, {"services": {"$exists": False}}]}
+
+
+AVAILABLE_Q = {"$or": [{"availability_status": "available"}, {"availability_status": {"$exists": False}, "available": {"$ne": False}}]}
+
+
+def local_area(code: str) -> dict:
+    """Drivers serving a taluk: it is their home taluk or one of their declared service-area taluks."""
+    return {"$or": [{"home.subdistrict_code": code}, {"service_taluk_codes": code}]}
+
+
+def pick_vehicle(p: dict, category: str, passengers: int) -> Optional[dict]:
+    fits = [v for v in p.get("vehicles") or [] if v.get("available", True) and v.get("seats", 0) >= passengers
+            and (not category or category == "any" or v.get("category") == category)]
+    return min(fits, key=lambda v: (v["seats"], v.get("day_rate", 0))) if fits else None
+
+
+async def eligible_local_drivers(area_q: dict, r: dict, exclude: str) -> list:
+    """Approved, Available local drivers offering the requested service, inside the area query, free for the whole trip."""
+    service = r.get("service") or "rent"
+    weekday = datetime.strptime(r["date"], "%Y-%m-%d").weekday()
+    start = datetime.strptime(f"{r['date']} {r['time']}", "%Y-%m-%d %H:%M").replace(tzinfo=IST)
+    end = start + timedelta(hours=r["hours"])
+    dates = [(start + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(max(1, math.ceil(r["hours"] / 24)))]
+    q = {"$and": [area_q, AVAILABLE_Q, svc_q(service)], "status": "approved", "days": weekday, "user_id": {"$ne": exclude}, "blocked_dates": {"$nin": dates}}
+    if r.get("service_type") == "outstation":
+        q["accepts_outstation"] = True
+    vt = r.get("vehicle_type") or ""
+    if service == "rent" and vt in ("hatchback", "sedan", "suv", "muv", "luxury", "automatic", "ev"):
+        q["vehicle_types"] = vt
     out = []
     for p in await db.pro_drivers.find(q, {"_id": 0, "licence_no": 0, "licence_expiry": 0, "city.geo": 0}).to_list(300):
-        if not fits_window(p, time, hours):
+        if not fits_window(p, r["time"], r["hours"]):
             continue
+        if service == "book":
+            v = pick_vehicle(p, vt, r.get("passengers", 1))
+            if not v:
+                continue
+            p["match_vehicle"] = v
         u = await db.users.find_one({"user_id": p["user_id"], "suspended": {"$ne": True}}, {"_id": 0, "user_id": 1})
         if not u or await has_clash(p["user_id"], start, end):
             continue
@@ -3043,12 +3252,57 @@ async def eligible_local_drivers(sub_codes: list, date: str, time: str, hours: i
     return out
 
 
+async def nearby_area(sd: dict, pickup_code: Optional[str], outstation: bool) -> dict:
+    """Fallback: drivers from other taluks of the destination district who accept trips outside their area;
+    for outstation trips also drivers based at the pickup taluk (outstation preference is enforced separately)."""
+    others = [s["code"] for s in await db.lgd_subdistricts.find({"district_code": sd["district_code"], "code": {"$ne": sd["code"]}}, {"_id": 0, "code": 1}).to_list(300)]
+    ors: list = [{"accepts_outside_area": True, "$or": [{"home.subdistrict_code": {"$in": others}}, {"service_taluk_codes": {"$in": others}}]}]
+    if outstation and pickup_code and pickup_code != sd["code"]:
+        ors.append({"home.subdistrict_code": pickup_code})
+    return {"$and": [{"$or": ors}, {"$nor": [local_area(sd["code"])]}]}
+
+
+def match_group(p: dict, dest_code: str, pickup_code: Optional[str]) -> str:
+    if dest_code in ([p.get("home", {}).get("subdistrict_code")] + list(p.get("service_taluk_codes") or [])):
+        return "local"
+    if pickup_code and p.get("home", {}).get("subdistrict_code") == pickup_code:
+        return "pickup_area"
+    return "nearby"
+
+
+def quote(p: dict, r: dict, v: Optional[dict] = None) -> int:
+    st, days = r["service_type"], max(1, r.get("days") or 1)
+    if st in ("multi_day", "outstation"):
+        fee = p["rate_full_day"] * days
+    elif st == "round_trip":
+        fee = p["rate_full_day"]
+    else:
+        fee = hire_estimate(p, st, r["hours"])
+    if r.get("service") == "book" and v:
+        fee += (v.get("day_rate") or 0) * (days if st in ("multi_day", "outstation") else 1)
+    return fee
+
+
+def request_shape(service: str, service_type: str, date: str, time: str, hours: int, days: int, vehicle_type: str, passengers: int) -> dict:
+    if service_type not in (BOOK_TYPES if service == "book" else RENT_TYPES):
+        raise HTTPException(400, f"'{service_type}' is not a {SERVICE_NAME[service]} option")
+    if service == "book" and vehicle_type not in VEHICLE_CATS + ("any",):
+        raise HTTPException(400, "Choose a vehicle category")
+    days = days if service_type in ("multi_day", "outstation") else 1
+    return {"service": service, "service_type": service_type, "date": date, "time": time, "days": days,
+            "hours": total_hours(service_type, hours, days), "vehicle_type": vehicle_type, "passengers": passengers}
+
+
 @api.get("/hire/local-drivers")
 async def hire_local_drivers(subdistrict_code: str = Query(max_length=10), date: str = Query(pattern=r"^\d{4}-\d{2}-\d{2}$"),
-                             time: str = Query(pattern=r"^\d{2}:\d{2}$"), hours: int = Query(4, ge=1, le=72), service: str = "hourly",
-                             vehicle_type: Optional[str] = None, nearby: bool = False, language: Optional[str] = None, min_exp: int = 0,
-                             user: dict = Depends(get_user)):
+                             time: str = Query(pattern=r"^\d{2}:\d{2}$"), hours: int = Query(4, ge=1, le=24), days: int = Query(1, ge=1, le=30),
+                             service: Literal["rent", "book"] = "rent", service_type: str = "hourly", vehicle_type: str = "", passengers: int = Query(1, ge=1, le=20),
+                             pickup_subdistrict_code: Optional[str] = Query(None, max_length=10), nearby: bool = False,
+                             language: Optional[str] = None, min_exp: int = 0, user: dict = Depends(get_user)):
+    """subdistrict_code = the DESTINATION taluk (primary matching criterion). Pickup taluk is only used for display/outstation fallback."""
     sd = await subdistrict_doc(subdistrict_code)
+    r = request_shape(service, service_type, date, time, hours, days, vehicle_type, passengers)
+    favs = {f["driver_id"] for f in await db.favourite_drivers.find({"user_id": user["user_id"]}, {"_id": 0, "driver_id": 1}).to_list(100)}
 
     async def present(rows: list) -> list:
         res = []
@@ -3056,68 +3310,87 @@ async def hire_local_drivers(subdistrict_code: str = Query(max_length=10), date:
             if p.get("experience_years", 0) < min_exp or (language and language.lower() not in [x.lower() for x in p.get("languages", [])]):
                 continue
             u = await public_user(p["user_id"])
-            res.append({**p, "user": {**u, "has_photo": await has_badge_photo(p["user_id"])}, "estimate": hire_estimate(p, service, hours)})
-        res.sort(key=lambda x: (-(x["user"].get("rating_avg") or 0), x["estimate"]))
+            res.append({**p, "services": p.get("services") or ["rent"], "user": {**u, "has_photo": await has_badge_photo(p["user_id"])},
+                        "estimate": quote(p, r, p.get("match_vehicle")), "group": match_group(p, sd["code"], pickup_subdistrict_code),
+                        "favourite": p["user_id"] in favs, "availability_status": pro_status(p)})
+        res.sort(key=lambda x: (not x["favourite"], -(x["user"].get("rating_avg") or 0), x["estimate"]))
         return res
 
-    local = await present(await eligible_local_drivers([sd["code"]], date, time, hours, vehicle_type, user["user_id"]))
+    local = await present(await eligible_local_drivers(local_area(sd["code"]), r, user["user_id"]))
     out = {"taluk": sd, "local": local, "nearby": None}
     if nearby:
-        others = [s["code"] for s in await db.lgd_subdistricts.find({"district_code": sd["district_code"], "code": {"$ne": sd["code"]}}, {"_id": 0, "code": 1}).to_list(300)]
-        out["nearby"] = await present(await eligible_local_drivers(others, date, time, hours, vehicle_type, user["user_id"])) if others else []
-        out["nearby_scope"] = f"Other {sd['sub_label'].lower()}s in {sd['district_name']} district"
+        out["nearby"] = await present(await eligible_local_drivers(await nearby_area(sd, pickup_subdistrict_code, service_type == "outstation"), r, user["user_id"]))
+        out["nearby_scope"] = (f"Drivers from other {sd['sub_label'].lower()}s of {sd['district_name']} district who accept trips outside their area"
+                               + (" · outstation drivers from your pickup area" if service_type == "outstation" and pickup_subdistrict_code else ""))
     return out
 
 
 class LocalHireIn(BaseModel):
-    service_type: Literal["hourly", "half_day", "full_day", "one_way", "airport", "outstation", "custom"]
+    service: Literal["rent", "book"] = "rent"
+    service_type: Literal["hourly", "half_day", "full_day", "multi_day", "outstation", "one_way", "round_trip"]
     date: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
     time: str = Field(pattern=r"^\d{2}:\d{2}$")
-    hours: int = Field(ge=1, le=72)
-    city: LocIn
+    hours: int = Field(default=4, ge=1, le=24)
+    days: int = Field(default=1, ge=1, le=30)
+    city: LocIn  # pickup place
     pickup: str = Field(min_length=2, max_length=150)
-    destination: str = Field(default="", max_length=150)
-    passengers: int = Field(default=1, ge=1, le=8)
-    vehicle_type: str = Field(max_length=20)
-    vehicle_desc: str = Field(min_length=2, max_length=80)
+    destination: str = Field(min_length=2, max_length=150)
+    passengers: int = Field(default=1, ge=1, le=20)
+    vehicle_type: str = Field(default="", max_length=20)  # rent: customer's car type (optional) · book: required category
+    vehicle_desc: str = Field(default="", max_length=80)  # rent only: customer's car
     notes: str = Field(default="", max_length=500)
-    subdistrict_code: str = Field(max_length=10)  # pickup taluk (auto-identified, possibly corrected by the customer)
+    subdistrict_code: str = Field(max_length=10)  # DESTINATION taluk (auto-identified, possibly corrected by the customer)
+    pickup_subdistrict_code: Optional[str] = Field(default=None, max_length=10)
     taluk_method: str = Field(default="manual", max_length=30)
     include_nearby: bool = False
+    driver_id: Optional[str] = Field(default=None, max_length=40)  # request one listed driver only
+
+
+def taluk_snap(sd: dict) -> dict:
+    return {k: sd[k] for k in ("code", "name", "district_code", "district_name", "state_code", "state_name", "sub_label")}
 
 
 @api.post("/hire/requests")
 async def hire_request_create(body: LocalHireIn, user: dict = Depends(get_user)):
-    """Broadcast a hire request to every eligible driver whose registered home taluk is the PICKUP taluk (never the destination's)."""
+    """Send a request to eligible drivers serving the DESTINATION taluk (home or declared service area), optionally nearby ones."""
     sd = await subdistrict_doc(body.subdistrict_code)
+    psd = await subdistrict_doc(body.pickup_subdistrict_code) if body.pickup_subdistrict_code else None
+    r = request_shape(body.service, body.service_type, body.date, body.time, body.hours, body.days, body.vehicle_type, body.passengers)
     dt = datetime.strptime(f"{body.date} {body.time}", "%Y-%m-%d %H:%M").replace(tzinfo=IST)
     if dt < now():
         raise HTTPException(400, "Start time must be in the future")
     if await db.hire_requests.find_one({"passenger_id": user["user_id"], "date": body.date, "time": body.time, "status": "open"}):
         raise HTTPException(409, "You already have an open request for this date and time")
-    codes = [sd["code"]]
-    if body.include_nearby:
-        codes += [s["code"] for s in await db.lgd_subdistricts.find({"district_code": sd["district_code"], "code": {"$ne": sd["code"]}}, {"_id": 0, "code": 1}).to_list(300)]
-    drivers = await eligible_local_drivers(codes, body.date, body.time, body.hours, body.vehicle_type, user["user_id"])
+    drivers = await eligible_local_drivers(local_area(sd["code"]), r, user["user_id"])
+    if body.include_nearby or body.driver_id:
+        drivers += await eligible_local_drivers(await nearby_area(sd, psd["code"] if psd else None, body.service_type == "outstation"), r, user["user_id"])
+    if body.driver_id:
+        drivers = [p for p in drivers if p["user_id"] == body.driver_id]
+        if not drivers:
+            raise HTTPException(404, "This driver is no longer available for this trip")
     if not drivers:
-        raise HTTPException(404, "No eligible drivers right now" + ("" if body.include_nearby else f" in {sd['name']}. Try including nearby {sd['sub_label'].lower()}s."))
+        raise HTTPException(404, f"No eligible {SERVICE_NAME[body.service]} drivers right now" + ("" if body.include_nearby else f" for {sd['name']}. Try including nearby areas."))
     await rate_limit(f"hirereq:{user['user_id']}", 10, 3600, "Too many hire requests. Please try again later.")
     rid = "LHR-" + secrets.token_hex(4).upper()
-    req = {"request_id": rid, **body.model_dump(exclude={"subdistrict_code", "include_nearby"}), "city": loc_snapshot(body.city), "passenger_id": user["user_id"],
-           "pickup_taluk": {k: sd[k] for k in ("code", "name", "district_code", "district_name", "state_code", "state_name", "sub_label")},
-           "include_nearby": body.include_nearby, "status": "open", "starts_at": dt.astimezone(timezone.utc), "created_at": now(), "driver_id": None, "booking_id": None}
+    req = {"request_id": rid, **body.model_dump(exclude={"subdistrict_code", "pickup_subdistrict_code", "include_nearby", "driver_id"}), **r,
+           "city": loc_snapshot(body.city), "passenger_id": user["user_id"], "dest_taluk": taluk_snap(sd), "pickup_taluk": taluk_snap(psd) if psd else None,
+           "include_nearby": body.include_nearby, "target_driver_id": body.driver_id, "status": "open", "starts_at": dt.astimezone(timezone.utc),
+           "created_at": now(), "driver_id": None, "booking_id": None}
     await db.hire_requests.insert_one(req)
+    sent = 0
     for p in drivers:
-        local = p["home"]["subdistrict_code"] == sd["code"]
+        group = match_group(p, sd["code"], psd["code"] if psd else None)
         try:  # unique (request_id, driver_id) -> never notify the same driver twice for one request
-            await db.hire_dispatches.insert_one({"request_id": rid, "driver_id": p["user_id"], "group": "local" if local else "nearby",
+            await db.hire_dispatches.insert_one({"request_id": rid, "driver_id": p["user_id"], "group": group, "service": body.service,
                                                  "notified_at": now(), "seen_at": None, "response": None})
         except DuplicateKeyError:
             continue
-        await notify(p["user_id"], "local_hire_request", {"pickup": body.pickup, "taluk": f"{sd['name']} {sd['sub_label']}", "destination": body.destination or "—",
-                                                          "date": dt.strftime("%d %b %Y"), "time": body.time, "passengers": body.passengers, "local": local}, rid)
+        sent += 1
+        await notify(p["user_id"], "local_hire_request", {"service": SERVICE_NAME[body.service], "pickup": body.pickup, "taluk": f"{sd['name']} {sd['sub_label']}",
+                                                          "destination": body.destination, "date": dt.strftime("%d %b %Y"), "time": body.time,
+                                                          "passengers": body.passengers, "local": group == "local"}, rid)
     req.pop("_id", None)
-    req["notified"] = len(drivers)
+    req["notified"] = sent
     return req
 
 
@@ -3155,6 +3428,7 @@ async def hire_request_action(rid: str, action: Literal["accept", "decline", "ca
     if not r:
         raise HTTPException(404, "Request not found")
     uid = user["user_id"]
+    svc = SERVICE_NAME.get(r.get("service") or "rent")
     if action == "cancel":
         if r["passenger_id"] != uid:
             raise HTTPException(403, "Only the customer can cancel")
@@ -3169,9 +3443,14 @@ async def hire_request_action(rid: str, action: Literal["accept", "decline", "ca
     if d.get("response"):
         raise HTTPException(409, f"You already {d['response']} this request")
     if action == "decline":
-        await db.hire_dispatches.update_one({"request_id": rid, "driver_id": uid}, {"$set": {"response": "declined", "responded_at": now()}})
+        await db.hire_dispatches.update_one({"request_id": rid, "driver_id": uid, "response": None}, {"$set": {"response": "declined", "responded_at": now()}})
+        if r["status"] == "open" and not await db.hire_dispatches.count_documents({"request_id": rid, "response": None}):
+            if (await db.hire_requests.update_one({"request_id": rid, "status": "open"}, {"$set": {"status": "declined", "declined_at": now()}})).modified_count:
+                await notify(r["passenger_id"], "local_hire_declined", {"service": svc, "destination": r.get("destination") or r["pickup"]}, rid)
         return {"ok": True}
     # accept: request must not have started, driver must still be eligible, then one atomic open -> fulfilled transition wins
+    if r["status"] != "open":
+        raise HTTPException(409, "Another driver has already accepted this request" if r["status"] == "fulfilled" else "This request is no longer open")
     if r["starts_at"].replace(tzinfo=timezone.utc) <= now():
         await db.hire_requests.update_one({"request_id": rid, "status": "open"}, {"$set": {"status": "expired", "expired_at": now()}})
         raise HTTPException(400, "This request's start time has passed")
@@ -3187,20 +3466,24 @@ async def hire_request_action(rid: str, action: Literal["accept", "decline", "ca
 
 
 async def accept_locked(r: dict, rid: str, uid: str, p: Optional[dict]) -> dict:
-    still = await eligible_local_drivers([p["home"]["subdistrict_code"]] if p and p.get("home") else [], r["date"], r["time"], r["hours"], None, r["passenger_id"])
-    if not any(x["user_id"] == uid for x in still):
-        raise HTTPException(409, "You are not available for this time any more (another booking or availability change)")
+    r = {**r, "service": r.get("service") or "rent"}
+    still = await eligible_local_drivers({"user_id": uid}, r, r["passenger_id"]) if p else []
+    me = next((x for x in still if x["user_id"] == uid), None)
+    if not me:
+        raise HTTPException(409, "You are not available for this trip any more (service, vehicle, availability or another booking)")
+    vehicle = me.get("match_vehicle")
     bid = "HIR-" + secrets.token_hex(4).upper()
     won = await db.hire_requests.find_one_and_update({"request_id": rid, "status": "open"},
                                                      {"$set": {"status": "fulfilled", "driver_id": uid, "booking_id": bid, "fulfilled_at": now()}})
     if not won:
         raise HTTPException(409, "Another driver has already accepted this request")
-    h = {"booking_id": bid, "driver_id": uid, "passenger_id": r["passenger_id"], "service_type": r["service_type"], "date": r["date"], "time": r["time"],
-         "hours": r["hours"], "city": r["city"], "pickup": r["pickup"], "destination": r["destination"], "vehicle_type": r["vehicle_type"],
-         "vehicle_desc": r["vehicle_desc"], "notes": r["notes"], "passengers": r.get("passengers", 1), "service_fee": hire_estimate(p, r["service_type"], r["hours"]),
-         "route": f"{r['city']['name']} · {r['pickup']}" + (f" → {r['destination']}" if r["destination"] else ""), "status": "confirmed",
+    h = {"booking_id": bid, "driver_id": uid, "passenger_id": r["passenger_id"], "service": r["service"], "service_type": r["service_type"], "date": r["date"],
+         "time": r["time"], "hours": r["hours"], "days": r.get("days", 1), "city": r["city"], "pickup": r["pickup"], "destination": r["destination"],
+         "vehicle_type": r["vehicle_type"], "vehicle_desc": r.get("vehicle_desc", ""), "vehicle": vehicle, "notes": r["notes"], "passengers": r.get("passengers", 1),
+         "service_fee": quote(p, r, vehicle),
+         "route": f"{r['pickup']}" + (f" → {r['destination']}" if r["destination"] else ""), "status": "confirmed",
          "starts_at": r["starts_at"], "settlement": {"status": "unpaid"}, "created_at": now(), "accept_at": now(), "request_id": rid,
-         "pickup_taluk": r["pickup_taluk"]}
+         "pickup_taluk": r.get("pickup_taluk"), "dest_taluk": r.get("dest_taluk")}
     await db.hires.insert_one(h)
     start = r["starts_at"].replace(tzinfo=timezone.utc)
     if await has_clash(uid, start, start + timedelta(hours=r["hours"]), exclude_booking=bid):  # lost a race with another accept
@@ -3215,12 +3498,48 @@ async def accept_locked(r: dict, rid: str, uid: str, p: Optional[dict]) -> dict:
     return {"ok": True, "booking_id": bid}
 
 
+def svc_filter(service: str) -> dict:
+    return {} if service == "all" else {"service": "book"} if service == "book" else {"$or": [{"service": "rent"}, {"service": {"$exists": False}}]}
+
+
+@api.get("/admin/hire-bookings")
+async def admin_hire_bookings(service: Literal["all", "rent", "book"] = "all", _: dict = Depends(get_admin)):
+    """Local-driver (Rent / Book a Driver) records, kept separate from carpool bookings."""
+    names: dict = {}
+
+    async def name(uid: Optional[str]) -> str:
+        if uid and uid not in names:
+            names[uid] = (await db.users.find_one({"user_id": uid}, {"_id": 0, "name": 1}) or {}).get("name", "—")
+        return names.get(uid, "—") if uid else "—"
+
+    bookings = await db.hires.find(svc_filter(service), {"_id": 0, "city.geo": 0}).sort("created_at", -1).to_list(200)
+    for h in bookings:
+        h["driver_name"], h["customer_name"] = await name(h.get("driver_id")), await name(h.get("passenger_id"))
+    requests = await db.hire_requests.find(svc_filter(service), {"_id": 0, "city.geo": 0}).sort("created_at", -1).to_list(200)
+    for r in requests:
+        r["customer_name"] = await name(r.get("passenger_id"))
+        r["notified"] = await db.hire_dispatches.count_documents({"request_id": r["request_id"]})
+        r["declined"] = await db.hire_dispatches.count_documents({"request_id": r["request_id"], "response": "declined"})
+    return {"bookings": bookings, "requests": requests}
+
+
+@api.get("/admin/hire-reports")
+async def admin_hire_reports(_: dict = Depends(get_admin)):
+    pro_ids = [p["user_id"] for p in await db.pro_drivers.find({}, {"_id": 0, "user_id": 1}).to_list(5000)]
+    return await db.tickets.find({"$or": [{"booking_id": {"$regex": "^(HIR|LHR)-"}}, {"reported_user_id": {"$in": pro_ids}}]}, {"_id": 0}).sort("created_at", -1).to_list(200)
+
+
 @api.get("/admin/pro-drivers")
-async def admin_pro_drivers(status: str = "under_review", _: dict = Depends(get_admin)):
-    rows = await db.pro_drivers.find({"status": status}, {"_id": 0, "city.geo": 0}).to_list(200)
+async def admin_pro_drivers(status: str = "under_review", service: Literal["all", "rent", "book"] = "all", _: dict = Depends(get_admin)):
+    q: dict = {"status": status}
+    if service != "all":
+        q.update(svc_q(service))
+    rows = await db.pro_drivers.find(q, {"_id": 0, "city.geo": 0}).to_list(200)
     for r in rows:
         r["documents"] = await db.driver_documents.find_one({"user_id": r["user_id"]}, {"_id": 0, "photos": 1})
         r["email"] = (await db.users.find_one({"user_id": r["user_id"]}, {"_id": 0, "email": 1}) or {}).get("email")
+        r["services"] = r.get("services") or ["rent"]
+        r["availability_status"] = pro_status(r)
     return rows
 
 

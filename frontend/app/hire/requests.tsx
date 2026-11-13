@@ -4,6 +4,7 @@ import { RefreshControl, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { api } from "@/src/api";
+import { confirmAction, SERVICE_LABEL, TYPE_LABEL } from "@/src/components/LocalDriverParts";
 import { useToast } from "@/src/components/toast";
 import { Badge, Btn, Card, Chip, Empty, Header, Loading, T, space } from "@/src/components/ui";
 import { useI18n } from "@/src/i18n";
@@ -37,25 +38,29 @@ export default function HireRequests() {
   const rows = tab === "inbox" ? data?.inbox ?? [] : data?.mine ?? [];
   return (
     <View style={{ flex: 1, backgroundColor: colors.surface }}>
-      <Header title="Local hire requests" />
+      <Header title="Booking requests" />
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }} contentContainerStyle={{ gap: space.sm, paddingHorizontal: space.lg, height: 56, alignItems: "center" }}>
         <View style={{ flexShrink: 0 }}><Chip testID="hire-requests-tab-inbox" label={`For me (${data?.inbox.length ?? 0})`} active={tab === "inbox"} onPress={() => setTab("inbox")} /></View>
         <View style={{ flexShrink: 0 }}><Chip testID="hire-requests-tab-mine" label={`My requests (${data?.mine.length ?? 0})`} active={tab === "mine"} onPress={() => setTab("mine")} /></View>
       </ScrollView>
       {!data ? <Loading /> : (
         <ScrollView refreshControl={<RefreshControl refreshing={false} onRefresh={load} />} contentContainerStyle={{ padding: space.lg, gap: space.md, paddingBottom: insets.bottom + space.xl }}>
-          {rows.length === 0 ? <Empty icon="people-outline" title={tab === "inbox" ? "No requests from your taluk yet" : "No local hire requests yet"} /> : null}
+          {rows.length === 0 ? <Empty icon="people-outline" title={tab === "inbox" ? "No requests for your service areas yet" : "No driver requests yet"} /> : null}
           {rows.map((r) => (
             <Card key={r.request_id} testID={`hire-request-${r.request_id}`} style={{ gap: space.xs }}>
               <View style={{ flexDirection: "row", gap: space.sm, alignItems: "center" }}>
-                <T weight="800" style={{ flex: 1 }}>{r.city?.name} → {r.destination || "Local"}</T>
-                <Badge testID={`hire-request-status-${r.request_id}`} label={r.status === "open" ? "Open" : r.status === "fulfilled" ? "Driver confirmed" : r.status === "expired" ? "Expired" : r.status === "cancelled" ? "Cancelled" : r.status} tone={r.status === "open" ? "warning" : r.status === "fulfilled" ? "success" : "muted"} />
+                <T weight="800" style={{ flex: 1 }}>{r.pickup} → {r.destination || "Local"}</T>
+                <Badge testID={`hire-request-status-${r.request_id}`} label={r.status === "open" ? "Open" : r.status === "fulfilled" ? "Driver confirmed" : r.status === "expired" ? "Expired" : r.status === "cancelled" ? "Cancelled" : r.status === "declined" ? "Declined" : r.status} tone={r.status === "open" ? "warning" : r.status === "fulfilled" ? "success" : "muted"} />
               </View>
-              <T size={13}>Pickup: {r.pickup}</T>
-              <T size={12} color={colors.muted}>{when(r)} · {r.pickup_taluk?.name} {r.pickup_taluk?.sub_label}, {r.pickup_taluk?.district_name}</T>
+              <Badge testID={`hire-request-service-${r.request_id}`} label={`${SERVICE_LABEL[r.service ?? "rent"]} · ${TYPE_LABEL[r.service_type] ?? r.service_type}${r.days > 1 ? ` · ${r.days} days` : ""}`} tone="info" />
+              <T size={13}>Pickup: {r.pickup}{r.pickup_taluk && r.dest_taluk ? ` (${r.pickup_taluk.name})` : ""}</T>
+              {r.dest_taluk ? <T size={13}>Destination taluk: {r.dest_taluk.name} {r.dest_taluk.sub_label}, {r.dest_taluk.district_name}</T> : null}
+              <T size={12} color={colors.muted}>{when(r)}{!r.dest_taluk && r.pickup_taluk ? ` · ${r.pickup_taluk.name} ${r.pickup_taluk.sub_label}, ${r.pickup_taluk.district_name}` : ""}</T>
+              {r.service === "book" ? <T size={12} color={colors.muted}>Vehicle needed: {(r.vehicle_type || "any").toUpperCase()} for {r.passengers}</T> : r.vehicle_desc ? <T size={12} color={colors.muted}>Customer car: {r.vehicle_desc}</T> : null}
+              {r.notes ? <T size={12} color={colors.muted}>Notes: {r.notes}</T> : null}
               {tab === "inbox" ? (
                 <>
-                  {r.dispatch?.group === "nearby" ? <Badge label="Nearby taluk request" tone="info" /> : <Badge label="From your registered taluk" tone="success" />}
+                  {r.dispatch?.group === "local" ? <Badge label="In your service area" tone="success" /> : r.dispatch?.group === "pickup_area" ? <Badge label="Outstation · from your area" tone="accent" /> : <Badge label="Nearby area request" tone="info" />}
                   {r.status === "open" && !r.dispatch?.response ? (
                     <View style={{ flexDirection: "row", gap: space.sm, marginTop: space.xs }}>
                       <Btn style={{ flex: 1 }} testID={`hire-request-accept-${r.request_id}`} label="Accept" loading={busy === r.request_id + "accept"} onPress={() => act(r.request_id, "accept")} />
@@ -66,7 +71,7 @@ export default function HireRequests() {
               ) : (
                 <>
                   {r.status === "fulfilled" && r.booking_id ? <Btn small testID={`hire-request-open-booking-${r.request_id}`} label="Open booking" onPress={() => router.push(`/hire/${r.booking_id}`)} /> : null}
-                  {r.status === "open" ? <Btn variant="outline" testID={`hire-request-cancel-${r.request_id}`} label="Cancel request" loading={busy === r.request_id + "cancel"} onPress={() => act(r.request_id, "cancel")} /> : null}
+                  {r.status === "open" ? <Btn variant="outline" testID={`hire-request-cancel-${r.request_id}`} label="Cancel request" loading={busy === r.request_id + "cancel"} onPress={() => confirmAction("Cancel this request?", "Drivers who received it will be told it is closed.", () => act(r.request_id, "cancel"))} /> : null}
                 </>
               )}
             </Card>

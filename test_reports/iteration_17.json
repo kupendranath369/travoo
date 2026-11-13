@@ -1,0 +1,57 @@
+{
+  "summary": "Tested the unified Local Driver (Rent a Driver / Book a Driver) backend and UI, plus regression. Backend: iter17 14/14, new iter18 edge-case suite 14/14 (legacy rent-only drivers, PUT /pro/settings book without vehicles -> 400, PUT /pro/vehicles, dashboard earnings after arriving/start/complete, customer cancel notifies every dispatched driver, destination taluk with drivers only in the pickup taluk -> 404, review, admin hire-reports), iter16 17/17, iter15 25/28 (all 3 failures come from the intended semantic change, not real bugs), carpool iter13 10/10 and trips/search 200. Frontend at 390x844 works end to end: /hire chooser cards and both forms, destination taluk card (Hiriyur from a Gajwel pickup), results with group badge, vehicle and estimate, favourite toggle, request-this-driver -> /hire/requests; as the driver: inbox with service badge, Accept -> /hire/HIR-..., vehicle shown, I am arriving (customer notified), dashboard status chips and 4 tabs, save vehicles; /hire/register service picker and vehicle editor; customer booking page with contact, favourite, report and cancel; admin Local drivers (service filter), Driver hire bookings and Driver reports open with no crash. No deprecated Expo packages and no SafeAreaView issues found. Main problems: wrong 'driving your car' fee text on Book a Driver screens, and cancel actions with no confirmation step.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/hire/requests", "issue": "rate_limit('hirereq') runs only after the eligibility queries and only on success. 404 'no drivers' probes are unlimited and each runs 2 driver queries."},
+      {"endpoint": "POST /api/hire/bookings/{bid}/start|complete", "issue": "No time check. A driver can start or complete a booking days before starts_at, which also moves earnings early."},
+      {"endpoint": "PUT /api/pro/settings", "issue": "Book a Driver can be turned on when every vehicle is marked unavailable. The driver then never matches and gets no warning."},
+      {"endpoint": "tests/test_travoo_api.py", "issue": "The TestDriverFlow admin fixture logs in through /api/auth/login, which now returns 403 for admins ('must sign in through the Admin Portal'). It is outdated test infrastructure, not an app bug; carpool was checked with test_iter13_retest_fixes.py instead."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Fee note under results / booking detail", "issue": "v2.service_fee_note ('This is the driver's service fee for driving your car - not a carpool fuel contribution') is shown for Book a Driver too, where the driver brings the car and the estimate includes the vehicle charge. Reference: /app/frontend/app/hire/index.tsx:223, /app/frontend/app/hire/[id].tsx:84", "testID": "hire-find-button / hire-booking-id", "priority": "MEDIUM"},
+      {"component": "Cancel booking / Cancel request", "issue": "One tap cancels at once with no confirmation (checked: hire-cancel-button cancelled HIR booking instantly). Easy to cancel by accident on mobile. Reference: /app/frontend/app/hire/[id].tsx:96, /app/frontend/app/hire/requests.tsx:74", "testID": "hire-cancel-button, hire-request-cancel-{rid}", "priority": "MEDIUM"},
+      {"component": "Local driver registration validation", "issue": "Submitting the empty form shows only 'City *' in pro-error. There is also a separate 'City' field (pro-city-field) at the bottom besides Home location City/Town, which is confusing. Reference: /app/frontend/app/hire/register.tsx", "testID": "pro-error, pro-city-field", "priority": "LOW"},
+      {"component": "Cancelled hire booking driver card", "issue": "A cancelled booking shows 'Phone number is shown after the booking is confirmed', which is misleading once the booking is cancelled. Reference: /app/frontend/app/hire/[id].tsx", "testID": "hire-booking-status", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Hire form / registration", "issues": ["Stepper +/- buttons are 40x40, below the 44pt minimum (src/components/ui.tsx:313).", "Hire results for Hiriyur list 9 drivers, mostly TEST_ drivers from repeated test runs, including duplicate names (TEST_HireBOTH17 x2). This is data pollution in the shared DB, not a UI bug."]},
+      {"screen": "Admin > Local drivers", "issues": ["Document thumbnails showed as empty grey boxes in the screenshot (taken about 2.5s after load). /api/files/{fid} returns 200 image/jpeg, so this may only be load time. Please check that the thumbnails actually render."]}
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter18_local_driver_edges.py",
+    "/app/backend/tests/test_iter17_unified_local_driver.py",
+    "/app/backend/tests/cleanup_iter18_ui.py",
+    "/app/test_reports/pytest/iter18_results.xml"
+  ],
+  "action_items": [
+    "Show a Book-a-Driver fee note (driver fee + vehicle charge, driver provides the car) instead of v2.service_fee_note when service === 'book' (hire/index.tsx:223, hire/[id].tsx:84).",
+    "Add a confirmation (Alert / modal) before cancelling a hire booking and before cancelling an open request.",
+    "Make the registration validation message clear (e.g. 'Choose your city') and merge or relabel the extra 'City' field so it is not confused with Home location City/Town.",
+    "Hide the 'Phone number is shown after the booking is confirmed' hint on cancelled or completed bookings.",
+    "Optional: enlarge Stepper buttons to 44x44; move rate_limit in POST /hire/requests before the eligibility search; block start/complete well before starts_at; warn when Book a Driver is on but no vehicle is available.",
+    "Optional: update or retire the admin fixture in test_travoo_api.py (admin must use /api/admin/auth/login)."
+  ],
+  "critical_code_review_comments": [
+    "server.py is 3,596 lines, far beyond 700. Split the hire/local-driver code (pro_*, hire_*, eligible_local_drivers, accept_locked, admin hire views) into its own router module.",
+    "The accept path is sound: per-driver hire_locks plus an atomic open->fulfilled find_one_and_update plus a post-insert clash rollback. Two drivers accepting at once gave exactly [200, 409] in tests.",
+    "Destination-taluk matching is correct: local_area = home or service_taluk_codes; nearby requires accepts_outside_area; outstation requires accepts_outstation and adds pickup-taluk drivers only as nearby/pickup_area.",
+    "Legacy profiles without a services field are treated as rent-only everywhere (svc_q, admin listing, favourites, dashboard) - verified.",
+    "The startup log shows 'object storage init failed: EMERGENT_LLM_KEY' (the key is not in backend/.env and not in the process environ), but file upload and GET /api/files work at runtime. Check where the key comes from so a cold start does not break uploads."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter18_local_driver_edges.py (new)",
+    "/app/backend/tests/cleanup_iter18_ui.py (new, deletes only the UI-test records by id)"
+  ],
+  "success_rate": {"backend": "100% of real behaviour (iter17 14/14, iter18 14/14, iter16 17/17, iter13 carpool 10/10; iter15 25/28 with 3 semantic-only failures)", "frontend": "95% (all flows functional; copy/UX issues only)"},
+  "seed_data_creation": "Test drivers TEST_HireLEG18/E18/BK18/GO18 and customers TEST_Pax18/Pax18b created via API (approved, password Passw0rd!x). UI test as the demo passenger created request LHR-5A5640FE, booking HIR-8288A5DC, ticket TKT-268A48 and a favourite; all were removed by id afterwards (favourite toggled back off in the UI, the rest deleted via cleanup_iter18_ui.py). No seed or user data was changed.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run: cd /app/backend/tests && pytest test_iter17_unified_local_driver.py test_iter18_local_driver_edges.py -c /dev/null -p no:xdist -v. The admin token is cached in /tmp/admtok (admin login is rate limited). iter15 known semantic failures: test_nearby_group / test_nearby_broadcast_decline_cancel (driver D lacks accepts_outside_area, now required for nearby) and test_broadcast_local (expects pickup_taluk = subdistrict_code; pickup_taluk is now only set from pickup_subdistrict_code). Web login: language-option-en -> language-continue-button -> auth-toggle-mode -> auth-email-input / auth-password-input / auth-submit-button. LocationField: tap field -> location-search-input -> location-option-* (OSM, 'Gajwel' / 'Hiriyur' work). Stepper values use the {testID}-value / -plus / -minus suffix (e.g. hire-days-value). Server clock is 2026-11-13.",
+  "rca_of_issue": "iter15 regression failures: (1) nearby_area now requires accepts_outside_area=True, and iter15 driver D (Holalkere) was registered without it, so it is no longer offered as nearby - intended by the new rule. (2) pickup_taluk is now built from pickup_subdistrict_code (subdistrict_code is the destination), and the old test sends no pickup code, so pickup_taluk is None - intended. Neither is a product bug."
+}
