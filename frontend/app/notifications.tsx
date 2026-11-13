@@ -37,7 +37,7 @@ export default function NotificationsScreen() {
           contentContainerStyle={{ padding: space.lg, gap: space.sm, paddingBottom: insets.bottom + space.xl }}
           ListEmptyComponent={<Empty icon="notifications-off-outline" title={t("notif.empty")} />}
           renderItem={({ item }) => (
-            <Card testID={`notification-${item.notif_id}`} onPress={() => item.ref && router.push(item.type === "new_message" ? `/chat/${item.ref}` : `/booking/${item.ref}`)} style={{ flexDirection: "row", gap: space.md, alignItems: "center", padding: space.md, borderColor: item.read ? colors.border : colors.brandPrimary }}>
+            <Card testID={`notification-${item.notif_id}`} onPress={() => item.ref && router.push(item.type === "new_message" ? `/chat/${item.ref}` : item.ref.startsWith("LHR-") ? "/hire/requests" : item.ref.startsWith("HIR-") ? `/hire/${item.ref}` : `/booking/${item.ref}`)} style={{ flexDirection: "row", gap: space.md, alignItems: "center", padding: space.md, borderColor: item.read ? colors.border : colors.brandPrimary }}>
               <Ionicons name={ICON[item.type] ?? "notifications"} size={22} color={colors.brandPrimary} />
               <View style={{ flex: 1 }}>
                 <T weight={item.read ? "500" : "700"}>{t(`notif.${item.type}`, item.params)}</T>

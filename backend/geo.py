@@ -756,4 +756,5 @@ def get_router(db, get_admin: Callable) -> APIRouter:
                 "outdated": await db.locations.count_documents({"stale": True}),
                 "pending_requests": await db.missing_locations.count_documents({"status": "pending"})}
 
+    r.nominatim_reverse = nominatim_reverse
     return r

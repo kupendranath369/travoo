@@ -7,8 +7,9 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { api, Loc, locPayload } from "@/src/api";
 import { useAuth } from "@/src/auth";
 import { TimeChips } from "@/src/components/DateChips";
-import { DocPhotos } from "@/src/components/DocPhotos";
+import { DocFile, DocKind, DocPhotos } from "@/src/components/DocPhotos";
 import { LocationField } from "@/src/components/LocationField";
+import { HomeLoc, TalukPicker } from "@/src/components/TalukPicker";
 import { useToast } from "@/src/components/toast";
 import { Badge, Btn, Card, Chip, Field, Header, Loading, Stepper, T, space, statusTone } from "@/src/components/ui";
 import { useI18n } from "@/src/i18n";
@@ -34,9 +35,15 @@ export default function ProRegister() {
   const [to, setTo] = useState("20:00");
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
+  const [home, setHome] = useState<HomeLoc>({ taluk: null, city: "", city_code: null, village_code: null, village_name: null });
+  const [docs, setDocs] = useState<{ files: DocFile[]; kinds: DocKind[] } | null>(null);
+  const [avail, setAvail] = useState<boolean | null>(null);
   const set = (k: keyof typeof f) => (v: string) => setF({ ...f, [k]: k.startsWith("rate") ? v.replace(/\D/g, "") : v });
   const toggle = <X,>(arr: X[], x: X, fn: (a: X[]) => void) => fn(arr.includes(x) ? arr.filter((y) => y !== x) : [...arr, x]);
-  const load = useCallback(() => api("/pro/me").then(setMe).catch((e) => setErr(e.message)), []);
+  const load = useCallback(() => {
+    api("/driver/profile").then((r) => setDocs({ files: r.files ?? [], kinds: (r.kinds ?? []).filter((k: DocKind) => k.kind.startsWith("licence")) })).catch(() => {});
+    return api("/pro/me").then((r) => { setMe(r); setAvail(r.profile ? r.profile.available !== false : null); }).catch((e) => setErr(e.message));
+  }, []);
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
   if (!me) return <View style={{ flex: 1 }}><Header title={t("v2.local_register")} /><Loading /></View>;
@@ -47,12 +54,14 @@ export default function ProRegister() {
   const submit = async () => {
     setErr("");
     if (!city) return setErr(`${t("v2.city")} *`);
+    if (!home.taluk) return setErr("Choose your home State, District and Taluk / Sub-district");
+    if (home.city.trim().length < 2) return setErr("Choose or type your City / Town");
     if (!langs.length) return setErr(`${t("v2.languages")} *`);
     if (f.bio.trim().length < 20) return setErr(`${t("v2.about_me")} * (20+)`);
     if (!f.rate_hourly || !f.rate_half_day || !f.rate_full_day) return setErr(`${t("v2.rate_hourly")} *`);
     setBusy(true);
     try {
-      const r = await api("/pro/register", { body: { city: locPayload(city), areas: f.areas.split(",").map((x) => x.trim()).filter(Boolean), languages: langs, experience_years: exp, licence_no: f.licence_no.replace(/\s/g, ""), licence_expiry: f.licence_expiry, vehicle_types: vt, days, start_time: from, end_time: to, bio: f.bio.trim(), rate_hourly: Number(f.rate_hourly), rate_half_day: Number(f.rate_half_day), rate_full_day: Number(f.rate_full_day), rate_one_way: f.rate_one_way ? Number(f.rate_one_way) : null } });
+      const r = await api("/pro/register", { body: { city: locPayload(city), home: { subdistrict_code: home.taluk.code, city: home.city.trim(), city_code: home.city_code, village_code: home.village_code }, areas: f.areas.split(",").map((x) => x.trim()).filter(Boolean), languages: langs, experience_years: exp, licence_no: f.licence_no.replace(/\s/g, ""), licence_expiry: f.licence_expiry, vehicle_types: vt, days, start_time: from, end_time: to, bio: f.bio.trim(), rate_hourly: Number(f.rate_hourly), rate_half_day: Number(f.rate_half_day), rate_full_day: Number(f.rate_full_day), rate_one_way: f.rate_one_way ? Number(f.rate_one_way) : null } });
       toast(t(`verify.status.${r.status}`));
       load();
     } catch (e: any) {
@@ -68,10 +77,26 @@ export default function ProRegister() {
         <Card style={{ gap: space.xs }}>
           <T weight="800">{t("v2.local_status")}</T>
           <Badge testID="pro-status" label={t(`verify.status.${status ?? "not_submitted"}`)} tone={statusTone(status ?? "")} />
-          <T size={12} color={colors.muted}>{user?.name} · {user?.email} · {user?.phone || "—"}</T>
+          <T size={12} color={colors.muted}>{user?.name} · {user?.email ?? (user?.phone_e164 ? `+${user.phone_e164}` : "")} · {user?.phone || "—"}</T>
+          {me.profile?.home ? <T testID="pro-home-taluk" size={13} weight="700">Home: {[me.profile.home.village_name, me.profile.home.city, `${me.profile.home.subdistrict_name} ${me.profile.home.sub_label}`, me.profile.home.district_name, me.profile.home.state_name].filter(Boolean).join(", ")}</T> : null}
+          {status === "approved" && avail !== null ? (
+            <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm, marginTop: space.xs }}>
+              <T weight="600" style={{ flex: 1 }}>{avail ? "Available for local hire requests" : "Not taking requests"}</T>
+              <Btn small testID="pro-availability-toggle" variant={avail ? "outline" : "primary"} label={avail ? "Go unavailable" : "Go available"}
+                onPress={async () => { try { const r = await api("/pro/availability", { method: "PUT", body: { available: !avail } }); setAvail(r.available !== false); } catch (e: any) { setErr(e.message); } }} />
+            </View>
+          ) : null}
+          {status && !me.profile?.home ? (
+            <View style={{ gap: space.xs, marginTop: space.sm }}>
+              <T size={12} color={colors.brandTertiary}>Add your home taluk once to receive local hire requests.</T>
+              <TalukPicker testPrefix="pro-home-legacy" withCity value={home} onChange={setHome} />
+              <Btn small testID="pro-home-save" label="Save home taluk" disabled={!home.taluk || home.city.trim().length < 2}
+                onPress={async () => { try { await api("/pro/home", { method: "PUT", body: { subdistrict_code: home.taluk!.code, city: home.city.trim(), city_code: home.city_code, village_code: home.village_code } }); toast("Home taluk saved"); load(); } catch (e: any) { setErr(e.message); } }} />
+            </View>
+          ) : null}
         </Card>
         <T weight="800">{t("verify.photos")}</T>
-        <DocPhotos photos={me.photos} editable={!locked && user?.driver_status !== "under_review" && user?.driver_status !== "approved"} onUploaded={load} />
+        {docs ? <DocPhotos files={docs.files} kinds={docs.kinds} editable={!locked && user?.driver_status !== "under_review" && user?.driver_status !== "approved"} onChanged={load} /> : null}
         {locked ? (
           <Card style={{ gap: 4 }}>
             <T weight="700">{me.profile.city?.name} · {t("v2.years", { n: me.profile.experience_years })}</T>
@@ -80,6 +105,10 @@ export default function ProRegister() {
           </Card>
         ) : (
           <>
+            <Card style={{ paddingVertical: space.xs, gap: 0 }}>
+              <T weight="800" style={{ paddingTop: space.sm }}>Home location (used to match local hire requests)</T>
+              <TalukPicker testPrefix="pro-home" withCity value={home} onChange={setHome} />
+            </Card>
             <Card style={{ paddingVertical: space.xs }}><LocationField testID="pro-city-field" label={t("v2.city")} value={city} onChange={setCity} icon="business-outline" /></Card>
             <Field testID="pro-areas-input" label={t("v2.areas")} value={f.areas} onChangeText={set("areas")} />
             <T size={13} weight="600" color={colors.muted}>{t("v2.languages")}</T>

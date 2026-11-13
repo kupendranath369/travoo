@@ -35,6 +35,7 @@ try:
 except ImportError:
     ImageContent = LlmChat = StreamDone = TextDelta = UserMessage = None
 from geo import GEO_INDEXES, LOC_OUT, circle, get_router, haversine, loc_doc
+from lgd import LGD_INDEXES, identify as lgd_identify, import_lgd as lgd_import, sub_label as lgd_sub_label
 from seed_data import PLACES, POPULAR_ROUTES, STATES
 
 ROOT_DIR = Path(__file__).parent
@@ -87,12 +88,17 @@ INDEXES: dict[str, list[IndexModel]] = {
                 IndexModel([("target_id", ASCENDING)], name="target")],
     "messages": [IndexModel([("booking_id", ASCENDING), ("created_at", ASCENDING)], name="booking_time")],
     "phone_tickets": [IndexModel([("ticket_hash", ASCENDING)], name="ticket", unique=True), IndexModel([("expires_at", ASCENDING)], name="ttl", expireAfterSeconds=0)],
+    "hire_requests": [IndexModel([("request_id", ASCENDING)], name="rid", unique=True), IndexModel([("passenger_id", ASCENDING), ("created_at", DESCENDING)], name="pax")],
+    "hire_dispatches": [IndexModel([("request_id", ASCENDING), ("driver_id", ASCENDING)], name="req_driver", unique=True), IndexModel([("driver_id", ASCENDING)], name="driver")],
+    "hire_locks": [IndexModel([("driver_id", ASCENDING)], name="driver", unique=True), IndexModel([("expires_at", ASCENDING)], name="ttl", expireAfterSeconds=0)],
+
     "featured": [IndexModel([("feature_id", ASCENDING)], name="feaid", unique=True), IndexModel([("trip_id", ASCENDING)], name="trip"),
                  IndexModel([("status", ASCENDING), ("expires_at", ASCENDING)], name="status_exp")],
     "notifications": [IndexModel([("user_id", ASCENDING), ("created_at", DESCENDING)], name="user_time")],
     "tickets": [IndexModel([("ticket_id", ASCENDING)], name="tkid", unique=True), IndexModel([("user_id", ASCENDING)], name="user")],
     "files": [IndexModel([("file_id", ASCENDING)], name="fid", unique=True), IndexModel([("owner_id", ASCENDING)], name="owner")],
     "pro_drivers": [IndexModel([("user_id", ASCENDING)], name="uid", unique=True), IndexModel([("city.geo", GEOSPHERE)], name="city_geo"),
+                    IndexModel([("home.subdistrict_code", ASCENDING), ("status", ASCENDING)], name="home_taluk"),
                     IndexModel([("status", ASCENDING)], name="status")],
     "hires": [IndexModel([("booking_id", ASCENDING)], name="bid", unique=True), IndexModel([("driver_id", ASCENDING), ("date", ASCENDING)], name="driver_date"),
               IndexModel([("passenger_id", ASCENDING)], name="customer")],
@@ -2684,6 +2690,7 @@ SERVICE_HOURS = {"hourly": None, "half_day": 4, "full_day": 8, "one_way": None, 
 
 class ProDriverIn(BaseModel):
     city: LocIn
+    home: "HomeLocIn"
     areas: List[str] = Field(default_factory=list, max_length=15)
     languages: List[str] = Field(min_length=1, max_length=10)
     experience_years: int = Field(ge=1, le=50)
@@ -2727,7 +2734,8 @@ async def pro_register(body: ProDriverIn, user: dict = Depends(get_user)):
     if missing:
         raise HTTPException(400, "Please add your " + " and ".join("profile photo (Profile screen)" if k == "profile" else "licence photo" for k in missing))
     status = "approved" if (await get_settings()).get("instant_driver_approval") else "under_review"
-    rec = {**body.model_dump(), "city": loc_snapshot(body.city), "licence_no": body.licence_no.upper(), "user_id": user["user_id"],
+    rec = {**body.model_dump(), "city": loc_snapshot(body.city), "home": await home_snapshot(body.home), "available": True,
+           "licence_no": body.licence_no.upper(), "user_id": user["user_id"],
            "name": user["name"], "status": status, "submitted_at": now(), "admin_note": ""}
     await db.pro_drivers.update_one({"user_id": user["user_id"]}, {"$set": rec}, upsert=True)
     await db.users.update_one({"user_id": user["user_id"]}, {"$set": {"bio": body.bio}})
@@ -2857,6 +2865,356 @@ async def hire_action(bid: str, action: Literal["accept", "reject", "start", "co
     return {"ok": True}
 
 
+# ---------------------------------------------------------------- India admin locations (LGD) + local-taluk hire matching
+@api.post("/admin/lgd/import")
+async def admin_lgd_import(admin: dict = Depends(get_admin)):
+    """Refresh India admin locations from the latest LGD release (upserts only; nothing is deleted)."""
+    app.state.lgd_task = asyncio.create_task(lgd_import(db))
+    await audit(admin["user_id"], "lgd.import", "lgd")
+    return {"status": "started"}
+
+
+@api.get("/lgd/status")
+async def lgd_status():
+    m = await db.lgd_meta.find_one({"key": "lgd"}, {"_id": 0}) or {}
+    return {"counts": m.get("counts", {}), "imported_at": m.get("imported_at"), "source": "Local Government Directory (Govt. of India) via ramSeraph/opendata"}
+
+
+@api.get("/lgd/states")
+async def lgd_states():
+    return await db.lgd_states.find({}, {"_id": 0, "norm": 0}).sort("name", 1).to_list(60)
+
+
+@api.get("/lgd/districts")
+async def lgd_districts(state_code: str = Query(max_length=10)):
+    return await db.lgd_districts.find({"state_code": state_code}, {"_id": 0, "norm": 0}).sort("name", 1).to_list(200)
+
+
+@api.get("/lgd/subdistricts")
+async def lgd_subdistricts(district_code: str = Query(max_length=10)):
+    return await db.lgd_subdistricts.find({"district_code": district_code}, {"_id": 0, "norm": 0}).sort("name", 1).to_list(300)
+
+
+@api.get("/lgd/villages")
+async def lgd_villages(subdistrict_code: str = Query(max_length=10), q: str = Query("", max_length=60), limit: int = Query(50, ge=1, le=200)):
+    f: dict = {"subdistrict_code": subdistrict_code}
+    if q.strip():
+        f["name"] = {"$regex": "^" + re.escape(q.strip()), "$options": "i"}
+    return await db.lgd_villages.find(f, {"_id": 0, "code": 1, "name": 1, "category": 1}).sort("name", 1).limit(limit).to_list(limit)
+
+
+@api.get("/lgd/subdistricts/search")
+async def lgd_subdistrict_search(q: str = Query(min_length=2, max_length=60)):
+    rows = await db.lgd_subdistricts.find({"name": {"$regex": "^" + re.escape(q.strip()), "$options": "i"}}, {"_id": 0, "norm": 0}).limit(20).to_list(20)
+    for r in rows:
+        r["sub_label"] = lgd_sub_label(r["state_name"])
+    return rows
+
+
+async def subdistrict_doc(code: str) -> dict:
+    sd = await db.lgd_subdistricts.find_one({"code": code}, {"_id": 0, "norm": 0})
+    if not sd:
+        raise HTTPException(400, "Unknown taluk / sub-district")
+    sd["sub_label"] = lgd_sub_label(sd["state_name"])
+    return sd
+
+
+@api.get("/hire/identify-taluk")
+async def hire_identify_taluk(loc_id: str = Query(max_length=120), pickup: str = Query("", max_length=150)):
+    """Pickup place -> LGD state/district/taluk using the stored geocode, a fresh reverse geocode and the LGD names."""
+    loc = await db.locations.find_one({"loc_id": loc_id}, {"_id": 0})
+    if not loc:
+        raise HTTPException(404, "Pickup place not found")
+    hint = loc.get("sub_district") or ""
+    rev = await geo_router.nominatim_reverse(loc["lat"], loc["lng"], 14) if not hint else None
+    if rev:
+        hint = rev.get("sub_district") or ""
+    names = [pickup.split(",")[0], loc.get("name", ""), (rev or {}).get("name", ""), loc.get("locality", "")]
+    res = await lgd_identify(db, state=loc.get("state", ""), district=loc.get("district", ""), sub_hint=hint, place_names=[n for n in names if n])
+    if not res:
+        return {"subdistrict": None, "confidence": "none", "method": "unmatched"}
+    if res.get("subdistrict"):
+        res["subdistrict"]["sub_label"] = lgd_sub_label(res["subdistrict"]["state_name"])
+    return res
+
+
+class HomeLocIn(BaseModel):
+    subdistrict_code: str = Field(max_length=10)
+    city: str = Field(min_length=2, max_length=80)
+    city_code: Optional[str] = Field(default=None, max_length=10)
+    village_code: Optional[str] = Field(default=None, max_length=10)
+
+
+ProDriverIn.model_rebuild()
+
+
+async def home_snapshot(h: HomeLocIn) -> dict:
+    sd = await subdistrict_doc(h.subdistrict_code)
+    out = {"state_code": sd["state_code"], "state_name": sd["state_name"], "district_code": sd["district_code"], "district_name": sd["district_name"],
+           "subdistrict_code": sd["code"], "subdistrict_name": sd["name"], "sub_label": sd["sub_label"], "city": h.city.strip(), "city_code": None,
+           "village_code": None, "village_name": None}
+    for key in ("city_code", "village_code"):
+        code = getattr(h, key)
+        if code:
+            v = await db.lgd_villages.find_one({"code": code, "subdistrict_code": sd["code"]}, {"_id": 0, "name": 1})
+            if not v:
+                raise HTTPException(400, "Selected town/village is not in that taluk")
+            out[key] = code
+            if key == "village_code":
+                out["village_name"] = v["name"]
+    return out
+
+
+class AvailabilityIn(BaseModel):
+    available: Optional[bool] = None
+    days: Optional[List[int]] = Field(default=None, min_length=1, max_length=7)
+    start_time: Optional[str] = Field(default=None, pattern=r"^\d{2}:\d{2}$")
+    end_time: Optional[str] = Field(default=None, pattern=r"^\d{2}:\d{2}$")
+
+
+@api.put("/pro/home")
+async def pro_set_home(body: HomeLocIn, user: dict = Depends(get_user)):
+    """One-time home taluk for hire drivers registered before taluk matching existed. Cannot overwrite an existing home."""
+    p = await db.pro_drivers.find_one({"user_id": user["user_id"]}, {"_id": 0, "home": 1})
+    if not p:
+        raise HTTPException(404, "Register as a hire driver first")
+    if p.get("home"):
+        raise HTTPException(400, "Your registered home taluk is already set. Contact support to change it.")
+    home = await home_snapshot(body)
+    await db.pro_drivers.update_one({"user_id": user["user_id"], "home": {"$exists": False}}, {"$set": {"home": home, "available": True}})
+    await audit(user["user_id"], "pro.home_set", user["user_id"], {"subdistrict": home["subdistrict_code"]})
+    return home
+
+
+@api.put("/pro/availability")
+async def pro_availability(body: AvailabilityIn, user: dict = Depends(get_user)):
+    """Availability only - the registered home taluk cannot be changed here."""
+    upd = {k: v for k, v in body.model_dump().items() if v is not None}
+    if not upd:
+        raise HTTPException(400, "Nothing to update")
+    res = await db.pro_drivers.update_one({"user_id": user["user_id"]}, {"$set": {**upd, "availability_updated_at": now()}})
+    if not res.matched_count:
+        raise HTTPException(404, "Register as a hire driver first")
+    return await db.pro_drivers.find_one({"user_id": user["user_id"]}, {"_id": 0, "available": 1, "days": 1, "start_time": 1, "end_time": 1, "home": 1})
+
+
+def hm(s: str) -> int:
+    h, m = s.split(":")
+    return int(h) * 60 + int(m)
+
+
+def fits_window(p: dict, time: str, hours: int) -> bool:
+    """Whole hire (start + hours) must sit inside the driver's daily window; overnight windows (e.g. 20:00-06:00) supported.
+    Multi-day hires (over 12 h, e.g. outstation) only need to START inside the window."""
+    s, e, t = hm(p.get("start_time", "00:00")), hm(p.get("end_time", "23:59")), hm(time)
+    if e <= s:  # overnight
+        e += 1440
+        if t < s:
+            t += 1440
+    return s <= t and (hours > 12 or t + hours * 60 <= e)
+
+
+async def has_clash(driver_id: str, start: datetime, end: datetime, exclude_booking: Optional[str] = None) -> bool:
+    q = {"driver_id": driver_id, "status": {"$in": ["confirmed", "started"]},
+         "starts_at": {"$lt": end.astimezone(timezone.utc), "$gte": (start - timedelta(hours=72)).astimezone(timezone.utc)}}
+    if exclude_booking:
+        q["booking_id"] = {"$ne": exclude_booking}
+    async for h in db.hires.find(q, {"_id": 0, "starts_at": 1, "hours": 1}):
+        if h["starts_at"].replace(tzinfo=timezone.utc) + timedelta(hours=h.get("hours", 4)) > start.astimezone(timezone.utc):
+            return True
+    return False
+
+
+async def eligible_local_drivers(sub_codes: list, date: str, time: str, hours: int, vehicle_type: Optional[str], exclude: str) -> list:
+    weekday = datetime.strptime(date, "%Y-%m-%d").weekday()
+    start = datetime.strptime(f"{date} {time}", "%Y-%m-%d %H:%M").replace(tzinfo=IST)
+    end = start + timedelta(hours=hours)
+    q = {"status": "approved", "home.subdistrict_code": {"$in": sub_codes}, "available": {"$ne": False}, "days": weekday, "user_id": {"$ne": exclude}}
+    if vehicle_type:
+        q["vehicle_types"] = vehicle_type
+    out = []
+    for p in await db.pro_drivers.find(q, {"_id": 0, "licence_no": 0, "licence_expiry": 0, "city.geo": 0}).to_list(300):
+        if not fits_window(p, time, hours):
+            continue
+        u = await db.users.find_one({"user_id": p["user_id"], "suspended": {"$ne": True}}, {"_id": 0, "user_id": 1})
+        if not u or await has_clash(p["user_id"], start, end):
+            continue
+        out.append(p)
+    return out
+
+
+@api.get("/hire/local-drivers")
+async def hire_local_drivers(subdistrict_code: str = Query(max_length=10), date: str = Query(pattern=r"^\d{4}-\d{2}-\d{2}$"),
+                             time: str = Query(pattern=r"^\d{2}:\d{2}$"), hours: int = Query(4, ge=1, le=72), service: str = "hourly",
+                             vehicle_type: Optional[str] = None, nearby: bool = False, language: Optional[str] = None, min_exp: int = 0,
+                             user: dict = Depends(get_user)):
+    sd = await subdistrict_doc(subdistrict_code)
+
+    async def present(rows: list) -> list:
+        res = []
+        for p in rows:
+            if p.get("experience_years", 0) < min_exp or (language and language.lower() not in [x.lower() for x in p.get("languages", [])]):
+                continue
+            u = await public_user(p["user_id"])
+            res.append({**p, "user": {**u, "has_photo": await has_badge_photo(p["user_id"])}, "estimate": hire_estimate(p, service, hours)})
+        res.sort(key=lambda x: (-(x["user"].get("rating_avg") or 0), x["estimate"]))
+        return res
+
+    local = await present(await eligible_local_drivers([sd["code"]], date, time, hours, vehicle_type, user["user_id"]))
+    out = {"taluk": sd, "local": local, "nearby": None}
+    if nearby:
+        others = [s["code"] for s in await db.lgd_subdistricts.find({"district_code": sd["district_code"], "code": {"$ne": sd["code"]}}, {"_id": 0, "code": 1}).to_list(300)]
+        out["nearby"] = await present(await eligible_local_drivers(others, date, time, hours, vehicle_type, user["user_id"])) if others else []
+        out["nearby_scope"] = f"Other {sd['sub_label'].lower()}s in {sd['district_name']} district"
+    return out
+
+
+class LocalHireIn(BaseModel):
+    service_type: Literal["hourly", "half_day", "full_day", "one_way", "airport", "outstation", "custom"]
+    date: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
+    time: str = Field(pattern=r"^\d{2}:\d{2}$")
+    hours: int = Field(ge=1, le=72)
+    city: LocIn
+    pickup: str = Field(min_length=2, max_length=150)
+    destination: str = Field(default="", max_length=150)
+    passengers: int = Field(default=1, ge=1, le=8)
+    vehicle_type: str = Field(max_length=20)
+    vehicle_desc: str = Field(min_length=2, max_length=80)
+    notes: str = Field(default="", max_length=500)
+    subdistrict_code: str = Field(max_length=10)  # pickup taluk (auto-identified, possibly corrected by the customer)
+    taluk_method: str = Field(default="manual", max_length=30)
+    include_nearby: bool = False
+
+
+@api.post("/hire/requests")
+async def hire_request_create(body: LocalHireIn, user: dict = Depends(get_user)):
+    """Broadcast a hire request to every eligible driver whose registered home taluk is the PICKUP taluk (never the destination's)."""
+    sd = await subdistrict_doc(body.subdistrict_code)
+    dt = datetime.strptime(f"{body.date} {body.time}", "%Y-%m-%d %H:%M").replace(tzinfo=IST)
+    if dt < now():
+        raise HTTPException(400, "Start time must be in the future")
+    if await db.hire_requests.find_one({"passenger_id": user["user_id"], "date": body.date, "time": body.time, "status": "open"}):
+        raise HTTPException(409, "You already have an open request for this date and time")
+    codes = [sd["code"]]
+    if body.include_nearby:
+        codes += [s["code"] for s in await db.lgd_subdistricts.find({"district_code": sd["district_code"], "code": {"$ne": sd["code"]}}, {"_id": 0, "code": 1}).to_list(300)]
+    drivers = await eligible_local_drivers(codes, body.date, body.time, body.hours, body.vehicle_type, user["user_id"])
+    if not drivers:
+        raise HTTPException(404, "No eligible drivers right now" + ("" if body.include_nearby else f" in {sd['name']}. Try including nearby {sd['sub_label'].lower()}s."))
+    await rate_limit(f"hirereq:{user['user_id']}", 10, 3600, "Too many hire requests. Please try again later.")
+    rid = "LHR-" + secrets.token_hex(4).upper()
+    req = {"request_id": rid, **body.model_dump(exclude={"subdistrict_code", "include_nearby"}), "city": loc_snapshot(body.city), "passenger_id": user["user_id"],
+           "pickup_taluk": {k: sd[k] for k in ("code", "name", "district_code", "district_name", "state_code", "state_name", "sub_label")},
+           "include_nearby": body.include_nearby, "status": "open", "starts_at": dt.astimezone(timezone.utc), "created_at": now(), "driver_id": None, "booking_id": None}
+    await db.hire_requests.insert_one(req)
+    for p in drivers:
+        local = p["home"]["subdistrict_code"] == sd["code"]
+        try:  # unique (request_id, driver_id) -> never notify the same driver twice for one request
+            await db.hire_dispatches.insert_one({"request_id": rid, "driver_id": p["user_id"], "group": "local" if local else "nearby",
+                                                 "notified_at": now(), "seen_at": None, "response": None})
+        except DuplicateKeyError:
+            continue
+        await notify(p["user_id"], "local_hire_request", {"pickup": body.pickup, "taluk": f"{sd['name']} {sd['sub_label']}", "destination": body.destination or "—",
+                                                          "date": dt.strftime("%d %b %Y"), "time": body.time, "passengers": body.passengers, "local": local}, rid)
+    req.pop("_id", None)
+    req["notified"] = len(drivers)
+    return req
+
+
+@api.get("/hire/requests")
+async def hire_request_list(user: dict = Depends(get_user)):
+    uid = user["user_id"]
+    await db.hire_requests.update_many({"status": "open", "starts_at": {"$lte": now()}}, {"$set": {"status": "expired", "expired_at": now()}})
+    mine = await db.hire_requests.find({"passenger_id": uid}, {"_id": 0, "city.geo": 0}).sort("created_at", -1).to_list(50)
+    disp = {d["request_id"]: d for d in await db.hire_dispatches.find({"driver_id": uid}, {"_id": 0}).sort("notified_at", -1).to_list(100)}
+    inbox = await db.hire_requests.find({"request_id": {"$in": list(disp)}}, {"_id": 0, "city.geo": 0}).sort("starts_at", 1).to_list(100)
+    for r in inbox:
+        r["dispatch"] = disp[r["request_id"]]
+    return {"mine": mine, "inbox": inbox}
+
+
+@api.get("/hire/requests/{rid}")
+async def hire_request_get(rid: str, user: dict = Depends(get_user)):
+    r = await db.hire_requests.find_one({"request_id": rid}, {"_id": 0, "city.geo": 0})
+    d = await db.hire_dispatches.find_one({"request_id": rid, "driver_id": user["user_id"]}, {"_id": 0})
+    if not r or (r["passenger_id"] != user["user_id"] and not d and user.get("role") != "admin"):
+        raise HTTPException(404, "Request not found")
+    if d and not d.get("seen_at"):
+        await db.hire_dispatches.update_one({"request_id": rid, "driver_id": user["user_id"]}, {"$set": {"seen_at": now()}})
+    r["dispatch"] = d
+    if r["passenger_id"] == user["user_id"]:
+        r["delivery"] = {"notified": await db.hire_dispatches.count_documents({"request_id": rid}),
+                         "seen": await db.hire_dispatches.count_documents({"request_id": rid, "seen_at": {"$ne": None}}),
+                         "declined": await db.hire_dispatches.count_documents({"request_id": rid, "response": "declined"})}
+    return r
+
+
+@api.post("/hire/requests/{rid}/{action}")
+async def hire_request_action(rid: str, action: Literal["accept", "decline", "cancel"], user: dict = Depends(get_user)):
+    r = await db.hire_requests.find_one({"request_id": rid}, {"_id": 0})
+    if not r:
+        raise HTTPException(404, "Request not found")
+    uid = user["user_id"]
+    if action == "cancel":
+        if r["passenger_id"] != uid:
+            raise HTTPException(403, "Only the customer can cancel")
+        if not (await db.hire_requests.update_one({"request_id": rid, "status": "open"}, {"$set": {"status": "cancelled", "cancelled_at": now()}})).modified_count:
+            raise HTTPException(400, "This request is no longer open")
+        for d in await db.hire_dispatches.find({"request_id": rid, "response": None}, {"_id": 0, "driver_id": 1}).to_list(300):
+            await notify(d["driver_id"], "local_hire_closed", {"pickup": r["pickup"], "reason": "cancelled"}, rid)
+        return {"ok": True}
+    d = await db.hire_dispatches.find_one({"request_id": rid, "driver_id": uid}, {"_id": 0})
+    if not d:
+        raise HTTPException(404, "Request not found")
+    if d.get("response"):
+        raise HTTPException(409, f"You already {d['response']} this request")
+    if action == "decline":
+        await db.hire_dispatches.update_one({"request_id": rid, "driver_id": uid}, {"$set": {"response": "declined", "responded_at": now()}})
+        return {"ok": True}
+    # accept: request must not have started, driver must still be eligible, then one atomic open -> fulfilled transition wins
+    if r["starts_at"].replace(tzinfo=timezone.utc) <= now():
+        await db.hire_requests.update_one({"request_id": rid, "status": "open"}, {"$set": {"status": "expired", "expired_at": now()}})
+        raise HTTPException(400, "This request's start time has passed")
+    p = await db.pro_drivers.find_one({"user_id": uid}, {"_id": 0})
+    try:  # one accept at a time per driver, so parallel accepts can't all see each other and back out
+        await db.hire_locks.insert_one({"driver_id": uid, "expires_at": now() + timedelta(seconds=30)})
+    except DuplicateKeyError:
+        raise HTTPException(409, "Another accept is being processed. Please try again in a moment.")
+    try:
+        return await accept_locked(r, rid, uid, p)
+    finally:
+        await db.hire_locks.delete_one({"driver_id": uid})
+
+
+async def accept_locked(r: dict, rid: str, uid: str, p: Optional[dict]) -> dict:
+    still = await eligible_local_drivers([p["home"]["subdistrict_code"]] if p and p.get("home") else [], r["date"], r["time"], r["hours"], None, r["passenger_id"])
+    if not any(x["user_id"] == uid for x in still):
+        raise HTTPException(409, "You are not available for this time any more (another booking or availability change)")
+    bid = "HIR-" + secrets.token_hex(4).upper()
+    won = await db.hire_requests.find_one_and_update({"request_id": rid, "status": "open"},
+                                                     {"$set": {"status": "fulfilled", "driver_id": uid, "booking_id": bid, "fulfilled_at": now()}})
+    if not won:
+        raise HTTPException(409, "Another driver has already accepted this request")
+    h = {"booking_id": bid, "driver_id": uid, "passenger_id": r["passenger_id"], "service_type": r["service_type"], "date": r["date"], "time": r["time"],
+         "hours": r["hours"], "city": r["city"], "pickup": r["pickup"], "destination": r["destination"], "vehicle_type": r["vehicle_type"],
+         "vehicle_desc": r["vehicle_desc"], "notes": r["notes"], "passengers": r.get("passengers", 1), "service_fee": hire_estimate(p, r["service_type"], r["hours"]),
+         "route": f"{r['city']['name']} · {r['pickup']}" + (f" → {r['destination']}" if r["destination"] else ""), "status": "confirmed",
+         "starts_at": r["starts_at"], "settlement": {"status": "unpaid"}, "created_at": now(), "accept_at": now(), "request_id": rid,
+         "pickup_taluk": r["pickup_taluk"]}
+    await db.hires.insert_one(h)
+    start = r["starts_at"].replace(tzinfo=timezone.utc)
+    if await has_clash(uid, start, start + timedelta(hours=r["hours"]), exclude_booking=bid):  # lost a race with another accept
+        await db.hires.delete_one({"booking_id": bid})
+        await db.hire_requests.update_one({"request_id": rid, "booking_id": bid}, {"$set": {"status": "open", "driver_id": None, "booking_id": None}, "$unset": {"fulfilled_at": ""}})
+        raise HTTPException(409, "You already have a confirmed booking at this time")
+    await db.hire_dispatches.update_one({"request_id": rid, "driver_id": uid}, {"$set": {"response": "accepted", "responded_at": now()}})
+    await notify(r["passenger_id"], "hire_confirmed", {"route": h["route"]}, bid)
+    for o in await db.hire_dispatches.find({"request_id": rid, "driver_id": {"$ne": uid}, "response": None}, {"_id": 0, "driver_id": 1}).to_list(300):
+        await notify(o["driver_id"], "local_hire_closed", {"pickup": r["pickup"], "reason": "fulfilled"}, rid)
+    await audit(uid, "hire.request_accept", rid, {"booking_id": bid})
+    return {"ok": True, "booking_id": bid}
+
+
 @api.get("/admin/pro-drivers")
 async def admin_pro_drivers(status: str = "under_review", _: dict = Depends(get_admin)):
     rows = await db.pro_drivers.find({"status": status}, {"_id": 0, "city.geo": 0}).to_list(200)
@@ -2900,6 +3258,8 @@ app.add_middleware(CORSMiddleware, allow_credentials=True, allow_origins=["*"], 
 async def startup():
     await ensure_indexes()
     await seed()
+    if not await db.lgd_meta.find_one({"key": "lgd"}):  # first boot: load India admin locations in the background
+        app.state.lgd_task = asyncio.create_task(lgd_import(db))
     # one-time move: profile photos uploaded in the old driver-verification screen become the Profile photo
     async for d in db.driver_documents.find({"photos.profile": {"$exists": True}}, {"_id": 0, "user_id": 1, "photos.profile": 1}):
         await db.users.update_one({"user_id": d["user_id"], "picture": {"$not": {"$regex": "^file_"}}}, {"$set": {"picture": d["photos"]["profile"]}})

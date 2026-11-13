@@ -78,6 +78,7 @@ pluggy==1.7.0
 propcache==0.5.4
 proto-plus==1.28.2
 protobuf==5.29.6
+pyarrow==26.0.1
 pyasn1==0.6.5
 pyasn1_modules==0.4.2
 pycodestyle==2.15.0

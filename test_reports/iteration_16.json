@@ -1,0 +1,39 @@
+{
+  "summary": "Retest of the iteration 15 local-hire fixes. Backend: 48 of 48 pytest tests pass: the 31 regression tests in test_iter15_lgd_local_hire.py and test_iter15_edge_cases.py (the window-end test now passes) and 17 new tests in test_iter16_hire_fixes.py. Verified: (1) Time window: a 19:00 + 4h hire is excluded from a 06:00-20:00 driver, 10:00 + 4h and 16:00 + 4h (ending exactly at 20:00) are included, and 05:00 is excluded. For an overnight 20:00-06:00 driver, 22:00 + 4h and 02:00 + 3h are included, while 04:00 + 4h and 12:00 + 2h are excluded. (2) Multiple clashes: with two confirmed hires (08-10 and 13-16), 14:00, 07:00 and a 09:00 + 6h span are all excluded, while the 10:30 gap and 16:00 are included. (3) Expiry: GET /hire/requests marks past open requests as expired in both inbox and mine, and accepting a past request returns 400 and sets status to expired with no hire created. (4) Same-driver accept race: no double booking in any run (pytest: 6 rounds with 2 requests; a stress script sent to backend :8001: 3 rounds with 6 overlapping requests each). The loser request goes back to open and another driver can accept it. However, in 1 of the 3 stress rounds every accept rolled back (0 winners, all 409 with 'You already have a confirmed booking at this time', which is not true). (5) Notification params: pickup = customer pickup text, taluk = 'Hiriyur Taluk', date = '16 Nov 2026'. (6) Rate limit: 12 failed 404 attempts and 11 failed 409 attempts do not block a later successful create. UI (390-375px mobile): the status badges show Open/Cancelled/Expired; the Cancel button appears only on open requests; picker rows have x=16, width 343 and height 48-60; Accept is 220x52 and Reject is 81x52; the driver notification reads 'Pickup: TEST UI Bus Stand (Hiriyur Taluk) · … · 16 Nov 2026 10:00'; the Accept tap opens HIR-… Confirmed. No deprecated Expo packages were detected.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/hire/requests/{rid}/accept", "issue": "Same-driver race rollback is symmetric. When several overlapping accepts all get past the claim, each one finds the others' hires in has_clash and rolls back, so nobody wins (seen in 1 of 3 stress rounds with 6 parallel accepts). Every response is 409 'You already have a confirmed booking at this time', which is false because the driver ends with 0 bookings. There is no data corruption. Fix: on clash, keep the earliest hire (compare created_at/_id of the clashing hires) or take a per-driver lock (e.g. an atomic flag on pro_drivers) around the accept. Also, while a claim is waiting to roll back, other drivers get 'Another driver has already accepted' for a request that later reopens. Reference: server.py:3180-3196"},
+      {"endpoint": "fits_window / eligible_local_drivers", "issue": "A whole multi-day hire (outstation up to 72h, or a full_day longer than the driver's window) can never fit a daily window, because t + hours*60 <= e. Outstation requests of 24h or more will always return 404 'No eligible drivers'. Confirm this is intended, or skip the daily-window check for outstation/multi-day services. Reference: server.py:3005-3012"},
+      {"endpoint": "fits_window (overnight)", "issue": "The weekday check uses the request date. A 02:00 request on Tuesday matches a driver whose overnight window starts Monday 20:00 only if Tuesday is in their days. Minor edge case."},
+      {"endpoint": "POST /api/hire/requests/{rid}/cancel & accept (local_hire_closed)", "issue": "local_hire_closed still uses r['city']['name'] as 'pickup' ('A local hire request from Hiriyur is closed'). This is inconsistent with local_hire_request, which now uses the customer's pickup text. Cosmetic."},
+      {"endpoint": "GET /api/hire/requests", "issue": "Every list call runs a global update_many to expire requests across all users. That is fine at the current scale; for larger scale, move it to a periodic job or TTL."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/hire/requests (My requests)", "issues": ["The 'Cancel request' button (Btn small, hire-request-cancel-*) is about 40px tall, below the 44pt minimum."]},
+      {"screen": "/hire/booking detail after accept", "issues": ["The 'Start trip' button is shown for a booking that starts 3 days in the future. Consider disabling it until near starts_at (outside the scope of this retest)."]}
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/test_iter16_hire_fixes.py", "/app/backend/tests/race_stress_iter16.py", "/app/backend/tests/ui_setup_iter16.py", "/app/test_reports/pytest/iter16.xml", "/app/test_reports/pytest/iter16_regression.xml"],
+  "action_items": [
+    "Make the same-driver accept race deterministic: on post-claim clash, roll back only if a clashing hire has an earlier created_at (or use a per-driver atomic lock), so concurrent accepts never produce 0 winners. Fix the misleading 409 text.",
+    "Decide how outstation/multi-day hires should interact with the daily availability window (currently they never match).",
+    "Optional: use the pickup text in local_hire_closed; raise the 'Cancel request' button to at least 44px."
+  ],
+  "critical_code_review_comments": [
+    "server.py is now 3264 lines. The LGD/local-hire block should move into its own module (carried over from iter15).",
+    "eligible_local_drivers still makes N+1 queries to users and hires per driver (carried over)."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter16_hire_fixes.py", "/app/backend/tests/race_stress_iter16.py", "/app/backend/tests/ui_setup_iter16.py"],
+  "success_rate": {"backend": "100% (48/48 pytest); stress race found 1 minor issue (0-winner rollback)", "frontend": "100% of retested items"},
+  "seed_data_creation": "Created TEST_ users, TEST pro_drivers, hire requests, dispatches, hires and notifications, plus directly inserted TEST past requests and TEST-HIR- hires. All were removed by ID (cleanup_iter15.py and the in-test cleanup); pro_drivers, hire_requests and hire_dispatches are back to 0. The TEST_ user accounts and their non-ref notifications (e.g. driver_approved) remain. Admin and seed data were not touched.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run: cd /app/backend/tests && pytest test_iter15_lgd_local_hire.py test_iter15_edge_cases.py test_iter16_hire_fixes.py -c /dev/null -p no:xdist, then python cleanup_iter15.py. To check the race fix: python race_stress_iter16.py (expects exactly one 200 per round), then cleanup_iter15.py. UI: python ui_setup_iter16.py writes /tmp/ui16.json (pax/drv/new emails, password Passw0rd!x, request IDs for open/cancelled/expired). Web login: language-continue-button -> auth-toggle-mode (switch to email) -> auth-email-input/auth-password-input/auth-submit-button. The frontend env key is EXPO_PUBLIC_BACKEND_URL. Server clock is 2026-11-13.",
+  "rca_of_issue": "0-winner race: after the atomic claim each accept inserts its hire and then calls has_clash(exclude_booking=own). With N simultaneous accepts, every accept sees the others' freshly inserted hires before any of them is deleted, so all roll back. The fix needs a tie-break (earliest hire wins) or serialization per driver."
+}

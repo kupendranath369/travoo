@@ -107,3 +107,13 @@ Pan-India intercity paid carpooling app (BlaBlaCar model) called TRAVOO, tagline
 - Tabs: Home, Offer, Bookings, Messages (unread badge, system msgs excluded); Profile at /profile via home avatar.
 - Hire a Driver: animated SVG driver illustration (react-native-svg + reanimated).
 - Added missing EMERGENT_LLM_KEY to backend .env (object storage was falling back to Mongo).
+
+## 2026-06 — India LGD locations + local-taluk Hire Driver matching (Hire Driver only)
+- lgd.py: imports Govt LGD (states 36, districts 790, sub-districts 7112, villages 677660) from ramSeraph/opendata metadata.json into lgd_* collections (upsert, auto on first boot, POST /admin/lgd/import to refresh). State-wise labels Taluk/Tehsil/Mandal/Taluka/Block/Circle.
+- APIs: /lgd/states|districts|subdistricts|villages|subdistricts/search|status; /hire/identify-taluk (pickup loc → taluk via place name/Nominatim county/village match); /hire/local-drivers (exact taluk group + optional nearby = same district); /hire/requests broadcast (dispatch dedupe unique request_id+driver_id, seen tracking), accept (atomic open→fulfilled, creates confirmed hire booking, notifies passenger + closes others), decline, cancel; /pro/availability; /pro/home (one-time for legacy).
+- Hire registration requires home State/District/Taluk/City (+village optional) via TalukPicker.
+- Screens: hire/index (pickup taluk card + LOCAL TALUK DRIVERS + nearby group + broadcast), hire/requests (driver inbox accept/reject, customer requests), hire/register (home taluk, availability toggle, fixed DocPhotos props).
+- Push (FCM) NOT implemented: needs google-services.json + native build; in-app notifications used.
+- Fixes (iter15-16): whole-hire time window incl. overnight; >12h hires need start-in-window only; multi-clash check; request expiry; per-driver accept lock (hire_locks TTL); pickup text + formatted date in notifications. 48 backend tests pass; race stress: exactly one winner each round.
+### Backlog
+- FCM push for local hire requests (needs google-services.json + native build). Urban towns (ULBs) in City/Town picker. Move LGD/hire block out of server.py. Translations.

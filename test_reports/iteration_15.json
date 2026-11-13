@@ -1,0 +1,48 @@
+{
+  "summary": "Tested the Hire Driver local-taluk feature end to end: LGD APIs, pickup taluk identification, hire-driver registration with a home taluk, exact-taluk and nearby matching, broadcast requests, accept/decline/cancel, and the UI on /hire, /hire/requests, /hire/register and /notifications. Backend: 30 of 31 tests passed, using 6 approved TEST drivers (A/B/C in Hiriyur, D in Holalkere, E in Gajwel, plus one for the UI). LGD counts are 36/790/7112/677660 and the sub-district labels are right (Taluk, Mandal, Tehsil, Taluka). Taluk identification is correct for Hiriyur, Gajwel, Baramati, Sitapur and Pushkar. The home-taluk checks return 400 for a bad sub-district, 400 for a village outside the taluk and 422 when home is missing. PUT /pro/home returns 400 when home is already set. Matching returns only Hiriyur drivers as local. The nearby group has only the Holalkere driver and never the Telangana one. Unavailable drivers, drivers with a clashing booking and times outside the driver's window are all excluded. A broadcast creates one local_hire_request notification per eligible driver and nobody else gets one. Duplicate requests return 409 and requests with no eligible drivers return 404. Delivery shows notified/seen/declined counts, and non-participants get 404. Accept creates a confirmed HIR- booking, sends hire_confirmed to the customer and local_hire_closed to the other drivers. A second accept returns 409, and when two drivers accept at the same moment there is exactly one winner. Decline then decline again returns 409, and cancel only works while the request is open. The one failure: a hire that starts inside the driver's window but ends after it still matches. UI: auto-detect shows 'Hiriyur Taluk · Chitradurga, Karnataka' and 'Gajwel Mandal · Siddipet, Telangana'. The Change taluk picker works with searchable lists. Results show 'LOCAL TALUK DRIVERS · Hiriyur (3)' with LOCAL TALUK DRIVER badges, the verified badge, home taluk and availability, and NEARBY TALUK DRIVERS appears as a separate group. Broadcast opens /hire/requests. In the driver inbox, tapping the notification opens /hire/requests, and Accept opens HIR-... Confirmed. The customer then sees 'Driver confirmed' with an Open booking button. /hire/register shows the state/district/taluk/city/village pickers, and an approved driver sees the home taluk and an availability toggle that switches both ways. Regression smoke: carpool search, offer and profile screens load and the legacy GET /api/hire/drivers returns 200. No deprecated Expo packages were detected.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "eligible_local_drivers (GET /api/hire/local-drivers, POST /api/hire/requests)", "issue": "The time-window check only compares the start time (start_time <= time <= end_time). A 19:00 start for 4h still matches a driver available 06:00-20:00, even though the hire ends at 23:00. Overnight windows (e.g. 20:00-06:00) can never match because times are compared as strings. Reference: server.py:3004-3005"},
+      {"endpoint": "POST /api/hire/requests/{rid}/accept", "issue": "Nothing checks whether the request's starts_at is already in the past, and open requests never expire (no cron or TTL). Old 'open' requests stay in driver inboxes forever and can still be accepted."},
+      {"endpoint": "POST /api/hire/requests/{rid}/accept", "issue": "Driver double-booking race: the eligibility (clash) check and the request claim are separate steps. Two simultaneous accepts by the same driver on two different overlapping requests can both succeed. Re-check for a clash after the claim, or use a per-driver lock."},
+      {"endpoint": "POST /api/hire/requests", "issue": "The notification's 'pickup' parameter is body.city.name (the city), not body.pickup (the customer's actual pickup text, e.g. 'Hiriyur Bus Stand'). Drivers see 'Pickup: Hiriyur (Hiriyur)'. Reference: server.py:3093"},
+      {"endpoint": "POST /api/hire/requests", "issue": "rate_limit runs before the duplicate (409) check and the no-drivers (404) check, so failed attempts use up the customer's 10/hour quota."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "TalukPicker PickerModal (state/district/taluk lists)", "issue": "List rows sit flush against the screen edge (picker-item bbox x=0, width 375) with no horizontal padding. The City/Town picker, which has the 'Use typed' header, is padded correctly. Add paddingHorizontal: space.lg to the item Pressable (TalukPicker.tsx:52) rather than relying on the FlatList contentContainerStyle.", "testID": "picker-item-*", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/hire/requests", "issues": ["The Accept and Reject buttons are 40px tall, below the 44pt minimum touch target (hire-request-accept-*/decline-*)."]},
+      {"screen": "/notifications", "issues": ["local_hire_request shows the raw ISO date '2026-11-14 09:00'. Format it the same way as the rest of the app (e.g. 'Sat, 14 Nov')."]},
+      {"screen": "/hire, /hire/register", "issues": ["New strings ('Pickup taluk (drivers are matched from here…)', 'Change taluk', 'Home location…', the picker titles) are hardcoded English. The notif.local_hire_* keys exist only in en.json, not in the other 22 locales."]},
+      {"screen": "/hire/register City/Town picker", "issues": ["LGD villages do not include urban towns, so searching 'Hiri' in Hiriyur taluk only shows 'Hiriyur (Rural)'. The town itself can only be entered through 'Use typed'. Consider a hint, or adding LGD urban local bodies."]}
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/test_iter15_lgd_local_hire.py", "/app/backend/tests/test_iter15_edge_cases.py", "/app/backend/tests/ui_setup_iter15.py", "/app/backend/tests/cleanup_iter15.py", "/app/test_reports/pytest/iter15.xml"],
+  "action_items": [
+    "Fix the time-window matching in eligible_local_drivers: require start >= start_time AND start + hours <= end_time, and handle overnight windows by comparing minutes instead of strings.",
+    "Expire or close open hire_requests once starts_at has passed, and reject accept on a past request.",
+    "Prevent the same driver from accepting two overlapping requests at the same time (check for a clash again after the atomic claim, or lock per driver).",
+    "Use body.pickup in the local_hire_request notification params (keep the city as a separate field).",
+    "Add horizontal padding to the TalukPicker modal list items.",
+    "Raise the Accept/Reject button height to at least 44px.",
+    "Optional: move rate_limit after the 409/404 checks; format the date in notifications; add i18n keys for the new strings and locales."
+  ],
+  "critical_code_review_comments": [
+    "server.py is now 3233 lines. The LGD and local-hire block (~300 lines) should move into its own module, like lgd.py.",
+    "eligible_local_drivers queries the users and hires collections once per driver (N+1). Acceptable for taluk-sized result sets, but batch them if the driver count grows.",
+    "frontend/package-lock.json was modified and there is no yarn.lock. Make sure dependencies are installed with yarn, not npm."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter15_lgd_local_hire.py", "/app/backend/tests/test_iter15_edge_cases.py", "/app/backend/tests/ui_setup_iter15.py", "/app/backend/tests/cleanup_iter15.py"],
+  "success_rate": {"backend": "97% (30/31)", "frontend": "100% of tested flows work; 1 visual bug and 3 minor design issues"},
+  "seed_data_creation": "Created TEST_ users (passengers and hire drivers). All TEST pro_drivers, hire_requests, hire_dispatches, hires (HIR- from requests) and their notifications were deleted by ID with cleanup_iter15.py; pro_drivers, hire_requests and hire_dispatches are all back to 0. The TEST_ user accounts remain. Admin settings were not changed (drivers were approved through POST /admin/pro-drivers/{uid}/review).",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run: cd /app/backend/tests && pytest test_iter15_lgd_local_hire.py test_iter15_edge_cases.py -c /dev/null -p no:xdist, then python cleanup_iter15.py. For UI testing: python ui_setup_iter15.py writes /tmp/ui15.json (pax/drv/new emails, password Passw0rd!x). The admin token is cached in /tmp/admtok. Server clock is 2026-11-13. On first web visit, click language-continue-button; email login uses auth-email-input/auth-password-input/auth-submit-button. LGD codes: Karnataka 29, Chitradurga 533, Hiriyur 5508, Holalkere 5506, Gajwel 4483 (Telangana 36, Siddipet 692).",
+  "rca_of_issue": "Window-end bug: the query in eligible_local_drivers filters start_time <= time <= end_time and ignores hours, so the end of the hire is never checked against the driver's availability."
+}

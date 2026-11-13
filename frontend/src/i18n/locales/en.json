@@ -538,5 +538,7 @@
   "offer.suggested_note": "Suggested contribution from Travoo's pricing guide for {km} km, this vehicle type and your seats — not a fuel bill or market rate. You can set any price up to ₹{n}.",
   "offer.suggested_wait": "Choose a route and vehicle to see the suggested price.",
   "offer.your_price_pp": "Your price per person (₹)",
-  "trip.suggested_price": "Driver's price per person (suggested contribution)"
+  "trip.suggested_price": "Driver's price per person (suggested contribution)",
+  "notif.local_hire_request": "NEW LOCAL HIRE DRIVER REQUEST · Pickup: {pickup} ({taluk}) · Destination: {destination} · {date} {time} · {passengers} passenger(s). A customer from your registered taluk has requested a hired driver. Open Travoo to accept or reject.",
+  "notif.local_hire_closed": "A local hire request from {pickup} is closed ({reason})"
 }
