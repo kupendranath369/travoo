@@ -49,7 +49,6 @@ export default function AuthScreen() {
           if (f.name.trim().length < 2) throw new Error("Enter your full name");
           if (!consent) throw new Error(t("auth.consent_required"));
           await register({ email: f.email.trim(), password: f.password, name: f.name.trim(), phone: "", language: lang, consent });
-          if (accountType === "driver") router.push("/driver");
         }
       } else if (ticket) {
         if (f.name.trim().length < 2) throw new Error("Enter your full name");
@@ -119,15 +118,6 @@ export default function AuthScreen() {
               {emailMode === "register" ? (
                 <>
                   <Field testID="auth-name-input" label={t("auth.name")} value={f.name} onChangeText={set("name")} autoCapitalize="words" />
-                  <T weight="600">I want to</T>
-                  <View style={{ flexDirection: "row", gap: space.sm }}>
-                    {(["passenger", "driver"] as const).map((k) => (
-                      <Pressable key={k} testID={`auth-type-${k}`} onPress={() => setAccountType(k)} style={{ flex: 1, minHeight: 56, borderRadius: radius.md, borderWidth: 1.5, borderColor: accountType === k ? colors.brandPrimary : colors.border, backgroundColor: accountType === k ? colors.brandSoft : colors.surfaceSecondary, alignItems: "center", justifyContent: "center", gap: 2, padding: space.sm }}>
-                        <Ionicons name={k === "passenger" ? "person-outline" : "car-sport-outline"} size={20} color={accountType === k ? colors.brandPrimary : colors.muted} />
-                        <T size={13} weight="700" color={accountType === k ? colors.brandPrimary : colors.onSurface}>{k === "passenger" ? "Travel as passenger" : "Drive & offer rides"}</T>
-                      </Pressable>
-                    ))}
-                  </View>
                   <Pressable testID="auth-consent-checkbox" onPress={() => setConsent(!consent)} style={{ flexDirection: "row", gap: space.sm, alignItems: "flex-start" }}>
                     <Ionicons name={consent ? "checkbox" : "square-outline"} size={22} color={colors.brandPrimary} />
                     <T size={13} style={{ flex: 1 }}>
