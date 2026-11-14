@@ -85,49 +85,54 @@ export default function Home() {
       </View>
       <ScrollView
         testID="home-scroll"
-        contentContainerStyle={{ padding: space.lg, gap: space.md, paddingBottom: (usesNativeTabs ? insets.bottom : 0) + space.xl }}
+        contentContainerStyle={{ padding: space.lg, gap: space.md, paddingBottom: (usesNativeTabs ? insets.bottom : 0) + space.xl + 70 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); await load(); setRefreshing(false); }} />}
       >
         <Animated.View entering={FadeInDown.duration(400)}>
           <Card testID="home-booking-card" style={{ gap: space.sm, paddingVertical: space.md }}>
-            <T size={20} weight="800">{t("home.where_to")}</T>
+            <T size={20} weight="800">Where are you travelling?</T>
             <View>
-              <LocationField testID="home-from-field" label={t("search.from")} value={from} onChange={(l) => { setFrom(l); setFormErr(""); }} icon="radio-button-on" />
+              <LocationField testID="home-from-field" label="Pickup Location" value={from} onChange={(l) => { setFrom(l); setFormErr(""); }} icon="radio-button-on" />
               <View style={{ height: 1, backgroundColor: colors.divider }} />
-              <LocationField testID="home-to-field" label={t("search.to")} value={to} onChange={(l) => { setTo(l); setFormErr(""); }} icon="location" />
+              <LocationField testID="home-to-field" label="Destination" value={to} onChange={(l) => { setTo(l); setFormErr(""); }} icon="location" />
               <Pressable testID="home-swap-button" accessibilityLabel={t("home.swap")} hitSlop={6} onPress={() => { setFrom(to); setTo(from); }}
                 style={{ position: "absolute", right: 0, top: "50%", marginTop: -20, width: 40, height: 40, borderRadius: 20, backgroundColor: colors.surfaceTertiary, borderWidth: 1, borderColor: colors.border, alignItems: "center", justifyContent: "center" }}>
                 <Ionicons name="swap-vertical" size={18} color={colors.brandPrimary} />
               </Pressable>
             </View>
-            <DateField testID="home-date" label={t("search.date")} value={date} onChange={setDate} allowClear />
-            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-              <T weight="600">{t("search.passengers")}</T>
-              <Stepper testID="home-passengers" value={seats} max={8} onChange={setSeats} />
-            </View>
             {formErr ? <T testID="home-form-error" size={13} color={colors.error} weight="600">{formErr}</T> : null}
-            <Btn testID="home-find-ride-button" icon="car-sport" label={t("btn.find")} onPress={find} />
           </Card>
         </Animated.View>
 
         <Animated.View entering={FadeInDown.delay(80).duration(400)} style={{ flexDirection: "row", gap: space.md }}>
-          {shortcut("home-hire-driver-button", null, t("v2.hire"), colors.brandSoft, colors.brandPrimary, () => router.push("/hire"))}
-          {shortcut("home-offer-ride-button", "add-circle", t("btn.offer"), colors.accentSoft, colors.brandTertiary, () => router.push("/offer"))}
+          <Card testID="home-rent-driver-card" onPress={() => router.push("/hire?service=rent")} style={{ flex: 1, gap: space.sm, padding: space.lg, backgroundColor: colors.brandSoft }}>
+            <View style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: colors.brandPrimary, alignItems: "center", justifyContent: "center" }}>
+              <HireDriverArt size={28} />
+            </View>
+            <T size={16} weight="800" color={colors.brandPrimary}>Rent a Driver</T>
+            <T size={12} color={colors.muted}>Your car, our driver</T>
+          </Card>
+          <Card testID="home-book-driver-card" onPress={() => router.push("/hire?service=book")} style={{ flex: 1, gap: space.sm, padding: space.lg, backgroundColor: colors.surfaceTertiary }}>
+            <View style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: colors.brandPrimary, alignItems: "center", justifyContent: "center" }}>
+              <Ionicons name="car-sport" size={24} color={colors.surface} />
+            </View>
+            <T size={16} weight="800" color={colors.brandPrimary}>Book a Driver</T>
+            <T size={12} color={colors.muted}>Car and driver</T>
+          </Card>
         </Animated.View>
 
         <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: space.sm }}>
-          <T size={18} weight="800">{t("v2.recent")}</T>
-          {recent.length ? <Pressable testID="home-clear-recent" onPress={async () => { await api("/searches", { method: "DELETE" }); setRecent([]); }} hitSlop={8}><T weight="700" color={colors.brandPrimary}>{t("v2.clear")}</T></Pressable> : null}
+          <T size={18} weight="800">Rebook Favourites</T>
         </View>
-        {recent.length === 0 ? <T testID="home-recent-empty" color={colors.muted}>{t("v2.recent_empty")}</T> : null}
-        {recent.map((s) => (
+        {recent.length === 0 ? <T testID="home-recent-empty" color={colors.muted}>No favourite drivers yet</T> : null}
+        {recent.slice(0, 3).map((s) => (
           <Card key={s.key} testID={`recent-search-${s.key}`} onPress={() => repeat(s)} style={{ flexDirection: "row", gap: space.md, alignItems: "center", padding: space.md }}>
             <Ionicons name={s.kind === "hire" ? "key-outline" : "time-outline"} size={20} color={colors.brandPrimary} />
             <View style={{ flex: 1 }}>
               <T weight="700" numberOfLines={1}>{s.kind === "hire" ? `${s.origin?.name} · ${t(`v2.svc.${s.service ?? "hourly"}`)}` : `${s.origin?.name} → ${s.destination?.name}`}</T>
               <T size={12} color={colors.muted}>{s.kind === "hire" ? t("v2.hire") : t("v2.find_intercity")} · {s.date ? fmtDate(s.date) : t("search.any_date")} · {fmtDate(s.at, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</T>
             </View>
-            <Ionicons name="refresh" size={18} color={colors.muted} />
+            <Btn testID={`rebook-${s.key}`} label="Rebook" size="sm" onPress={() => repeat(s)} />
           </Card>
         ))}
 
@@ -148,6 +153,31 @@ export default function Home() {
           </View>
         ) : null}
       </ScrollView>
+
+      <Pressable
+        testID="home-offer-ride-fab"
+        onPress={() => router.push("/offer")}
+        style={({ pressed }) => ({
+          position: "absolute",
+          bottom: (usesNativeTabs ? insets.bottom : 0) + space.xl + 20,
+          right: space.lg,
+          width: 56,
+          height: 56,
+          borderRadius: 28,
+          backgroundColor: colors.brandPrimary,
+          alignItems: "center",
+          justifyContent: "center",
+          opacity: pressed ? 0.8 : 1,
+          transform: [{ scale: pressed ? 0.95 : 1 }],
+          shadowColor: "#000",
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.25,
+          shadowRadius: 4,
+          elevation: 5,
+        })}
+      >
+        <Ionicons name="add" size={28} color={colors.surface} />
+      </Pressable>
     </View>
   );
 }

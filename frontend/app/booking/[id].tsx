@@ -12,6 +12,7 @@ import { Avatar, Badge, Btn, Card, Chip, ErrorBox, Field, Header, Loading, Ratin
 import { inr, useI18n } from "@/src/i18n";
 import { openRouteInMaps } from "@/src/maps";
 import { useTheme } from "@/src/theme";
+import * as Location from "expo-location";
 
 export default function BookingScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -30,6 +31,9 @@ export default function BookingScreen() {
   const [comment, setComment] = useState("");
   const [busy, setBusy] = useState("");
   const [actionErr, setActionErr] = useState("");
+  const [arriving, setArriving] = useState(false);
+  const [tracking, setTracking] = useState(false);
+  const [driverLocation, setDriverLocation] = useState<{ lat: number; lng: number } | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -41,6 +45,52 @@ export default function BookingScreen() {
   }, [id]);
   useFocusEffect(useCallback(() => { load(); }, [load]));
   useEffect(() => { api("/settings").then((s) => setReasons(s.cancellation_reasons || [])).catch(() => {}); }, []);
+
+  // Start location tracking when driver marks as arriving
+  useEffect(() => {
+    if (b?.is_driver && b.status === "confirmed" && arriving && !tracking) {
+      startLocationTracking();
+    }
+    // Stop tracking if booking is cancelled or completed
+    if (b && (b.status === "cancelled" || b.status === "completed")) {
+      stopLocationTracking();
+    }
+  }, [b, arriving, tracking]);
+
+  const startLocationTracking = async () => {
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") {
+        toast("Location permission required for tracking", "error");
+        return;
+      }
+      setTracking(true);
+      const location = await Location.getCurrentPositionAsync({});
+      setDriverLocation({ lat: location.coords.latitude, lng: location.coords.longitude });
+      // Send location to backend
+      await api(`/bookings/${b.booking_id}/location`, {
+        body: { lat: location.coords.latitude, lng: location.coords.longitude }
+      });
+    } catch (e: any) {
+      console.error("Location tracking error:", e);
+    }
+  };
+
+  const stopLocationTracking = () => {
+    setTracking(false);
+    setDriverLocation(null);
+  };
+
+  const markArriving = async () => {
+    try {
+      await api(`/bookings/${b.booking_id}/arriving`, { method: "POST" });
+      setArriving(true);
+      toast("Status updated to Arriving");
+      await load();
+    } catch (e: any) {
+      toast(e.message, "error");
+    }
+  };
 
   if (err) return <View style={{ flex: 1 }}><Header title={t("booking.confirmation")} /><ErrorBox message={err} onRetry={load} /></View>;
   if (!b) return <View style={{ flex: 1 }}><Header title={t("booking.confirmation")} /><Loading /></View>;
@@ -154,6 +204,34 @@ export default function BookingScreen() {
               <Btn testID="review-submit-button" label={t("booking.submit")} loading={busy === "rev"} onPress={() => run("rev", () => api("/reviews", { body: { booking_id: b.booking_id, target_id: other.user_id, rating, comment } }), t("booking.reviewed"))} />
             </Card>
           )
+        ) : null}
+
+        {/* Driver: I AM ARRIVING button */}
+        {b.is_driver && b.status === "confirmed" && !arriving ? (
+          <Btn testID="booking-arriving-button" icon="navigate" label="I AM ARRIVING" onPress={markArriving} loading={busy === "arriving"} style={{ backgroundColor: colors.brandPrimary }} />
+        ) : null}
+
+        {/* Driver: Arriving status indicator */}
+        {b.is_driver && arriving ? (
+          <Card style={{ backgroundColor: colors.successSoft, borderColor: colors.success, gap: space.sm }}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
+              <Ionicons name="navigate" size={20} color={colors.success} />
+              <T weight="800" color={colors.success}>You are arriving</T>
+            </View>
+            <T size={12} color={colors.muted}>Location sharing is active. Your GPS coordinates are being shared with the passenger.</T>
+          </Card>
+        ) : null}
+
+        {/* Passenger: Live driver tracking */}
+        {!b.is_driver && (b.status === "confirmed" || b.status === "started") && driverLocation ? (
+          <Card style={{ gap: space.sm }}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
+              <Ionicons name="navigate" size={20} color={colors.brandPrimary} />
+              <T weight="800">Driver is on the way</T>
+            </View>
+            <T size={12} color={colors.muted}>Live tracking active</T>
+            <Btn testID="booking-view-tracking" variant="outline" icon="map" label="View on Map" onPress={() => openRouteInMaps(trip)} />
+          </Card>
         ) : null}
 
         {["pending", "confirmed"].includes(b.status) ? (

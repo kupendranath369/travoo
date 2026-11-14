@@ -1711,6 +1711,50 @@ async def settle_booking(bid: str, body: SettleIn, user: dict = Depends(get_user
     return {"ok": True}
 
 
+class LocationIn(BaseModel):
+    lat: float = Field(ge=-90, le=90)
+    lng: float = Field(ge=-180, le=180)
+
+
+@api.post("/bookings/{bid}/arriving")
+async def mark_arriving(bid: str, user: dict = Depends(get_user)):
+    """Driver marks themselves as arriving at pickup location, starting location sharing."""
+    b = await booking_for(bid, user)
+    if b["driver_id"] != user["user_id"]:
+        raise HTTPException(403, "Only the driver can mark arrival")
+    if b["status"] != "confirmed":
+        raise HTTPException(400, "Booking must be confirmed to mark arrival")
+    res = await db.bookings.update_one({"booking_id": bid, "status": "confirmed"}, {"$set": {"arriving_at": now()}})
+    if not res.modified_count:
+        raise HTTPException(409, "Booking status changed, please refresh")
+    await notify(b["passenger_id"], "driver_arriving", {"driver_name": user["name"]}, bid)
+    return {"ok": True}
+
+
+@api.post("/bookings/{bid}/location")
+async def update_driver_location(bid: str, body: LocationIn, user: dict = Depends(get_user)):
+    """Driver updates their GPS coordinates for real-time tracking."""
+    b = await booking_for(bid, user)
+    if b["driver_id"] != user["user_id"]:
+        raise HTTPException(403, "Only the driver can update location")
+    if b["status"] not in ("confirmed", "started"):
+        raise HTTPException(400, "Location tracking only for active bookings")
+    loc = {"lat": body.lat, "lng": body.lng, "updated_at": now()}
+    await db.bookings.update_one({"booking_id": bid}, {"$set": {"driver_location": loc}})
+    return {"ok": True}
+
+
+@api.get("/bookings/{bid}/location")
+async def get_driver_location(bid: str, user: dict = Depends(get_user)):
+    """Passenger gets driver's current location for live tracking."""
+    b = await booking_for(bid, user)
+    if user["user_id"] != b["passenger_id"]:
+        raise HTTPException(403, "Only the passenger can view driver location")
+    if b["status"] not in ("confirmed", "started"):
+        raise HTTPException(400, "Location tracking only for active bookings")
+    return b.get("driver_location", None)
+
+
 # ---------------------------------------------------------------- earnings
 @api.get("/earnings")
 async def earnings(user: dict = Depends(get_user)):

@@ -1,5 +1,5 @@
 import Ionicons from "@react-native-vector-icons/ionicons";
-import { useFocusEffect, useRouter } from "expo-router";
+import { useFocusEffect, useRouter, useLocalSearchParams } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
 import { FlatList, Pressable, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -81,6 +81,7 @@ export default function HireScreen() {
   const { colors } = useTheme();
   const { t } = useI18n();
   const router = useRouter();
+  const params = useLocalSearchParams();
   const toast = useToast();
   const [service, setService] = useState<"rent" | "book" | null>(null);
   const [favs, setFavs] = useState<any[]>([]);
@@ -105,7 +106,14 @@ export default function HireScreen() {
   const dt = useTaluk(dest);
   const pt = useTaluk(pickup);
 
-  useFocusEffect(useCallback(() => { api("/hire/favourites").then(setFavs).catch(() => {}); }, []));
+  useFocusEffect(useCallback(() => {
+    api("/hire/favourites").then(setFavs).catch(() => {});
+    if (params.service === "rent" || params.service === "book") {
+      setService(params.service as "rent" | "book");
+      setStype(params.service === "rent" ? "hourly" : "one_way");
+      setVtype(params.service === "rent" ? "" : "sedan");
+    }
+  }, [params.service]));
   useEffect(() => { setRows(null); setNearby(null); }, [service, dest?.loc_id, dt.taluk?.code, stype, date, time, hours, days, vtype, passengers]);
   useEffect(() => { setChangeTaluk(!!dest && !dt.busy && !dt.taluk); }, [dest, dt.busy, dt.taluk]);
   const pick = (s: "rent" | "book") => { setService(s); setStype(s === "rent" ? "hourly" : "one_way"); setVtype(s === "rent" ? "" : "sedan"); setErr(""); };

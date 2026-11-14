@@ -2,8 +2,9 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { useFonts } from "expo-font";
 import { Stack, useRouter, useSegments } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { LogBox, StyleSheet, View } from "react-native";
+import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 
@@ -27,6 +28,7 @@ function Gate() {
   const router = useRouter();
   const { colors } = useTheme();
   const top = segments[0] as string | undefined;
+  const [showSplash, setShowSplash] = useState(true);
 
   useEffect(() => {
     if (loading || !ready) return;
@@ -40,12 +42,22 @@ function Gate() {
     if (user && chosen && user.language !== lang) api("/me", { method: "PUT", body: { language: lang } }).catch(() => {});
   }, [user, lang, chosen]);
 
-  if (loading || !ready)
+  // Hide splash screen after auth/language is ready
+  useEffect(() => {
+    if (!loading && ready) {
+      const timer = setTimeout(() => setShowSplash(false), 1500);
+      return () => clearTimeout(timer);
+    }
+  }, [loading, ready]);
+
+  if (showSplash) {
     return (
-      <View testID="splash-screen" style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.surface }}>
+      <Animated.View entering={FadeIn.duration(600)} exiting={FadeOut.duration(600)} testID="splash-screen" style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#F8FAFC" }}>
         <LogoFull width={200} />
-      </View>
+      </Animated.View>
     );
+  }
+
   return (
     <View style={{ flex: 1, direction: rtl ? "rtl" : "ltr" }}>
       <StatusBar style="dark" />
