@@ -7,13 +7,13 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { api } from "@/src/api";
 import { DateField } from "@/src/components/Calendar";
 import { TimeChips } from "@/src/components/DateChips";
-import { Area, SERVICE_LABEL, ServiceAreasEditor, ServicesPicker, STATUS_LABEL, Toggle, TYPE_LABEL, Vehicle, VehiclesEditor } from "@/src/components/LocalDriverParts";
+import { SERVICE_LABEL, ServicesPicker, STATUS_LABEL, Toggle, TYPE_LABEL, Vehicle, VehiclesEditor } from "@/src/components/LocalDriverParts";
 import { useToast } from "@/src/components/toast";
 import { Badge, Btn, Card, Chip, Empty, ErrorBox, Field, Header, Loading, T, space, statusTone } from "@/src/components/ui";
 import { inr, useI18n } from "@/src/i18n";
 import { useTheme } from "@/src/theme";
 
-type Tab = "requests" | "settings" | "areas" | "vehicles";
+type Tab = "requests" | "settings" | "vehicles";
 
 /** Single Local Driver dashboard: status, services, service areas, availability, vehicles, bookings, earnings. */
 export default function LocalDriverDashboard() {
@@ -26,8 +26,6 @@ export default function LocalDriverDashboard() {
   const [err, setErr] = useState("");
   const [tab, setTab] = useState<Tab>("requests");
   const [saving, setSaving] = useState("");
-  const [areas, setAreas] = useState<Area[]>([]);
-  const [cities, setCities] = useState("");
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [days, setDays] = useState<number[]>([]);
   const [from, setFrom] = useState("08:00");
@@ -39,7 +37,7 @@ export default function LocalDriverDashboard() {
     setD(r);
     const p = r.profile;
     if (p) {
-      setAreas(p.service_areas ?? []); setCities((p.cities_covered ?? []).join(", ")); setVehicles(p.vehicles ?? []);
+      setVehicles(p.vehicles ?? []);
       setDays(p.days ?? []); setFrom(p.start_time ?? "08:00"); setTo(p.end_time ?? "20:00"); setBlocked(p.blocked_dates ?? []);
     }
   }).catch((e) => setErr(e.message)), []);
@@ -113,7 +111,7 @@ export default function LocalDriverDashboard() {
         ) : null}
 
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: space.sm }}>
-          {([["requests", "Bookings"], ["settings", "Services & time"], ["areas", "Service areas"], ["vehicles", "Vehicles"]] as const).map(([k, l]) => (
+          {([["requests", "Bookings"], ["settings", "Services & time"], ["vehicles", "Vehicles"]] as const).map(([k, l]) => (
             <Chip key={k} testID={`dash-tab-${k}`} label={l} active={tab === k} onPress={() => setTab(k)} />
           ))}
         </ScrollView>
@@ -134,8 +132,9 @@ export default function LocalDriverDashboard() {
             <ServicesPicker testPrefix="dash-svc" value={services} onChange={(v) => save("svc", { services: v })} />
             {!p.vehicles?.length ? <T size={12} color={colors.muted}>Add a vehicle (Vehicles tab) to turn on Book a Driver.</T> : null}
             <Card style={{ gap: space.sm }}>
-              <Toggle testID="dash-outstation" label="Accept outstation trips" value={!!p.accepts_outstation} onChange={(v) => save("os", { accepts_outstation: v })} />
-              <Toggle testID="dash-outside" label="Accept trips outside my service areas" value={!!p.accepts_outside_area} onChange={(v) => save("oa", { accepts_outside_area: v })} />
+              <T weight="800">Outstation Trip Preference</T>
+              <Toggle testID="dash-outstation" label="Accept Outstation Trips" value={!!p.acceptOutstationTrips} onChange={(v) => save("os", { acceptOutstationTrips: v })} />
+              <T size={12} color={colors.muted}>Enable this option to receive eligible booking requests outside your regular local service area.</T>
             </Card>
             <Card style={{ gap: space.sm }}>
               <T weight="800">Working days and hours</T>
@@ -154,15 +153,6 @@ export default function LocalDriverDashboard() {
               <Btn testID="dash-save-time" label="Save availability" disabled={!days.length} loading={saving === "time"} onPress={() => save("time", { days, start_time: from, end_time: to, blocked_dates: blocked })} />
             </Card>
           </>
-        ) : null}
-
-        {tab === "areas" ? (
-          <Card style={{ gap: space.sm }}>
-            <T weight="800">Service-area taluks</T>
-            <ServiceAreasEditor testPrefix="dash-areas" areas={areas} onChange={setAreas} homeCode={p.home?.subdistrict_code} />
-            <Field testID="dash-cities" label="Cities / towns you cover (comma separated)" value={cities} onChangeText={setCities} />
-            <Btn testID="dash-save-areas" label="Save service areas" loading={saving === "areas"} onPress={() => save("areas", { service_taluks: areas.map((a) => a.code), cities_covered: cities.split(",").map((x) => x.trim()).filter(Boolean) })} />
-          </Card>
         ) : null}
 
         {tab === "vehicles" ? (

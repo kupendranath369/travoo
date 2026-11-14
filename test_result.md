@@ -112,3 +112,12 @@
 - Changed: GET /api/hire/local-drivers and POST /api/hire/requests: subdistrict_code = DESTINATION taluk; service + service_type (rent: hourly/half_day/full_day/multi_day/outstation; book: one_way/round_trip/multi_day/outstation), days, vehicle_type, passengers, pickup_subdistrict_code, driver_id (direct request). Decline-all -> request status declined + customer notified.
 - Backend test: backend/tests/test_iter17_unified_local_driver.py — 14/14 pass.
 - Frontend: app/hire/index.tsx (Rent/Book chooser + forms + results), app/hire/driver.tsx (new dashboard), app/hire/register.tsx (services, areas, vehicles), app/hire/requests.tsx, app/hire/[id].tsx (vehicle, arriving, favourite, report), admin/dashboard.tsx (Local drivers filters + Driver hire bookings + Driver reports tabs), src/components/LocalDriverParts.tsx.
+
+## Local Driver Verification Update (Service Areas Removal + Outstation Preference)
+- Backend (server.py): Removed service_taluks, cities_covered, accepts_outside_area from ProDriverIn and ProSettingsIn. Changed to acceptOutstationTrips (bool, default false). Removed service_areas/service_taluk_codes index. bio field now optional. Updated pro_register to set service_areas=[], service_taluk_codes=[home_code], cities_covered=[]. Updated driver matching to use acceptOutstationTrips instead of accepts_outstation. Simplified nearby_area function.
+- Frontend: app/hire/register.tsx - Removed Service Areas section (ServiceAreasEditor, cities field, areas state). Removed About Me field from UI. Added simplified "Accept Outstation Trips" toggle with description. Updated submit validation to remove bio length check and service areas validation.
+- Frontend: app/hire/driver.tsx - Removed "Service areas" tab. Removed ServiceAreasEditor and cities field from dashboard. Simplified settings to only show "Accept Outstation Trips" toggle.
+- Frontend: app/hire/index.tsx - Updated to use acceptOutstationTrips instead of accepts_outstation.
+- Frontend: app/admin/dashboard.tsx - Updated to show acceptOutstationTrips instead of accepts_outstation/accepts_outside_area. Removed service_areas and cities_covered display.
+- Frontend: src/components/LocalDriverParts.tsx - ServiceAreasEditor still available but not used in main registration flow.
+- Backend test: backend/tests/test_iter17_unified_local_driver.py - Updated to use acceptOutstationTrips instead of accepts_outstation/accepts_outside_area. Removed NEAR driver test case.

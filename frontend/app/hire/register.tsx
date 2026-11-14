@@ -8,7 +8,7 @@ import { api, Loc, locPayload } from "@/src/api";
 import { useAuth } from "@/src/auth";
 import { TimeChips } from "@/src/components/DateChips";
 import { DocFile, DocKind, DocPhotos } from "@/src/components/DocPhotos";
-import { Area, ServiceAreasEditor, ServicesPicker, Toggle, Vehicle, VehiclesEditor } from "@/src/components/LocalDriverParts";
+import { ServicesPicker, Toggle, Vehicle, VehiclesEditor } from "@/src/components/LocalDriverParts";
 import { LocationField } from "@/src/components/LocationField";
 import { HomeLoc, TalukPicker } from "@/src/components/TalukPicker";
 import { useToast } from "@/src/components/toast";
@@ -41,10 +41,7 @@ export default function ProRegister() {
   const [docs, setDocs] = useState<{ files: DocFile[]; kinds: DocKind[] } | null>(null);
   const [avail, setAvail] = useState<boolean | null>(null);
   const [services, setServices] = useState<string[]>(["rent"]);
-  const [areas, setAreas] = useState<Area[]>([]);
-  const [cities, setCities] = useState("");
-  const [outstation, setOutstation] = useState(false);
-  const [outside, setOutside] = useState(false);
+  const [acceptOutstationTrips, setAcceptOutstationTrips] = useState(false);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [carpoolVehicles, setCarpoolVehicles] = useState<Vehicle[]>([]);
   const set = (k: keyof typeof f) => (v: string) => setF({ ...f, [k]: k.startsWith("rate") ? v.replace(/\D/g, "") : v });
@@ -66,16 +63,15 @@ export default function ProRegister() {
 
   const submit = async () => {
     setErr("");
-    if (!city) return setErr("Choose your main city on the map search (below Service areas)");
+    if (!city) return setErr("Choose your main city on the map search");
     if (!home.taluk) return setErr("Choose your home State, District and Taluk / Sub-district");
     if (home.city.trim().length < 2) return setErr("Choose or type your City / Town");
     if (!langs.length) return setErr(`${t("v2.languages")} *`);
-    if (f.bio.trim().length < 20) return setErr(`${t("v2.about_me")} * (20+)`);
     if (!f.rate_hourly || !f.rate_half_day || !f.rate_full_day) return setErr(`${t("v2.rate_hourly")} *`);
     if (services.includes("book") && !vehicles.length) return setErr("Add at least one vehicle to offer Book a Driver");
     setBusy(true);
     try {
-      const r = await api("/pro/register", { body: { services, service_taluks: areas.map((a) => a.code), cities_covered: cities.split(",").map((x) => x.trim()).filter(Boolean), accepts_outstation: outstation, accepts_outside_area: outside, vehicles: services.includes("book") ? vehicles : [], city: locPayload(city), home: { subdistrict_code: home.taluk.code, city: home.city.trim(), city_code: home.city_code, village_code: home.village_code }, areas: f.areas.split(",").map((x) => x.trim()).filter(Boolean), languages: langs, experience_years: exp, licence_no: f.licence_no.replace(/\s/g, ""), licence_expiry: f.licence_expiry, vehicle_types: vt, days, start_time: from, end_time: to, bio: f.bio.trim(), rate_hourly: Number(f.rate_hourly), rate_half_day: Number(f.rate_half_day), rate_full_day: Number(f.rate_full_day), rate_one_way: f.rate_one_way ? Number(f.rate_one_way) : null } });
+      const r = await api("/pro/register", { body: { services, acceptOutstationTrips, vehicles: services.includes("book") ? vehicles : [], city: locPayload(city), home: { subdistrict_code: home.taluk.code, city: home.city.trim(), city_code: home.city_code, village_code: home.village_code }, areas: f.areas.split(",").map((x) => x.trim()).filter(Boolean), languages: langs, experience_years: exp, licence_no: f.licence_no.replace(/\s/g, ""), licence_expiry: f.licence_expiry, vehicle_types: vt, days, start_time: from, end_time: to, bio: f.bio.trim(), rate_hourly: Number(f.rate_hourly), rate_half_day: Number(f.rate_half_day), rate_full_day: Number(f.rate_full_day), rate_one_way: f.rate_one_way ? Number(f.rate_one_way) : null } });
       toast(t(`verify.status.${r.status}`));
       await load();
       router.replace("/hire/driver");
@@ -115,7 +111,6 @@ export default function ProRegister() {
         {locked ? (
           <Card style={{ gap: 4 }}>
             <T weight="700">{me.profile.city?.name} · {t("v2.years", { n: me.profile.experience_years })}</T>
-            <T size={13}>{me.profile.bio}</T>
             <T size={12} color={colors.muted}>{me.profile.languages.join(", ")} · ₹{me.profile.rate_hourly}/h</T>
             <Btn small testID="pro-open-dashboard" icon="speedometer-outline" label="Open Local Driver dashboard" onPress={() => router.push("/hire/driver")} />
           </Card>
@@ -128,11 +123,9 @@ export default function ProRegister() {
               <TalukPicker testPrefix="pro-home" withCity value={home} onChange={setHome} />
             </Card>
             <Card style={{ gap: space.sm }}>
-              <T weight="800">Service areas</T>
-              <ServiceAreasEditor testPrefix="pro-areas" areas={areas} onChange={setAreas} homeCode={home.taluk?.code} />
-              <Field testID="pro-cities-input" label="Cities / towns you cover (comma separated)" value={cities} onChangeText={setCities} />
-              <Toggle testID="pro-outstation" label="Accept outstation trips" value={outstation} onChange={setOutstation} />
-              <Toggle testID="pro-outside" label="Accept trips outside my service areas" value={outside} onChange={setOutside} />
+              <T weight="800">Outstation Trip Preference</T>
+              <Toggle testID="pro-outstation" label="Accept Outstation Trips" value={acceptOutstationTrips} onChange={setAcceptOutstationTrips} />
+              <T size={12} color={colors.muted}>Enable this option to receive eligible booking requests outside your regular local service area.</T>
             </Card>
             {services.includes("book") ? (
               <Card style={{ gap: space.sm }}>
@@ -162,7 +155,6 @@ export default function ProRegister() {
             <TimeChips value={from} onChange={setFrom} />
             <T size={13} weight="600" color={colors.muted}>{t("v2.to_time")}: {to}</T>
             <TimeChips value={to} onChange={setTo} />
-            <Field testID="pro-bio-input" label={`${t("v2.about_me")} (${f.bio.length}/500)`} value={f.bio} onChangeText={set("bio")} multiline maxLength={500} placeholder={t("v2.about_me_ph")} />
             <Field testID="pro-rate-hourly" label={t("v2.rate_hourly")} value={f.rate_hourly} onChangeText={set("rate_hourly")} keyboardType="number-pad" />
             <Field testID="pro-rate-half" label={t("v2.rate_half")} value={f.rate_half_day} onChangeText={set("rate_half_day")} keyboardType="number-pad" />
             <Field testID="pro-rate-full" label={t("v2.rate_full")} value={f.rate_full_day} onChangeText={set("rate_full_day")} keyboardType="number-pad" />

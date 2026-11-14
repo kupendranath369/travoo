@@ -415,12 +415,9 @@ export default function AdminScreen() {
                 <View style={{ flexDirection: "row", gap: space.sm, flexWrap: "wrap" }}>
                   {(p.services ?? ["rent"]).map((s: string) => <Badge key={s} testID={`admin-pro-service-${s}-${p.user_id}`} label={s === "book" ? "Book a Driver" : "Rent a Driver"} tone="info" />)}
                   <Badge testID={`admin-pro-avail-${p.user_id}`} label={(p.availability_status ?? "available").toUpperCase()} tone={p.availability_status === "available" ? "success" : "muted"} />
-                  {p.accepts_outstation ? <Badge label="Outstation" tone="muted" /> : null}
-                  {p.accepts_outside_area ? <Badge label="Outside area" tone="muted" /> : null}
+                  {p.acceptOutstationTrips ? <Badge label="Outstation" tone="muted" /> : null}
                 </View>
                 <T size={12}>Home: {p.home ? `${p.home.subdistrict_name} ${p.home.sub_label}, ${p.home.district_name}, ${p.home.state_name}` : "not set"}</T>
-                {p.service_areas?.length ? <T size={12}>Service areas: {p.service_areas.map((a: any) => `${a.name} (${a.district_name})`).join(", ")}</T> : null}
-                {p.cities_covered?.length ? <T size={12}>Cities: {p.cities_covered.join(", ")}</T> : null}
                 {(p.vehicles ?? []).map((v: any) => <T key={v.vehicle_id} size={12} color={colors.muted}>🚗 {v.name} · {v.reg_no} · {v.category} · {v.seats} seats · ₹{v.day_rate}/day {v.available ? "" : "· unavailable"}</T>)}
                 {p.status === "under_review" ? (
                   <View style={{ flexDirection: "row", gap: space.sm }}>

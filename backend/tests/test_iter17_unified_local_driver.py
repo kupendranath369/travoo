@@ -32,10 +32,9 @@ class TestSetup:
         S["city"] = t.loc("Hiriyur")
         S["pax"], S["pax_id"], _ = t.reg("Pax17")
         S["R"] = t.make_driver("R17", HIRIYUR, services=["rent"])                                   # home = destination taluk
-        S["B"] = t.make_driver("B17", HOLALKERE, services=["book"], service_taluks=[HIRIYUR], vehicles=VEH)  # serves destination via service area
-        S["BOTH"] = t.make_driver("BOTH17", HIRIYUR, services=["rent", "book"], vehicles=VEH, accepts_outstation=True)
+        S["B"] = t.make_driver("B17", HOLALKERE, services=["book"], vehicles=VEH)  # serves destination via home taluk
+        S["BOTH"] = t.make_driver("BOTH17", HIRIYUR, services=["rent", "book"], vehicles=VEH, acceptOutstationTrips=True)
         S["G"] = t.make_driver("G17", GAJWEL, services=["rent", "book"], vehicles=VEH)               # pickup taluk only -> never local
-        S["NEAR"] = t.make_driver("NEAR17", HOLALKERE, services=["rent"], accepts_outside_area=True)
 
     def test_book_requires_vehicle(self):
         tok, _, _ = t.reg("NoVeh17")
@@ -63,11 +62,6 @@ class TestMatching:
     def test_outstation_preference(self):
         got = q(service="rent", service_type="outstation", days=2)
         assert S["BOTH"][1] in got and S["R"][1] not in got
-
-    def test_nearby_only_if_outside_area_allowed(self):
-        d = t.local({"subdistrict_code": HIRIYUR, "date": DATE, "time": "10:00", "hours": 4, "service": "rent", "nearby": "true"})
-        near = {x["user_id"] for x in d["nearby"]}
-        assert S["NEAR"][1] in near and S["B"][1] not in near
 
     def test_busy_offline_excluded(self):
         tok = S["R"][0]

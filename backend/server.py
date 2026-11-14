@@ -100,7 +100,6 @@ INDEXES: dict[str, list[IndexModel]] = {
     "files": [IndexModel([("file_id", ASCENDING)], name="fid", unique=True), IndexModel([("owner_id", ASCENDING)], name="owner")],
     "pro_drivers": [IndexModel([("user_id", ASCENDING)], name="uid", unique=True), IndexModel([("city.geo", GEOSPHERE)], name="city_geo"),
                     IndexModel([("home.subdistrict_code", ASCENDING), ("status", ASCENDING)], name="home_taluk"),
-                    IndexModel([("service_taluk_codes", ASCENDING), ("status", ASCENDING)], name="service_taluks"),
                     IndexModel([("status", ASCENDING)], name="status")],
     "hires": [IndexModel([("booking_id", ASCENDING)], name="bid", unique=True), IndexModel([("driver_id", ASCENDING), ("date", ASCENDING)], name="driver_date"),
               IndexModel([("passenger_id", ASCENDING)], name="customer")],
@@ -2703,17 +2702,14 @@ class ProDriverIn(BaseModel):
     days: List[int] = Field(min_length=1, max_length=7)  # 0=Mon..6=Sun
     start_time: str = Field(pattern=r"^\d{2}:\d{2}$")
     end_time: str = Field(pattern=r"^\d{2}:\d{2}$")
-    bio: str = Field(min_length=20, max_length=500)
+    bio: Optional[str] = Field(default=None, max_length=500)
     rate_hourly: int = Field(ge=50, le=5000)
     rate_half_day: int = Field(ge=100, le=20000)
     rate_full_day: int = Field(ge=200, le=40000)
     rate_one_way: Optional[int] = Field(default=None, ge=100, le=40000)
     # Unified local-driver profile: one registration, either or both services
     services: List[Literal["rent", "book"]] = Field(default_factory=lambda: ["rent"], min_length=1, max_length=2)
-    service_taluks: List[str] = Field(default_factory=list, max_length=30)  # extra LGD sub-district codes served (home is always served)
-    cities_covered: List[str] = Field(default_factory=list, max_length=20)
-    accepts_outstation: bool = False
-    accepts_outside_area: bool = False
+    acceptOutstationTrips: bool = False
     vehicles: List["ProVehicleIn"] = Field(default_factory=list, max_length=5)  # only needed for Book a Driver
 
 
@@ -2783,14 +2779,14 @@ async def pro_register(body: ProDriverIn, user: dict = Depends(get_user)):
         raise HTTPException(400, "Add at least one vehicle to offer Book a Driver")
     status = "approved" if (await get_settings()).get("instant_driver_approval") else "under_review"
     home = await home_snapshot(body.home)
-    areas, codes = await areas_snapshot(body.service_taluks, home["subdistrict_code"])
-    rec = {**body.model_dump(exclude={"service_taluks"}), "city": loc_snapshot(body.city), "home": home, "available": True, "availability_status": "available",
-           "service_areas": areas, "service_taluk_codes": codes, "vehicles": vehicles_snapshot(body.vehicles),
-           "cities_covered": [c.strip() for c in body.cities_covered if c.strip()], "services": sorted(set(body.services)),
+    rec = {**body.model_dump(), "city": loc_snapshot(body.city), "home": home, "available": True, "availability_status": "available",
+           "service_areas": [], "service_taluk_codes": [home["subdistrict_code"]], "vehicles": vehicles_snapshot(body.vehicles),
+           "cities_covered": [], "services": sorted(set(body.services)),
            "licence_no": body.licence_no.upper(), "user_id": user["user_id"],
            "name": user["name"], "status": status, "submitted_at": now(), "admin_note": ""}
     await db.pro_drivers.update_one({"user_id": user["user_id"]}, {"$set": rec}, upsert=True)
-    await db.users.update_one({"user_id": user["user_id"]}, {"$set": {"bio": body.bio}})
+    if body.bio:
+        await db.users.update_one({"user_id": user["user_id"]}, {"$set": {"bio": body.bio}})
     if status == "approved":
         await notify(user["user_id"], "driver_approved", {})
     await audit(user["user_id"], "pro.submit", user["user_id"], {"status": status})
@@ -3010,10 +3006,7 @@ ProDriverIn.model_rebuild()
 
 class ProSettingsIn(BaseModel):
     services: Optional[List[Literal["rent", "book"]]] = Field(default=None, min_length=1, max_length=2)
-    service_taluks: Optional[List[str]] = Field(default=None, max_length=30)
-    cities_covered: Optional[List[str]] = Field(default=None, max_length=20)
-    accepts_outstation: Optional[bool] = None
-    accepts_outside_area: Optional[bool] = None
+    acceptOutstationTrips: Optional[bool] = None
     availability_status: Optional[Literal["available", "busy", "offline"]] = None
     days: Optional[List[int]] = Field(default=None, min_length=1, max_length=7)
     start_time: Optional[str] = Field(default=None, pattern=r"^\d{2}:\d{2}$")
@@ -3023,21 +3016,15 @@ class ProSettingsIn(BaseModel):
 
 @api.put("/pro/settings")
 async def pro_settings(body: ProSettingsIn, user: dict = Depends(get_user)):
-    """Services, service areas, preferences and availability for the single local-driver profile (no re-verification)."""
+    """Services, preferences and availability for the single local-driver profile (no re-verification)."""
     p = await db.pro_drivers.find_one({"user_id": user["user_id"]}, {"_id": 0})
     if not p:
         raise HTTPException(404, "Register as a local driver first")
-    upd = {k: v for k, v in body.model_dump(exclude={"service_taluks"}).items() if v is not None}
+    upd = {k: v for k, v in body.model_dump().items() if v is not None}
     if body.services is not None:
         if "book" in body.services and not [v for v in p.get("vehicles") or []]:
             raise HTTPException(400, "Add at least one vehicle before offering Book a Driver")
         upd["services"] = sorted(set(body.services))
-    if body.service_taluks is not None:
-        if not p.get("home"):
-            raise HTTPException(400, "Set your home taluk first")
-        upd["service_areas"], upd["service_taluk_codes"] = await areas_snapshot(body.service_taluks, p["home"]["subdistrict_code"])
-    if body.cities_covered is not None:
-        upd["cities_covered"] = [c.strip()[:60] for c in body.cities_covered if c.strip()]
     if body.blocked_dates is not None:
         if any(not re.fullmatch(r"\d{4}-\d{2}-\d{2}", d) for d in body.blocked_dates):
             raise HTTPException(400, "Invalid date")
@@ -3232,7 +3219,7 @@ async def eligible_local_drivers(area_q: dict, r: dict, exclude: str) -> list:
     dates = [(start + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(max(1, math.ceil(r["hours"] / 24)))]
     q = {"$and": [area_q, AVAILABLE_Q, svc_q(service)], "status": "approved", "days": weekday, "user_id": {"$ne": exclude}, "blocked_dates": {"$nin": dates}}
     if r.get("service_type") == "outstation":
-        q["accepts_outstation"] = True
+        q["acceptOutstationTrips"] = True
     vt = r.get("vehicle_type") or ""
     if service == "rent" and vt in ("hatchback", "sedan", "suv", "muv", "luxury", "automatic", "ev"):
         q["vehicle_types"] = vt
@@ -3253,10 +3240,8 @@ async def eligible_local_drivers(area_q: dict, r: dict, exclude: str) -> list:
 
 
 async def nearby_area(sd: dict, pickup_code: Optional[str], outstation: bool) -> dict:
-    """Fallback: drivers from other taluks of the destination district who accept trips outside their area;
-    for outstation trips also drivers based at the pickup taluk (outstation preference is enforced separately)."""
-    others = [s["code"] for s in await db.lgd_subdistricts.find({"district_code": sd["district_code"], "code": {"$ne": sd["code"]}}, {"_id": 0, "code": 1}).to_list(300)]
-    ors: list = [{"accepts_outside_area": True, "$or": [{"home.subdistrict_code": {"$in": others}}, {"service_taluk_codes": {"$in": others}}]}]
+    """Fallback: for outstation trips, drivers based at the pickup taluk (outstation preference is enforced separately)."""
+    ors: list = []
     if outstation and pickup_code and pickup_code != sd["code"]:
         ors.append({"home.subdistrict_code": pickup_code})
     return {"$and": [{"$or": ors}, {"$nor": [local_area(sd["code"])]}]}

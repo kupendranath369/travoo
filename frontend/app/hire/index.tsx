@@ -254,7 +254,7 @@ export default function HireScreen() {
           <Badge testID={`hire-driver-group-${item.user_id}`} icon="location" label={gl} tone={gt} />
           <Badge label={`Home: ${item.home?.subdistrict_name}`} tone="muted" />
           {item.match_vehicle ? <Badge testID={`hire-driver-vehicle-${item.user_id}`} icon="car-outline" label={`${item.match_vehicle.name} · ${item.match_vehicle.category.toUpperCase()} · ${item.match_vehicle.seats} seats`} tone="info" /> : null}
-          {item.accepts_outstation ? <Badge label="Outstation OK" tone="muted" /> : null}
+          {item.acceptOutstationTrips ? <Badge label="Outstation OK" tone="muted" /> : null}
         </View>
         <View style={{ flexDirection: "row", gap: space.sm }}>
           <Btn small style={{ flex: 1 }} icon="send" testID={`hire-request-driver-${item.user_id}`} label="Request this driver" loading={sending === item.user_id} onPress={() => send(item.user_id, { driver_id: item.user_id })} />
