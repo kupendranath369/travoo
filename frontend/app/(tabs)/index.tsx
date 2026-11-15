@@ -74,13 +74,16 @@ export default function Home() {
   return (
     <View style={{ flex: 1, backgroundColor: colors.surface }}>
       <View style={{ paddingTop: insets.top + space.sm, paddingHorizontal: space.lg, paddingBottom: space.sm, flexDirection: "row", alignItems: "center", backgroundColor: colors.surfaceSecondary, borderBottomWidth: 1, borderBottomColor: colors.border, gap: space.sm }}>
-        <View style={{ flex: 1 }}><Logo size={34} /></View>
+        <Pressable testID="home-profile-section" onPress={() => router.push("/profile")} style={{ flexDirection: "row", alignItems: "center", gap: space.sm, flex: 1 }}>
+          <Avatar name={user?.name} uri={pictureUrl(user?.picture)} size={40} />
+          <View>
+            <T size={12} color={colors.muted}>Hello,</T>
+            <T size={16} weight="700">{user?.name?.split(" ")[0] || "User"}</T>
+          </View>
+        </Pressable>
         {user?.role === "admin" && icon("shield-checkmark-outline", () => router.push("/admin/login"), "home-admin-button")}
         {icon("language-outline", () => router.push("/language?from=profile"), "home-language-button")}
         {icon("notifications-outline", () => router.push("/notifications"), "home-notifications-button", !!unread)}
-        <Pressable testID="home-profile-button" accessibilityLabel={t("tab.profile")} onPress={() => router.push("/profile")} hitSlop={6}>
-          <Avatar name={user?.name} uri={pictureUrl(user?.picture)} size={40} />
-        </Pressable>
         {icon("menu", () => router.push("/more"), "home-menu-button")}
       </View>
       <ScrollView
@@ -107,20 +110,57 @@ export default function Home() {
         </Animated.View>
 
         <Animated.View entering={FadeInDown.delay(80).duration(400)} style={{ flexDirection: "row", gap: space.md }}>
-          <Card testID="home-rent-driver-card" onPress={() => router.push("/hire?service=rent")} style={{ flex: 1, gap: space.sm, padding: space.lg, backgroundColor: "#E3F2FD", borderWidth: 1.5, borderColor: "#1565C0" }}>
-            <View style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: "#1565C0", alignItems: "center", justifyContent: "center" }}>
-              <HireDriverArt size={28} />
+          <Card testID="home-rent-driver-card" onPress={() => router.push("/hire?service=rent")} style={{ flex: 1, gap: space.sm, padding: space.md, backgroundColor: "#E3F2FD", borderWidth: 1.5, borderColor: "#1565C0", borderRadius: radius.md, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 3 }}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
+              <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: "#1565C0", alignItems: "center", justifyContent: "center" }}>
+                <HireDriverArt size={24} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <T size={14} weight="800" color="#1565C0">Rent a Driver</T>
+                <T size={11} color="#546E7A">Your car, our driver</T>
+              </View>
             </View>
-            <T size={16} weight="800" color="#1565C0">Rent a Driver</T>
-            <T size={12} color="#546E7A">Your car, our driver</T>
           </Card>
-          <Card testID="home-book-driver-card" onPress={() => router.push("/hire?service=book")} style={{ flex: 1, gap: space.sm, padding: space.lg, backgroundColor: "#FFF3E0", borderWidth: 1.5, borderColor: "#E65100" }}>
-            <View style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: "#E65100", alignItems: "center", justifyContent: "center" }}>
-              <Ionicons name="car-sport" size={24} color="#FFFFFF" />
+          <Card testID="home-book-driver-card" onPress={() => router.push("/hire?service=book")} style={{ flex: 1, gap: space.sm, padding: space.md, backgroundColor: "#FFF3E0", borderWidth: 1.5, borderColor: "#E65100", borderRadius: radius.md, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 3 }}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
+              <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: "#E65100", alignItems: "center", justifyContent: "center" }}>
+                <Ionicons name="car-sport" size={20} color="#FFFFFF" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <T size={14} weight="800" color="#E65100">Book a Driver</T>
+                <T size={11} color="#546E7A">Car and driver</T>
+              </View>
             </View>
-            <T size={16} weight="800" color="#E65100">Book a Driver</T>
-            <T size={12} color="#546E7A">Car and driver</T>
           </Card>
+        </Animated.View>
+
+        <Animated.View entering={FadeInDown.delay(120).duration(400)} style={{ gap: space.sm }}>
+          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+            <T size={16} weight="800">Recent Searches</T>
+            {recent.length > 0 ? (
+              <Pressable testID="home-clear-recent" onPress={async () => { await api("/searches", { method: "DELETE" }); setRecent([]); }} hitSlop={8}>
+                <T size={12} weight="700" color={colors.brandPrimary}>Clear All</T>
+              </Pressable>
+            ) : null}
+          </View>
+          {recent.length === 0 ? (
+            <T testID="home-recent-empty" size={13} color={colors.muted} style={{ textAlign: "center", padding: space.md }}>No recent searches</T>
+          ) : (
+            <View style={{ gap: space.sm }}>
+              {recent.slice(0, 4).map((s) => (
+                <Card key={s.key} testID={`recent-search-${s.key}`} onPress={() => { setFrom(s.origin); setTo(s.destination); if (s.date && s.date >= new Date().toISOString().slice(0, 10)) setDate(s.date); }} style={{ flexDirection: "row", gap: space.sm, alignItems: "center", padding: space.sm, backgroundColor: colors.surfaceSecondary }}>
+                  <Ionicons name={s.kind === "hire" ? "key-outline" : "time-outline"} size={18} color={colors.brandPrimary} />
+                  <View style={{ flex: 1 }}>
+                    <T weight="700" size={13} numberOfLines={1}>{s.kind === "hire" ? `${s.origin?.name} · ${t(`v2.svc.${s.service ?? "hourly"}`)}` : `${s.origin?.name} → ${s.destination?.name}`}</T>
+                    <T size={11} color={colors.muted}>{s.date ? fmtDate(s.date) : t("search.any_date")} · {fmtDate(s.at, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</T>
+                  </View>
+                  <Pressable testID={`remove-recent-${s.key}`} onPress={async () => { await api(`/searches/${s.key}`, { method: "DELETE" }); setRecent(recent.filter((r: any) => r.key !== s.key)); }} hitSlop={8}>
+                    <Ionicons name="close-circle" size={20} color={colors.muted} />
+                  </Pressable>
+                </Card>
+              ))}
+            </View>
+          )}
         </Animated.View>
 
         {featured.length ? (
