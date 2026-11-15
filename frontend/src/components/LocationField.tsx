@@ -169,6 +169,14 @@ export function LocationSearchModal({ visible, title, onClose, onSelect }: { vis
               {blocked ? <Btn small variant="outline" label={t("loc.settings")} onPress={() => Linking.openSettings()} testID="open-settings-button" /> : null}
             </View>
           ) : null}
+          {rows.length === 0 && q.trim().length >= 3 && !searching ? (
+            <View style={{ paddingHorizontal: space.lg, gap: space.sm }}>
+              <T size={13} color={colors.muted} center>No locations found. Try:</T>
+              <T size={12} color={colors.muted} center>• More specific search terms</T>
+              <T size={12} color={colors.muted} center>• Check spelling</T>
+              <T size={12} color={colors.muted} center>• Use the map to select location</T>
+            </View>
+          ) : null}
           <FlatList
             data={rows}
             keyboardShouldPersistTaps="handled"

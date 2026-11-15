@@ -23,6 +23,7 @@ export function MapPicker({ visible, title, initial, onClose, onConfirm }: { vis
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [blocked, setBlocked] = useState(false);
+  const [dragging, setDragging] = useState(false);
 
   useEffect(() => {
     if (visible) {
@@ -30,12 +31,14 @@ export function MapPicker({ visible, title, initial, onClose, onConfirm }: { vis
       setKey(String(Date.now()));
       setPlace(null);
       setMsg("");
+      setDragging(false);
     }
   }, [visible, initial]);
 
   useEffect(() => {
     if (!visible || (pos.lat === INDIA.lat && pos.lng === INDIA.lng)) return;
     setBusy(true);
+    setDragging(true);
     const h = setTimeout(async () => {
       try {
         setPlace(await api<Loc>(`/geo/reverse?lat=${pos.lat}&lng=${pos.lng}&exact=true`));
@@ -45,6 +48,7 @@ export function MapPicker({ visible, title, initial, onClose, onConfirm }: { vis
         setMsg(e.message);
       }
       setBusy(false);
+      setDragging(false);
     }, 600);
     return () => clearTimeout(h);
   }, [pos, visible]);
@@ -71,14 +75,20 @@ export function MapPicker({ visible, title, initial, onClose, onConfirm }: { vis
           <T size={18} weight="700" style={{ flex: 1 }} numberOfLines={1}>{title}</T>
         </View>
         <OsmMap testID="map-picker-map" style={{ flex: 1, height: undefined, borderRadius: 0 }} pick={{ ...pos, color: colors.brandPrimary }} centerKey={key}
-          zoom={initial ? 15 : 5} onPick={(lat, lng) => setPos({ lat, lng })} />
+          zoom={initial ? 16 : 5} onPick={(lat, lng) => setPos({ lat, lng })} />
         <View style={{ padding: space.lg, paddingBottom: insets.bottom + space.lg, gap: space.sm, backgroundColor: colors.surfaceSecondary, borderTopWidth: 1, borderTopColor: colors.border }}>
-          <T size={12} color={colors.muted}>{t("geo.tap_map")}</T>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
+            <Ionicons name={dragging ? "navigate" : "location"} size={16} color={colors.brandPrimary} />
+            <T size={12} color={colors.muted}>{dragging ? "Adjusting pin position..." : t("geo.tap_map")}</T>
+          </View>
           {busy ? <ActivityIndicator color={colors.brandPrimary} /> : place ? (
-            <View testID="map-picker-place">
+            <View testID="map-picker-place" style={{ gap: space.xs }}>
               <T weight="800">{place.name}</T>
-              <T size={12} color={colors.muted} numberOfLines={2}>{place.address || [place.district, place.state].filter(Boolean).join(", ")}</T>
-              <T size={11} color={colors.muted}>{pos.lat.toFixed(5)}, {pos.lng.toFixed(5)}</T>
+              <T size={12} color={colors.muted} numberOfLines={2}>{place.address || [place.locality, place.city, place.district, place.state].filter(Boolean).join(", ")}</T>
+              <View style={{ flexDirection: "row", gap: space.sm, alignItems: "center" }}>
+                <T size={11} color={colors.muted}>{pos.lat.toFixed(5)}, {pos.lng.toFixed(5)}</T>
+                {place.sub_district ? <T size={11} color={colors.brandPrimary} weight="600">· {place.sub_district}</T> : null}
+              </View>
             </View>
           ) : null}
           {msg ? <T size={12} color={colors.error}>{msg}</T> : null}

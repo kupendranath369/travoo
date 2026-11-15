@@ -120,6 +120,7 @@ export default function ProRegister() {
             <ServicesPicker testPrefix="pro-svc" value={services} onChange={setServices} />
             <Card style={{ paddingVertical: space.xs, gap: 0 }}>
               <T weight="800" style={{ paddingTop: space.sm }}>Home location</T>
+              <T size={12} color={colors.muted}>Select your home location to receive local hire requests in your area</T>
               <TalukPicker testPrefix="pro-home" withCity value={home} onChange={setHome} />
             </Card>
             <Card style={{ gap: space.sm }}>

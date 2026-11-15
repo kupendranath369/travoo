@@ -84,7 +84,8 @@ export function TalukPicker({ value, onChange, withCity = false, testPrefix = "t
   const subLabel = st?.sub_label ?? "Taluk / Sub-district";
   const reset = { city: "", city_code: null, village_code: null, village_name: null };
   return (
-    <View>
+    <View style={{ gap: space.xs }}>
+      <T size={12} color={colors.muted} style={{ marginTop: space.sm }}>Select your home location using the government directory</T>
       <Row testID={`${testPrefix}-state`} label="State / Union Territory" value={st?.name} onPress={() => setOpen("state")} />
       <Row testID={`${testPrefix}-district`} label="District" value={ds?.name} disabled={!st} onPress={() => setOpen("district")} />
       <Row testID={`${testPrefix}-subdistrict`} label={subLabel} value={tk?.name} disabled={!ds} onPress={() => setOpen("taluk")} />
