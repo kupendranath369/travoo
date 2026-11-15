@@ -110,25 +110,25 @@ export default function Home() {
         </Animated.View>
 
         <Animated.View entering={FadeInDown.delay(80).duration(400)} style={{ flexDirection: "row", gap: space.md }}>
-          <Card testID="home-rent-driver-card" onPress={() => router.push("/hire?service=rent")} style={{ flex: 1, gap: space.sm, padding: space.md, backgroundColor: "#E3F2FD", borderWidth: 1.5, borderColor: "#1565C0", borderRadius: radius.md, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 3 }}>
+          <Card testID="home-rent-driver-card" onPress={() => router.push("/hire?service=rent")} style={{ flex: 1, gap: space.sm, padding: space.md, backgroundColor: colors.brandSoft, borderWidth: 1.5, borderColor: colors.brandPrimary, borderRadius: radius.md, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 3 }}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
-              <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: "#1565C0", alignItems: "center", justifyContent: "center" }}>
+              <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: colors.brandPrimary, alignItems: "center", justifyContent: "center" }}>
                 <HireDriverArt size={24} />
               </View>
               <View style={{ flex: 1 }}>
-                <T size={14} weight="800" color="#1565C0">Rent a Driver</T>
-                <T size={11} color="#546E7A">Your car, our driver</T>
+                <T size={14} weight="800" color={colors.brandPrimary}>Rent a Driver</T>
+                <T size={11} color={colors.muted}>Your car, our driver</T>
               </View>
             </View>
           </Card>
-          <Card testID="home-book-driver-card" onPress={() => router.push("/hire?service=book")} style={{ flex: 1, gap: space.sm, padding: space.md, backgroundColor: "#FFF3E0", borderWidth: 1.5, borderColor: "#E65100", borderRadius: radius.md, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 3 }}>
+          <Card testID="home-book-driver-card" onPress={() => router.push("/hire?service=book")} style={{ flex: 1, gap: space.sm, padding: space.md, backgroundColor: colors.accentSoft, borderWidth: 1.5, borderColor: colors.brandTertiary, borderRadius: radius.md, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 3 }}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
-              <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: "#E65100", alignItems: "center", justifyContent: "center" }}>
-                <Ionicons name="car-sport" size={20} color="#FFFFFF" />
+              <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: colors.brandTertiary, alignItems: "center", justifyContent: "center" }}>
+                <Ionicons name="car-sport" size={20} color={colors.onBrandTertiary} />
               </View>
               <View style={{ flex: 1 }}>
-                <T size={14} weight="800" color="#E65100">Book a Driver</T>
-                <T size={11} color="#546E7A">Car and driver</T>
+                <T size={14} weight="800" color={colors.brandTertiary}>Book a Driver</T>
+                <T size={11" color={colors.muted}>Car and driver</T>
               </View>
             </View>
           </Card>
