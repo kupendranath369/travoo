@@ -39,7 +39,7 @@ export default function ProfileScreen() {
   const router = useRouter();
   const toast = useToast();
   const [edit, setEdit] = useState(false);
-  const [f, setF] = useState({ name: "", phone: "", upi_id: "", bio: "" });
+  const [f, setF] = useState({ name: "", dob: "", gender: "", language: "" });
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
@@ -52,9 +52,7 @@ export default function ProfileScreen() {
     setBusy(true);
     setErr("");
     try {
-      const { phone, ...rest } = f;
-      const body = user?.phone_verified || (phone ?? "") === (user?.phone ?? "") ? rest : f;
-      setUser(await api("/me", { method: "PUT", body }));
+      setUser(await api("/me", { method: "PUT", body: f }));
       setEdit(false);
       toast(t("profile.saved"));
     } catch (e: any) {
@@ -153,21 +151,20 @@ export default function ProfileScreen() {
 
         {edit ? (
           <Card style={{ gap: space.md }}>
-            <Field testID="profile-name-input" label={t("auth.name")} value={f.name} onChangeText={(v) => setF({ ...f, name: v })} />
-            {user.phone_verified ? <T testID="profile-verified-phone" size={13} color={colors.muted}>Verified mobile: +{(user as any).phone_e164}</T> : <Field testID="profile-phone-input" label={t("auth.phone")} value={f.phone} onChangeText={(v) => setF({ ...f, phone: v })} keyboardType="phone-pad" maxLength={10} />}
-            <Field testID="profile-upi-input" label={t("profile.upi")} value={f.upi_id} onChangeText={(v) => setF({ ...f, upi_id: v })} autoCapitalize="none" placeholder="name@bank" />
-            <Field testID="profile-bio-input" label={`${t("v2.about_me")} (${f.bio.length}/500)`} placeholder={t("v2.about_me_ph")} value={f.bio} onChangeText={(v) => setF({ ...f, bio: v })} multiline maxLength={500} />
+            <Field testID="profile-name-input" label="Full Name" value={f.name} onChangeText={(v) => setF({ ...f, name: v })} />
+            <Field testID="profile-dob-input" label="Date of Birth" value={f.dob} onChangeText={(v) => setF({ ...f, dob: v })} placeholder="DD-MM-YYYY" maxLength={10} />
+            <Field testID="profile-gender-input" label="Gender" value={f.gender} onChangeText={(v) => setF({ ...f, gender: v })} />
+            <Field testID="profile-language-input" label="Language" value={f.language} onChangeText={(v) => setF({ ...f, language: v })} />
             {err ? <T color={colors.error}>{err}</T> : null}
             <Btn testID="profile-save-button" label={t("profile.save")} onPress={save} loading={busy} />
             <Btn variant="ghost" label={t("common.cancel")} onPress={() => setEdit(false)} testID="profile-cancel-edit" />
           </Card>
         ) : (
           <Card style={{ gap: 0, paddingVertical: space.sm }}>
-            <Row testID="profile-edit-row" icon="create-outline" label={t("profile.edit")} onPress={() => { setF({ name: user.name, phone: user.phone ?? "", upi_id: user.upi_id ?? "", bio: user.bio ?? "" }); setEdit(true); }} right={user.upi_id ? <T size={12} color={colors.muted}>{user.upi_id}</T> : null} />
-            <Row testID="profile-language-row" icon="language-outline" label={t("profile.language")} onPress={() => router.push("/language?from=profile")} right={<T size={13} color={colors.muted}>{langName}</T>} />
-            <Row testID="profile-notifications-row" icon="notifications-outline" label={t("profile.notifications")} onPress={() => router.push("/notifications")} />
-            <Row testID="profile-messages-row" icon="chatbubbles-outline" label={t("v2.messages")} onPress={() => router.push("/messages")} />
-            <Row testID="profile-public-row" icon="person-outline" label={t("v2.view_profile")} onPress={() => router.push(`/user/${user.user_id}`)} />
+            <Row testID="profile-name-row" icon="person-outline" label="Full Name" onPress={() => { setF({ name: user.name, dob: user.dob ?? "", gender: user.gender ?? "", language: lang }); setEdit(true); }} right={<T size={13} color={colors.muted}>{user.name}</T>} />
+            <Row testID="profile-dob-row" icon="calendar-outline" label="Date of Birth" onPress={() => { setF({ name: user.name, dob: user.dob ?? "", gender: user.gender ?? "", language: lang }); setEdit(true); }} right={<T size={13} color={colors.muted}>{user.dob || "Not set"}</T>} />
+            <Row testID="profile-gender-row" icon="person-outline" label="Gender" onPress={() => { setF({ name: user.name, dob: user.dob ?? "", gender: user.gender ?? "", language: lang }); setEdit(true); }} right={<T size={13} color={colors.muted}>{user.gender || "Not set"}</T>} />
+            <Row testID="profile-language-row" icon="language-outline" label={t("profile.language")} onPress={() => { setF({ name: user.name, dob: user.dob ?? "", gender: user.gender ?? "", language: lang }); setEdit(true); }} right={<T size={13} color={colors.muted}>{langName}</T>} />
           </Card>
         )}
 
