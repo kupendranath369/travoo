@@ -121,3 +121,27 @@
 - Frontend: app/admin/dashboard.tsx - Updated to show acceptOutstationTrips instead of accepts_outstation/accepts_outside_area. Removed service_areas and cities_covered display.
 - Frontend: src/components/LocalDriverParts.tsx - ServiceAreasEditor still available but not used in main registration flow.
 - Backend test: backend/tests/test_iter17_unified_local_driver.py - Updated to use acceptOutstationTrips instead of accepts_outstation/accepts_outside_area. Removed NEAR driver test case.
+
+## Bug fix — "colors is not defined" on Register as Local Driver (/hire/register)
+- Root cause: src/components/TalukPicker.tsx `TalukPicker` used `colors` without calling useTheme(); crashed the whole register screen.
+- Fix: added `const { colors } = useTheme();` in TalukPicker.
+frontend:
+  - task: "Local driver registration screen renders (TalukPicker colors fix)"
+    implemented: true
+    working: true
+    file: "frontend/src/components/TalukPicker.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: false
+        -agent: "user"
+        -comment: "User reported 'colors is not defined' error in Register as Local Driver section"
+        -working: true
+        -agent: "testing"
+        -comment: "VERIFIED - Bug fix successful. Tested on mobile viewport (390x844). Results: (1) No 'Something went wrong' error boundary detected on /hire/register. (2) No 'colors is not defined' error found in page content or console. (3) Registration form renders correctly with TalukPicker component - all three rows (State/District/Taluk) visible and functional. (4) State picker modal opens successfully, search works (tested with Karnataka), selection works. (5) District row becomes enabled after state selection, District picker opens showing Karnataka districts. (6) No undefined variable errors in console during form interaction and scrolling. (7) Related screens /hire?service=rent and /hire/driver also render without crashes. (8) Only minor console warnings about deprecated expo-router imports (not related to bug). Fix confirmed: const { colors } = useTheme() added at line 78 in TalukPicker.tsx resolves the issue completely."
+test_plan:
+  current_focus: []
+agent_communication:
+    -agent: "testing"
+    -message: "Bug fix verification complete. The 'colors is not defined' error has been successfully resolved. TalukPicker component now properly calls useTheme() and all functionality works as expected. No further issues detected."
