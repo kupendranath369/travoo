@@ -56,6 +56,15 @@ export default function AuthScreen() {
         const r = await api("/auth/otp/complete", { body: { ticket: ticket.ticket, name: f.name.trim(), account_type: accountType, language: lang, consent } });
         await signInWith(r.token, r.user);
         if (accountType === "driver") router.push("/driver");
+      } else if (mode === "phone" && !ticket) {
+        // Temporarily disabled: Allow registration without OTP
+        // TODO: Re-enable OTP verification when MSG91 API key is available
+        if (f.name.trim().length < 2) throw new Error("Enter your full name");
+        if (!consent) throw new Error(t("auth.consent_required"));
+        // For now, redirect to email registration as OTP is disabled
+        setMode("email");
+        setEmailMode("register");
+        setErr("Mobile OTP verification is temporarily disabled. Please register with email.");
       }
     } catch (e: any) {
       setErr(e.message);

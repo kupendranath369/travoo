@@ -2738,7 +2738,7 @@ class ProDriverIn(BaseModel):
     city: LocIn
     home: "HomeLocIn"
     areas: List[str] = Field(default_factory=list, max_length=15)
-    languages: List[str] = Field(min_length=1, max_length=10)
+    languages: List[str] = Field(min_length=1, max_length=15)
     experience_years: int = Field(ge=1, le=50)
     licence_no: str = Field(min_length=8, max_length=20)
     licence_expiry: str = Field(pattern=r"^\d{2}-\d{2}-\d{4}$")
@@ -2755,6 +2755,9 @@ class ProDriverIn(BaseModel):
     services: List[Literal["rent", "book"]] = Field(default_factory=lambda: ["rent"], min_length=1, max_length=2)
     acceptOutstationTrips: bool = False
     vehicles: List["ProVehicleIn"] = Field(default_factory=list, max_length=5)  # only needed for Book a Driver
+    # New fields for enhanced verification
+    availability: List[dict] = Field(default_factory=list, max_length=30)  # Multiple date-specific schedules
+    aadhaar_front: Optional[str] = Field(default=None, max_length=50)  # Aadhaar front document file_id
 
 
 VEHICLE_CATS = ("hatchback", "sedan", "suv", "muv", "van", "luxury", "other")
@@ -2823,11 +2826,31 @@ async def pro_register(body: ProDriverIn, user: dict = Depends(get_user)):
         raise HTTPException(400, "Add at least one vehicle to offer Book a Driver")
     status = "approved" if (await get_settings()).get("instant_driver_approval") else "under_review"
     home = await home_snapshot(body.home)
+
+    # Process availability schedules
+    availability_records = []
+    for avail in body.availability:
+        if not avail.get("date") or not avail.get("from") or not avail.get("to"):
+            continue
+        # Validate time range
+        from_time = datetime.fromisoformat(avail["from"].replace("Z", "+00:00"))
+        to_time = datetime.fromisoformat(avail["to"].replace("Z", "+00:00"))
+        if to_time <= from_time:
+            raise HTTPException(400, "End time must be later than start time")
+        availability_records.append({
+            "date": avail["date"],
+            "from": avail["from"],
+            "to": avail["to"],
+            "created_at": now(),
+            "status": "active"
+        })
+
     rec = {**body.model_dump(), "city": loc_snapshot(body.city), "home": home, "available": True, "availability_status": "available",
            "service_areas": [], "service_taluk_codes": [home["subdistrict_code"]], "vehicles": vehicles_snapshot(body.vehicles),
            "cities_covered": [], "services": sorted(set(body.services)),
            "licence_no": body.licence_no.upper(), "user_id": user["user_id"],
-           "name": user["name"], "status": status, "submitted_at": now(), "admin_note": ""}
+           "name": user["name"], "status": status, "submitted_at": now(), "admin_note": "",
+           "availability": availability_records, "aadhaar_front": body.aadhaar_front}
     await db.pro_drivers.update_one({"user_id": user["user_id"]}, {"$set": rec}, upsert=True)
     if body.bio:
         await db.users.update_one({"user_id": user["user_id"]}, {"$set": {"bio": body.bio}})

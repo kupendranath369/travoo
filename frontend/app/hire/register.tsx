@@ -6,8 +6,10 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { api, Loc, locPayload } from "@/src/api";
 import { useAuth } from "@/src/auth";
+import { AvailabilityPicker, AvailabilitySchedule } from "@/src/components/AvailabilityPicker";
 import { TimeChips } from "@/src/components/DateChips";
 import { DocFile, DocKind, DocPhotos } from "@/src/components/DocPhotos";
+import { LanguagePicker } from "@/src/components/LanguagePicker";
 import { ServicesPicker, Toggle, Vehicle, VehiclesEditor } from "@/src/components/LocalDriverParts";
 import { LocationField } from "@/src/components/LocationField";
 import { HomeLoc, TalukPicker } from "@/src/components/TalukPicker";
@@ -17,7 +19,7 @@ import { useI18n } from "@/src/i18n";
 import { useTheme } from "@/src/theme";
 
 const VTYPES = ["hatchback", "sedan", "suv", "muv", "luxury", "automatic", "ev"];
-const LANGS = ["Hindi", "English", "Tamil", "Telugu", "Kannada", "Marathi", "Bengali", "Malayalam", "Gujarati", "Punjabi", "Odia", "Urdu", "Assamese"];
+const LANGS = ["Kannada", "English", "Hindi", "Telugu", "Tamil", "Malayalam", "Marathi", "Bengali", "Gujarati", "Punjabi", "Odia", "Assamese", "Urdu", "Konkani", "Sanskrit"];
 
 export default function ProRegister() {
   const insets = useSafeAreaInsets();
@@ -35,6 +37,7 @@ export default function ProRegister() {
   const [exp, setExp] = useState(3);
   const [from, setFrom] = useState("08:00");
   const [to, setTo] = useState("20:00");
+  const [availability, setAvailability] = useState<AvailabilitySchedule[]>([]);
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
   const [home, setHome] = useState<HomeLoc>({ taluk: null, city: "", city_code: null, village_code: null, village_name: null });
@@ -44,6 +47,7 @@ export default function ProRegister() {
   const [acceptOutstationTrips, setAcceptOutstationTrips] = useState(false);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [carpoolVehicles, setCarpoolVehicles] = useState<Vehicle[]>([]);
+  const [aadhaarFront, setAadhaarFront] = useState<DocFile | null>(null);
   const set = (k: keyof typeof f) => (v: string) => setF({ ...f, [k]: k.startsWith("rate") ? v.replace(/\D/g, "") : v });
   const toggle = <X,>(arr: X[], x: X, fn: (a: X[]) => void) => fn(arr.includes(x) ? arr.filter((y) => y !== x) : [...arr, x]);
   const load = useCallback(() => {
@@ -69,9 +73,17 @@ export default function ProRegister() {
     if (!langs.length) return setErr(`${t("v2.languages")} *`);
     if (!f.rate_hourly || !f.rate_half_day || !f.rate_full_day) return setErr(`${t("v2.rate_hourly")} *`);
     if (services.includes("book") && !vehicles.length) return setErr("Add at least one vehicle to offer Book a Driver");
+    if (!availability.length) return setErr("Add at least one availability schedule");
     setBusy(true);
     try {
-      const r = await api("/pro/register", { body: { services, acceptOutstationTrips, vehicles: services.includes("book") ? vehicles : [], city: locPayload(city), home: { subdistrict_code: home.taluk.code, city: home.city.trim(), city_code: home.city_code, village_code: home.village_code }, areas: f.areas.split(",").map((x) => x.trim()).filter(Boolean), languages: langs, experience_years: exp, licence_no: f.licence_no.replace(/\s/g, ""), licence_expiry: f.licence_expiry, vehicle_types: vt, days, start_time: from, end_time: to, bio: f.bio.trim(), rate_hourly: Number(f.rate_hourly), rate_half_day: Number(f.rate_half_day), rate_full_day: Number(f.rate_full_day), rate_one_way: f.rate_one_way ? Number(f.rate_one_way) : null } });
+      // Convert availability to ISO 8601 format with IST timezone
+      const availabilityData = availability.map((schedule) => ({
+        date: schedule.date,
+        from: `${schedule.date}T${schedule.from}:00+05:30`,
+        to: `${schedule.date}T${schedule.to}:00+05:30`,
+      }));
+
+      const r = await api("/pro/register", { body: { services, acceptOutstationTrips, vehicles: services.includes("book") ? vehicles : [], city: locPayload(city), home: { subdistrict_code: home.taluk.code, city: home.city.trim(), city_code: home.city_code, village_code: home.village_code }, areas: f.areas.split(",").map((x) => x.trim()).filter(Boolean), languages: langs, experience_years: exp, licence_no: f.licence_no.replace(/\s/g, ""), licence_expiry: f.licence_expiry, vehicle_types: vt, availability: availabilityData, bio: f.bio.trim(), rate_hourly: Number(f.rate_hourly), rate_half_day: Number(f.rate_half_day), rate_full_day: Number(f.rate_full_day), rate_one_way: f.rate_one_way ? Number(f.rate_one_way) : null, aadhaar_front: aadhaarFront?.file_id } });
       toast(t(`verify.status.${r.status}`));
       await load();
       router.replace("/hire/driver");
@@ -108,6 +120,15 @@ export default function ProRegister() {
         </Card>
         <T weight="800">{t("verify.photos")}</T>
         {docs ? <DocPhotos files={docs.files} kinds={docs.kinds} editable={!locked && user?.driver_status !== "under_review" && user?.driver_status !== "approved"} onChanged={load} /> : null}
+        <Card style={{ gap: space.sm }}>
+          <T weight="800">Aadhaar Card (Front)</T>
+          <T size={12} color={colors.muted}>Upload the front side of your Aadhaar card for verification</T>
+          <DocPhotos files={aadhaarFront ? [aadhaarFront] : []} kinds={[{ kind: "aadhaar_front", file_id: aadhaarFront?.file_id ?? "" }]} editable={!locked} onChanged={(files, kinds) => {
+            if (files.length > 0 && kinds.length > 0) {
+              setAadhaarFront(files[0]);
+            }
+          }} />
+        </Card>
         {locked ? (
           <Card style={{ gap: 4 }}>
             <T weight="700">{me.profile.city?.name} · {t("v2.years", { n: me.profile.experience_years })}</T>
@@ -140,8 +161,7 @@ export default function ProRegister() {
             ) : null}
             <Card style={{ paddingVertical: space.xs }}><LocationField testID="pro-city-field" label="Main city (map location)" value={city} onChange={setCity} icon="business-outline" /></Card>
             <Field testID="pro-areas-input" label={t("v2.areas")} value={f.areas} onChangeText={set("areas")} />
-            <T size={13} weight="600" color={colors.muted}>{t("v2.languages")}</T>
-            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.sm }}>{LANGS.map((l) => <Chip key={l} testID={`pro-lang-${l}`} label={l} active={langs.includes(l)} onPress={() => toggle(langs, l, setLangs)} />)}</View>
+            <LanguagePicker testPrefix="pro-lang" value={langs} onChange={setLangs} />
             <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
               <T weight="600">{t("v2.experience")}: {t("v2.years", { n: exp })}</T>
               <Stepper testID="pro-exp" value={exp} max={50} onChange={setExp} />
@@ -151,11 +171,7 @@ export default function ProRegister() {
             <T size={13} weight="600" color={colors.muted}>{t("v2.vehicle_types")}</T>
             <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.sm }}>{VTYPES.map((v) => <Chip key={v} testID={`pro-vt-${v}`} label={v.toUpperCase()} active={vt.includes(v)} onPress={() => toggle(vt, v, setVt)} />)}</View>
             <T size={13} weight="600" color={colors.muted}>{t("v2.availability")}</T>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: space.sm }}>{dayNames.map((d, i) => <Chip key={d} testID={`pro-day-${i}`} label={d} active={days.includes(i)} onPress={() => toggle(days, i, setDays)} />)}</ScrollView>
-            <T size={13} weight="600" color={colors.muted}>{t("v2.from_time")}: {from}</T>
-            <TimeChips value={from} onChange={setFrom} />
-            <T size={13} weight="600" color={colors.muted}>{t("v2.to_time")}: {to}</T>
-            <TimeChips value={to} onChange={setTo} />
+            <AvailabilityPicker testPrefix="pro-availability" value={availability} onChange={setAvailability} />
             <Field testID="pro-rate-hourly" label={t("v2.rate_hourly")} value={f.rate_hourly} onChangeText={set("rate_hourly")} keyboardType="number-pad" />
             <Field testID="pro-rate-half" label={t("v2.rate_half")} value={f.rate_half_day} onChangeText={set("rate_half_day")} keyboardType="number-pad" />
             <Field testID="pro-rate-full" label={t("v2.rate_full")} value={f.rate_full_day} onChangeText={set("rate_full_day")} keyboardType="number-pad" />
