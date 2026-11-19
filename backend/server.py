@@ -2212,8 +2212,9 @@ async def get_licence_documents(verification_id: str, _: dict = Depends(get_admi
     
     return {
         "verification_id": verification_id,
-        "licence_front": fileUrl(front_fid) if front_fid else None,
-        "licence_back": fileUrl(back_fid) if back_fid else None,
+        # Return file ids; the client builds the authenticated URL (/api/files/{fid}).
+        "licence_front": front_fid or None,
+        "licence_back": back_fid or None,
         "ocr_data": verification.get("ocr_data", {}),
         "manual_data": {
             "licence_no": mask(verification.get("manual_licence_no", "")),
@@ -3311,6 +3312,8 @@ async def nearby_area(sd: dict, pickup_code: Optional[str], outstation: bool) ->
     ors: list = []
     if outstation and pickup_code and pickup_code != sd["code"]:
         ors.append({"home.subdistrict_code": pickup_code})
+    if not ors:  # MongoDB rejects an empty $or -> match nobody instead of crashing
+        return {"user_id": {"$in": []}}
     return {"$and": [{"$or": ors}, {"$nor": [local_area(sd["code"])]}]}
 
 

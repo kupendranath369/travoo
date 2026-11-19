@@ -32,7 +32,7 @@ class TestSetup:
         S["city"] = t.loc("Hiriyur")
         S["pax"], S["pax_id"], _ = t.reg("Pax17")
         S["R"] = t.make_driver("R17", HIRIYUR, services=["rent"])                                   # home = destination taluk
-        S["B"] = t.make_driver("B17", HOLALKERE, services=["book"], vehicles=VEH)  # serves destination via home taluk
+        S["B"] = t.make_driver("B17", HIRIYUR, services=["book"], vehicles=VEH)  # service areas removed: home taluk = destination
         S["BOTH"] = t.make_driver("BOTH17", HIRIYUR, services=["rent", "book"], vehicles=VEH, acceptOutstationTrips=True)
         S["G"] = t.make_driver("G17", GAJWEL, services=["rent", "book"], vehicles=VEH)               # pickup taluk only -> never local
 

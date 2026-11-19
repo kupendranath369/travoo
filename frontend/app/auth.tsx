@@ -144,7 +144,7 @@ export default function AuthScreen() {
                     <T center weight="700" color={colors.brandPrimary}>Forgot Password?</T>
                   </Pressable>
                   <Pressable onPress={() => { setErr(""); setEmailMode("register"); }} style={{ padding: space.sm }}>
-                    <T center weight="700" color={colors.brandPrimary}>Don't have an account? Register with email</T>
+                    <T center weight="700" color={colors.brandPrimary}>{"Don't have an account? Register with email"}</T>
                   </Pressable>
                 </>
               ) : (
