@@ -131,3 +131,7 @@ Pan-India intercity paid carpooling app (BlaBlaCar model) called TRAVOO, tagline
 - Installed missing backend packages (resend etc.) + emergentintegrations; reinstalled frontend packages (expo command was missing).
 - Fixed 2 build-breaking errors: typo `size={11"` in app/(tabs)/index.tsx; duplicate `params` name in app/hire/index.tsx (renamed helper to queryParams).
 - Web bundle builds, app loads (language screen), backend running with no errors.
+
+## 2026-11 — Test & build session
+- Restored deps (resend, emergentintegrations; npm reinstall). Fixed licence-documents endpoint (undefined fileUrl) and hire request/search 500 (empty $or in nearby_area). Updated stale iter17 test.
+- Backend regression + frontend smoke (auth, tabs, search, profile, hire, admin) all pass.
