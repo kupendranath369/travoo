@@ -66,6 +66,17 @@ export default function AdminDriverDetail() {
           {row("Licence no.", doc.licence_no)}{row("RC no.", doc.rc_no)}{row("Licence expiry", doc.licence_expiry)}{row("Vehicle name", doc.vehicle_name)}
           {row("Registered mobile", d.user?.phone_e164 ? `+${d.user.phone_e164}${d.user.phone_verified ? " (verified)" : ""}` : doc.phone)}{row("Trips published", d.trips)}
           {row("Submitted", doc.submitted_at && new Date(doc.submitted_at + "Z").toLocaleString())}
+          {d.pro?.availability ? (
+            <View style={{ gap: space.xs, marginTop: space.sm }}>
+              <T size={12} weight="700" color={colors.muted}>AVAILABILITY SCHEDULES</T>
+              {d.pro.availability.map((avail: any, idx: number) => (
+                <View key={idx} style={{ paddingVertical: space.xs, borderBottomWidth: 1, borderBottomColor: colors.border }}>
+                  <T size={12} weight="600">{avail.date}</T>
+                  <T size={11} color={colors.muted}>{new Date(avail.from).toLocaleTimeString()} - {new Date(avail.to).toLocaleTimeString()}</T>
+                </View>
+              ))}
+            </View>
+          ) : null}
           {u.suspended ? <T color={colors.error} weight="700">Account suspended</T> : null}
           {d.missing.length ? <T size={12} color={colors.error}>Missing: {d.missing.map((k: string) => d.labels[k]).join(", ")}</T> : null}
         </Card>
