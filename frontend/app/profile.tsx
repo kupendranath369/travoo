@@ -10,7 +10,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { api, pictureUrl, getApiToken, API_BASE } from "@/src/api";
 import { useAuth } from "@/src/auth";
 import { useToast } from "@/src/components/toast";
-import { Avatar, Badge, Btn, Card, Field, Header, IconName, Rating, T, space, statusTone } from "@/src/components/ui";
+import { Avatar, Badge, Btn, Card, Field, Header, IconName, Rating, T, radius, space, statusTone } from "@/src/components/ui";
 import { PhoneOtp } from "@/src/components/PhoneOtp";
 import { LANGUAGES, useI18n } from "@/src/i18n";
 import { useTheme } from "@/src/theme";
@@ -149,31 +149,41 @@ export default function ProfileScreen() {
           </Card>
         ) : null}
 
-        {edit ? (
-          <Card style={{ gap: space.md }}>
-            <Field testID="profile-name-input" label="Full Name" value={f.name} onChangeText={(v) => setF({ ...f, name: v })} />
-            <Field testID="profile-dob-input" label="Date of Birth" value={f.dob} onChangeText={(v) => setF({ ...f, dob: v })} placeholder="DD-MM-YYYY" maxLength={10} />
-            <Field testID="profile-gender-input" label="Gender" value={f.gender} onChangeText={(v) => setF({ ...f, gender: v })} />
-            <Field testID="profile-language-input" label="Language" value={f.language} onChangeText={(v) => setF({ ...f, language: v })} />
-            {err ? <T color={colors.error}>{err}</T> : null}
-            <Btn testID="profile-save-button" label={t("profile.save")} onPress={save} loading={busy} />
-            <Btn variant="ghost" label={t("common.cancel")} onPress={() => setEdit(false)} testID="profile-cancel-edit" />
-          </Card>
-        ) : (
-          <Card style={{ gap: 0, paddingVertical: space.sm }}>
-            <Row testID="profile-name-row" icon="person-outline" label="Full Name" onPress={() => { setF({ name: user.name, dob: user.dob ?? "", gender: user.gender ?? "", language: lang }); setEdit(true); }} right={<T size={13} color={colors.muted}>{user.name}</T>} />
-            <Row testID="profile-dob-row" icon="calendar-outline" label="Date of Birth" onPress={() => { setF({ name: user.name, dob: user.dob ?? "", gender: user.gender ?? "", language: lang }); setEdit(true); }} right={<T size={13} color={colors.muted}>{user.dob || "Not set"}</T>} />
-            <Row testID="profile-gender-row" icon="person-outline" label="Gender" onPress={() => { setF({ name: user.name, dob: user.dob ?? "", gender: user.gender ?? "", language: lang }); setEdit(true); }} right={<T size={13} color={colors.muted}>{user.gender || "Not set"}</T>} />
-            <Row testID="profile-language-row" icon="language-outline" label={t("profile.language")} onPress={() => { setF({ name: user.name, dob: user.dob ?? "", gender: user.gender ?? "", language: lang }); setEdit(true); }} right={<T size={13} color={colors.muted}>{langName}</T>} />
-          </Card>
-        )}
+        <Card testID="personal-profile-card" style={{ gap: space.sm, padding: space.md, backgroundColor: colors.surfaceSecondary, borderRadius: radius.lg, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 3 }}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
+            <Ionicons name="person-circle" size={24} color={colors.brandPrimary} />
+            <T weight="800" size={16}>Personal Profile</T>
+          </View>
+          {edit ? (
+            <View style={{ gap: space.md }}>
+              <Field testID="profile-name-input" label="Full Name" value={f.name} onChangeText={(v) => setF({ ...f, name: v })} />
+              <Field testID="profile-dob-input" label="Date of Birth" value={f.dob} onChangeText={(v) => setF({ ...f, dob: v })} placeholder="DD-MM-YYYY" maxLength={10} />
+              <Field testID="profile-gender-input" label="Gender" value={f.gender} onChangeText={(v) => setF({ ...f, gender: v })} />
+              <Field testID="profile-language-input" label="Language" value={f.language} onChangeText={(v) => setF({ ...f, language: v })} />
+              {err ? <T color={colors.error}>{err}</T> : null}
+              <Btn testID="profile-save-button" label={t("profile.save")} onPress={save} loading={busy} />
+              <Btn variant="ghost" label={t("common.cancel")} onPress={() => setEdit(false)} testID="profile-cancel-edit" />
+            </View>
+          ) : (
+            <View style={{ gap: 0 }}>
+              <Row testID="profile-name-row" icon="person-outline" label="Full Name" onPress={() => { setF({ name: user.name, dob: user.dob ?? "", gender: user.gender ?? "", language: lang }); setEdit(true); }} right={<T size={13} color={colors.muted}>{user.name}</T>} />
+              <Row testID="profile-dob-row" icon="calendar-outline" label="Date of Birth" onPress={() => { setF({ name: user.name, dob: user.dob ?? "", gender: user.gender ?? "", language: lang }); setEdit(true); }} right={<T size={13} color={colors.muted}>{user.dob || "Not set"}</T>} />
+              <Row testID="profile-gender-row" icon="person-outline" label="Gender" onPress={() => { setF({ name: user.name, dob: user.dob ?? "", gender: user.gender ?? "", language: lang }); setEdit(true); }} right={<T size={13} color={colors.muted}>{user.gender || "Not set"}</T>} />
+              <Row testID="profile-language-row" icon="language-outline" label={t("profile.language")} onPress={() => { setF({ name: user.name, dob: user.dob ?? "", gender: user.gender ?? "", language: lang }); setEdit(true); }} right={<T size={13} color={colors.muted}>{langName}</T>} />
+            </View>
+          )}
+        </Card>
 
-        <T size={13} weight="700" color={colors.muted}>{t("profile.driver").toUpperCase()}</T>
-        <Card style={{ gap: 0, paddingVertical: space.sm }}>
-          <Row testID="profile-verification-row" icon="shield-checkmark-outline" label={t("profile.verification")} onPress={() => router.push("/driver")} />
-          <Row testID="profile-earnings-row" icon="wallet-outline" label={t("profile.earnings")} onPress={() => router.push("/earnings")} />
-          <Row testID="profile-local-driver-row" icon="briefcase-outline" label={t("v2.local_register")} onPress={() => router.push("/hire/register")} />
-          <Row testID="profile-hire-row" icon="key-outline" label={t("v2.hire")} onPress={() => router.push("/hire")} />
+        <Card testID="driver-section-card" style={{ gap: space.sm, padding: space.md, backgroundColor: colors.surfaceSecondary, borderRadius: radius.lg, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 3 }}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
+            <Ionicons name="car-sport" size={24} color={colors.brandPrimary} />
+            <T weight="800" size={16}>Driver Section</T>
+          </View>
+          <View style={{ gap: 0 }}>
+            <Row testID="profile-local-driver-row" icon="briefcase-outline" label={t("v2.local_register")} onPress={() => router.push("/hire/register")} />
+            <Row testID="profile-verification-row" icon="shield-checkmark-outline" label={t("profile.verification")} onPress={() => router.push("/driver")} />
+            <Row testID="profile-earnings-row" icon="wallet-outline" label={t("profile.earnings")} onPress={() => router.push("/earnings")} />
+          </View>
         </Card>
 
         <Card style={{ gap: 0, paddingVertical: space.sm }}>

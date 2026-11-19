@@ -82,7 +82,6 @@ export default function Home() {
           </View>
         </Pressable>
         {user?.role === "admin" && icon("shield-checkmark-outline", () => router.push("/admin/login"), "home-admin-button")}
-        {icon("language-outline", () => router.push("/language?from=profile"), "home-language-button")}
         {icon("notifications-outline", () => router.push("/notifications"), "home-notifications-button", !!unread)}
         {icon("menu", () => router.push("/more"), "home-menu-button")}
       </View>

@@ -30,6 +30,21 @@ export default function TabsLayout() {
   const { t } = useI18n();
   const { colors } = useTheme();
   const unread = useUnreadMessages();
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
+
+  useEffect(() => {
+    const loadNotifications = async () => {
+      try {
+        const n = await api("/notifications");
+        setUnreadNotifications(n.unread || 0);
+      } catch (e) {
+        setUnreadNotifications(0);
+      }
+    };
+    loadNotifications();
+    const interval = setInterval(loadNotifications, 15000);
+    return () => clearInterval(interval);
+  }, []);
 
   if (usesNativeTabs) {
     return (
@@ -50,6 +65,11 @@ export default function TabsLayout() {
           <NativeTabs.Trigger.Icon sf="bubble.left.and.bubble.right.fill" />
           <NativeTabs.Trigger.Label>{t("v2.messages")}</NativeTabs.Trigger.Label>
           {unread ? <NativeTabs.Trigger.Badge>{String(unread)}</NativeTabs.Trigger.Badge> : null}
+        </NativeTabs.Trigger>
+        <NativeTabs.Trigger name="notifications">
+          <NativeTabs.Trigger.Icon sf="bell.fill" />
+          <NativeTabs.Trigger.Label>{t("profile.notifications")}</NativeTabs.Trigger.Label>
+          {unreadNotifications ? <NativeTabs.Trigger.Badge>{String(unreadNotifications)}</NativeTabs.Trigger.Badge> : null}
         </NativeTabs.Trigger>
       </NativeTabs>
     );
@@ -86,6 +106,7 @@ export default function TabsLayout() {
       />
       <Tabs.Screen name="bookings" options={{ title: t("tab.bookings"), tabBarButtonTestID: "tab-bookings", tabBarIcon: icon("ticket", "ticket-outline") }} />
       <Tabs.Screen name="messages" options={{ title: t("v2.messages"), tabBarButtonTestID: "tab-messages", tabBarIcon: icon("chatbubbles", "chatbubbles-outline"), tabBarBadge: unread ? unread : undefined, tabBarBadgeStyle: { backgroundColor: colors.brandTertiary, color: colors.onBrandTertiary, fontSize: 10 } }} />
+      <Tabs.Screen name="notifications" options={{ title: t("profile.notifications"), tabBarButtonTestID: "tab-notifications", tabBarIcon: icon("notifications", "notifications-outline"), tabBarBadge: unreadNotifications ? unreadNotifications : undefined, tabBarBadgeStyle: { backgroundColor: colors.brandTertiary, color: colors.onBrandTertiary, fontSize: 10 } }} />
     </Tabs>
   );
 }
