@@ -126,3 +126,8 @@ Pan-India intercity paid carpooling app (BlaBlaCar model) called TRAVOO, tagline
 - New screens: hire chooser + forms (hire/index), Local Driver dashboard (hire/driver), registration updated; admin tabs Local drivers (service filter), Driver hire bookings, Driver reports.
 - Notifications are in-app (notifications collection). Real phone push (FCM) still needs google-services.json + a native build.
 - Tests: iter17 14/14, iter18 edge cases 14/14, iter16 17/17, carpool regression OK.
+
+## 2026-11 — Update & build
+- Installed missing backend packages (resend etc.) + emergentintegrations; reinstalled frontend packages (expo command was missing).
+- Fixed 2 build-breaking errors: typo `size={11"` in app/(tabs)/index.tsx; duplicate `params` name in app/hire/index.tsx (renamed helper to queryParams).
+- Web bundle builds, app loads (language screen), backend running with no errors.

@@ -127,7 +127,7 @@ export default function Home() {
               </View>
               <View style={{ flex: 1 }}>
                 <T size={14} weight="800" color={colors.brandTertiary}>Book a Driver</T>
-                <T size={11" color={colors.muted}>Car and driver</T>
+                <T size={11} color={colors.muted}>Car and driver</T>
               </View>
             </View>
           </Card>

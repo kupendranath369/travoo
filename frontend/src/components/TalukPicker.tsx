@@ -75,6 +75,7 @@ function Row({ testID, label, value, disabled, onPress }: { testID: string; labe
 
 /** State → District → Taluk/Tehsil/Mandal → (City/Town → Village) using the Govt. LGD directory. */
 export function TalukPicker({ value, onChange, withCity = false, testPrefix = "taluk" }: { value: HomeLoc; onChange: (v: HomeLoc) => void; withCity?: boolean; testPrefix?: string }) {
+  const { colors } = useTheme();
   const [open, setOpen] = useState<"state" | "district" | "taluk" | "city" | "village" | null>(null);
   const [state, setState] = useState<{ code: string; name: string; sub_label: string } | null>(null);
   const [district, setDistrict] = useState<{ code: string; name: string } | null>(null);

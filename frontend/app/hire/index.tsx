@@ -119,7 +119,7 @@ export default function HireScreen() {
   const pick = (s: "rent" | "book") => { setService(s); setStype(s === "rent" ? "hourly" : "one_way"); setVtype(s === "rent" ? "" : "sedan"); setErr(""); };
 
   const multi = stype === "multi_day" || stype === "outstation";
-  const params = () => {
+  const queryParams = () => {
     const q = new URLSearchParams({ subdistrict_code: dt.taluk!.code, date: date!, time, service: service!, service_type: stype, hours: String(hours), days: String(days), vehicle_type: vtype, passengers: String(passengers) });
     if (pt.taluk) q.set("pickup_subdistrict_code", pt.taluk.code);
     return q;
@@ -132,7 +132,7 @@ export default function HireScreen() {
     setErr("");
     setBusy(true);
     try {
-      const r = await api(`/hire/local-drivers?${params()}`);
+      const r = await api(`/hire/local-drivers?${queryParams()}`);
       setRows(r.local);
     } catch (e: any) { setErr(e.message); }
     setBusy(false);
@@ -140,7 +140,7 @@ export default function HireScreen() {
   const findNearby = async () => {
     setBusy(true);
     try {
-      const r = await api(`/hire/local-drivers?${params()}&nearby=true`);
+      const r = await api(`/hire/local-drivers?${queryParams()}&nearby=true`);
       setNearby({ rows: r.nearby ?? [], scope: r.nearby_scope });
     } catch (e: any) { setErr(e.message); }
     setBusy(false);
