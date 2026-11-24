@@ -3,7 +3,8 @@ import React, { useState } from "react";
 import { Modal, Pressable, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { Btn, Card, Field, T, radius, space } from "@/src/components/ui";
+import { Btn, Card, T, radius, space } from "@/src/components/ui";
+import { ClockTimePicker } from "@/src/components/ClockTimePicker";
 import { DateField } from "@/src/components/Calendar";
 import { useTheme } from "@/src/theme";
 
@@ -37,6 +38,7 @@ export function AvailabilityPicker({ availability = [], onChange, onSave, saving
   const [newFrom, setNewFrom] = useState("09:00");
   const [newTo, setNewTo] = useState("18:00");
   const [err, setErr] = useState("");
+  const [openClock, setOpenClock] = useState<"from" | "to" | null>(null);
   const testPrefix = "avail"; // Hardcoded for consistency
 
   const validateTimeRange = (from: string, to: string): boolean => {
@@ -215,23 +217,11 @@ export function AvailabilityPicker({ availability = [], onChange, onSave, saving
               minDate={new Date()} // Prevent past dates
             />
 
-            <Field
-              testID={`avail-from`}
-              label="Available From"
-              value={newFrom}
-              onChangeText={setNewFrom}
-              placeholder="09:00"
-              maxLength={5}
-            />
+            <ClockTimePicker testID="avail-from" label="Available From" value={newFrom} onChange={setNewFrom}
+              open={openClock === "from"} onToggle={() => setOpenClock(openClock === "from" ? null : "from")} />
 
-            <Field
-              testID={`avail-to`}
-              label="Available To"
-              value={newTo}
-              onChangeText={setNewTo}
-              placeholder="18:00"
-              maxLength={5}
-            />
+            <ClockTimePicker testID="avail-to" label="Available To" value={newTo} onChange={setNewTo}
+              open={openClock === "to"} onToggle={() => setOpenClock(openClock === "to" ? null : "to")} />
 
             {err ? <T color={colors.error} weight="600">{err}</T> : null}
 

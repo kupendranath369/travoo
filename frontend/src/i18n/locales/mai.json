@@ -431,7 +431,7 @@
  "v2.local_status": "स्थानीय ड्राइवर स्थिति",
  "v2.areas": "सेवा क्षेत्र (कॉमा सँ अलग)",
  "v2.vehicle_types": "जकरा वाहन अहाँ चला सकैत छी",
- "v2.availability": "उपलब्ध दिन",
+ "v2.availability": "उपलब्धताक तिथि",
  "v2.from_time": "सँ",
  "v2.to_time": "धरि",
  "v2.rate_hourly": "घंटाक दर (₹)",

@@ -431,7 +431,7 @@
  "v2.local_status": "स्थानीय ड्राइवर स्थिति",
  "v2.areas": "सेवा वाले इलाके (comma separated)",
  "v2.vehicle_types": "जेहड़े वाहन तुस चला सकदे ओ",
- "v2.availability": "उपलब्ध दिन",
+ "v2.availability": "उपलब्धता दियां तरीकां",
  "v2.from_time": "तों",
  "v2.to_time": "तक",
  "v2.rate_hourly": "घंटे दी दर (₹)",

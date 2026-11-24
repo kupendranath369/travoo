@@ -393,7 +393,7 @@
   "v2.local_status": "Local driver status",
   "v2.areas": "Areas served (comma separated)",
   "v2.vehicle_types": "Vehicles you can drive",
-  "v2.availability": "Available days",
+  "v2.availability": "Availability dates",
   "v2.from_time": "From",
   "v2.to_time": "To",
   "v2.rate_hourly": "Hourly rate (₹)",
