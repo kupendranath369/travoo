@@ -147,3 +147,9 @@ Pan-India intercity paid carpooling app (BlaBlaCar model) called TRAVOO, tagline
 - The driver dashboard Availability tab now saves through /pro/settings (ids, ISO storage, HH:MM normalising, list reloads when a save fails)
 - Fixed a 500 in local-driver matching (naive/aware datetimes). has_clash no longer treats availability windows as conflicts.
 - Tested: iteration_21 — backend 29/29, all frontend flows pass
+
+## Iteration 22–24 (Jun 2026)
+- Tap-to-pick clock (ClockTimePicker) for availability times. The label "Availability dates" is in all 23 locales.
+- Local driver verification is now one form for Rent and Book. A YES/NO swipe switch asks "Do you have a vehicle?". YES shows Add vehicle and offers both services, NO offers Rent only.
+- Fixed: registration from the UI failed with 'days: Field required'. These fields now have backend defaults, and date availability governs matching.
+- Tested: iteration_24 — backend 39/39, frontend 100%

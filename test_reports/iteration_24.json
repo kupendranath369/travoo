@@ -1,0 +1,26 @@
+{
+  "summary": "Retest of the 'Do you have a vehicle?' YES/NO flow after the days/start_time/end_time fix. Everything passes. (a) A REAL UI submit at 390x844 with no request interception works. NO sends services ['rent'] and vehicles [], POST /api/pro/register returns 200 {status: under_review}, and the page redirects to /hire/driver, where the dashboard shows only the 'Rent a Driver' badge. YES with one vehicle (KA01AB2424, SUV, 1200/day) sends services ['rent','book'] plus the vehicle, returns 200, and the dashboard shows the 'Book a Driver' and 'Rent a Driver' badges. GET /api/pro/me confirms both, including the defaults days 0-6 and 00:00-23:59, availability on 2026-12-05 from 09:00 to 18:00, and a vehicle_id assigned to the vehicle. (b) After approving both in the DB, GET /api/hire/local-drivers on 2026-12-05 10:00 for 4h: Rent finds both drivers. Book (one_way, any or suv) finds only the YES driver. Book with 6 passengers does not find the YES driver (4 seats). Another date (12-06) finds neither, and a window overrun (16:00 + 4h) finds neither. (c) YesNoSwipe on web at 1920x1080: a mouse drag right toggles it to YES, the vehicle section appears and aria-checked is 'true'. A mouse drag left toggles it back to NO. A 10px drag does not toggle it. There is no text selection after drags or a double-click, user-select is none on the switch and its labels, role='switch' is set, and taps still work. (d) Regression: test_iter20_availability.py and test_iter21_matching_availability.py pass 29/29.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/hire/register at 1920x1080", "issues": ["The Document photos placeholder (DocPhotos) stretches the full width with a very tall aspect ratio, so it fills the whole first screen and the form starts far below. Cap its maxWidth/height on wide screens."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_iter24_hasvehicle_e2e.py", "/app/backend/tests/ui_setup_iter23_hasvehicle.py", "/app/test_reports/pytest/iter24.xml"],
+  "action_items": [
+    "Optional/LOW: limit the size of the DocPhotos placeholder on desktop widths.",
+    "Optional/LOW: remove dead state in register.tsx (days/setDays, from/setFrom, to/setTo, dayNames)."
+  ],
+  "critical_code_review_comments": [
+    "ProDriverIn now defaults days to 0-6 and the time to 00:00-23:59. A driver registered via the API WITHOUT availability therefore matches at any hour on any day through the weekly fallback. The UI requires at least one availability entry, so this only affects direct API clients. Consider requiring availability (min_length=1) in the backend if it is mandatory.",
+    "register.tsx still has the unused days/from/to state and dayNames (dead code)."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter24_hasvehicle_e2e.py (new)"],
+  "success_rate": {"backend": "100% (10/10 new + 29/29 regression)", "frontend": "100%"},
+  "seed_data_creation": "Created TEST_Veh23No, TEST_Veh23Yes, TEST_Veh24Pax and TEST_Swipe24 users. All were deleted (users, pro_drivers, driver_documents, notifications) by id. Uploaded image files for the first two may remain in the file storage.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Flow: run `cd backend/tests && python ui_setup_iter23_hasvehicle.py` (writes /tmp/iter23_users.txt). In the UI: /auth -> language-continue-button if shown -> auth-toggle-mode -> email login -> /hire/register. Fill the form as described in iteration_23 (the first picker-item for home gives subdistrict 5916). Submit for real, then run test_iter24_hasvehicle_e2e.py (-c /dev/null -p no:xdist), which checks /pro/me, approves, checks matching and cleans up. For mouse-drag tests, scroll the switch into view first, otherwise mouse events miss it."
+}
