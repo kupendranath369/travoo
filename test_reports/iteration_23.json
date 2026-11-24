@@ -1,0 +1,31 @@
+{
+  "summary": "Frontend-only test of the 'Do you have a vehicle?' YES/NO swipe on /hire/register at 390x844, using two fresh TEST users. Each user had a phone, a profile photo, licence front/back and Aadhaar uploaded through the API. The new switch works: the old Services chips are gone, pro-has-vehicle-card shows the label and the switch, and the switch defaults to NO. Tapping YES/NO toggles it. The knob animates with a spring (left 2px -> 76px, seen at 59px mid-animation), the background goes grey -> brand blue, and the note text changes. A touch swipe right/left (CDP touch events) toggles it too. On NO there is no vehicle section. On YES the Add vehicle card with VehiclesEditor and the 'Use my Carpool vehicle' button appear. Going YES then NO hides the section again. Submitting YES with no vehicle shows 'Add at least one vehicle, or choose NO for 'Do you have a vehicle?''. Layout at 390px is fine: the switch is 148px next to the label inside a 358px card, and scrollWidth is 390 with no overflow. BLOCKER: submitting the full form from the UI fails for EVERY user with 'days: Field required'. The fix commit dd6f1a0 dropped days/start_time/end_time from the frontend payload, but the backend ProDriverIn still requires them, and hire_search matches on 'days'. To check the new logic anyway, I let Playwright route-intercept the request and inject only the missing days/start_time/end_time. This showed the UI sends the correct values. YES + vehicle sends services ['rent','book'] and the vehicle, and GET /api/pro/me returns services ['book','rent'] with vehicle KA01AB2323 (suv, 1200/day), status under_review. NO (after adding a Carpool vehicle under YES and then switching back to NO) sends services ['rent'] and vehicles [], and /pro/me returns services ['rent'] and vehicles []. Both redirect to /hire/driver. No page errors.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "hire/register submit", "issue": "POST /api/pro/register returns 422/400 'days: Field required' because the frontend no longer sends days, start_time and end_time (they were removed in commit dd6f1a0). The backend ProDriverIn (server.py ~L2747-2749) still requires them. Nobody can complete local driver registration from the UI. Fix: either send days/start_time/end_time again (the days/from/to state still exists in register.tsx but is unused), or make them optional in the backend or derive them from availability. Note that /hire/drivers search filters on 'days', so any backend default must keep matching working.", "selector": "pro-submit-button / pro-error", "priority": "CRITICAL"},
+      {"component": "YesNoSwipe (web, mouse)", "issue": "On web, a mouse drag does not toggle the switch and selects the NO/YES text instead. A touch swipe works. Consider userSelect:'none' on the labels, and also handling the mouse responder (onStartShouldSetPanResponderCapture, or don't let the child Pressables keep the responder).", "selector": "pro-has-vehicle", "priority": "LOW"},
+      {"component": "YesNoSwipe a11y", "issue": "aria-checked is not rendered on web (accessibilityState on Animated.View has no effect). Use aria-checked / accessibilityState on a role that react-native-web supports.", "selector": "pro-has-vehicle", "priority": "LOW"}
+    ],
+    "integration_issues": [
+      {"flow": "Local driver registration (both YES and NO)", "issue": "Blocked by the missing days/start_time/end_time payload fields (see above). With them injected, the services/vehicles logic is correct.", "affected_selectors": ["pro-submit-button"]}
+    ],
+    "design_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/ui_setup_iter23_hasvehicle.py"],
+  "action_items": [
+    "CRITICAL: Fix POST /api/pro/register 'days: Field required'. Either send days/start_time/end_time from register.tsx (the state vars days/from/to already exist) or make them optional/derived in ProDriverIn, keeping hire_search's 'days' filter working.",
+    "LOW: YesNoSwipe: add userSelect none and support mouse drag on web, and expose aria-checked."
+  ],
+  "critical_code_review_comments": [
+    "register.tsx still declares the unused state days/setDays, from/setFrom and to/setTo, plus the unused imports TimeChips, ScrollView and dayNames. This is dead code, and it hides the fact that the payload no longer sends these fields.",
+    "Vehicles added under YES are kept in state after switching to NO. They are not sent (services excludes 'book'), so this is correct, and they come back if the user switches to YES again. That is acceptable UX.",
+    "The backend sorts services, so /pro/me returns ['book','rent'] rather than ['rent','book']. Order-insensitive checks are fine."
+  ],
+  "updated_files": ["/app/backend/tests/ui_setup_iter23_hasvehicle.py (new setup script)"],
+  "success_rate": {"backend": "N/A (skipped)", "frontend": "Switch/visibility/validation/payload 100%; real end-to-end submit 0% (blocked by the days field bug)"},
+  "seed_data_creation": "Created TEST_Veh23No and TEST_Veh23Yes, with a Carpool vehicle KA02CD4545 for Veh23No. All were deleted by user_id: users, pro_drivers, driver_documents, files and vehicles. passenger@travoo.in was not modified.",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Setup: run `cd /app/backend/tests && python ui_setup_iter23_hasvehicle.py`. It writes /tmp/iter23_users.txt with one 'email uid' per line, password Passw0rd!x. UI fill order: pro-home-state/district/subdistrict/city, each followed by picker-search and the first picker-item-*. Then pro-city-field -> location-search-input 'Hiriyur' -> first location-option-*, then pro-lang-trigger -> pro-lang-item-Kannada -> pro-lang-save, then the licence fields, then avail-add-button -> avail-date -> avail-date-next -> avail-date-day-2026-12-05 -> avail-save, then the rates. Mouse drag does not toggle the switch; use CDP Input.dispatchTouchEvent for swipes. After the days fix, retest without the route interception."
+}

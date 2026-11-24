@@ -2744,9 +2744,9 @@ class ProDriverIn(BaseModel):
     licence_no: str = Field(min_length=8, max_length=20)
     licence_expiry: str = Field(pattern=r"^\d{2}-\d{2}-\d{4}$")
     vehicle_types: List[Literal["hatchback", "sedan", "suv", "muv", "luxury", "automatic", "ev"]] = Field(min_length=1)
-    days: List[int] = Field(min_length=1, max_length=7)  # 0=Mon..6=Sun
-    start_time: str = Field(pattern=r"^\d{2}:\d{2}$")
-    end_time: str = Field(pattern=r"^\d{2}:\d{2}$")
+    days: List[int] = Field(default_factory=lambda: list(range(7)), min_length=1, max_length=7)  # 0=Mon..6=Sun; date-specific availability governs
+    start_time: str = Field(default="00:00", pattern=r"^\d{2}:\d{2}$")
+    end_time: str = Field(default="23:59", pattern=r"^\d{2}:\d{2}$")
     bio: Optional[str] = Field(default=None, max_length=500)
     rate_hourly: int = Field(ge=50, le=5000)
     rate_half_day: int = Field(ge=100, le=20000)
@@ -3302,12 +3302,12 @@ async def eligible_local_drivers(area_q: dict, r: dict, exclude: str) -> list:
     # Check if driver has availability for this specific date and time
     avail_q = {
         "$or": [
-            {"availability": {"$in": [None, []]}},  # No availability schedules - use old logic
+            {"availability": {"$in": [None, []]}, "days": weekday},  # No availability schedules - use weekly days
             {"availability": {"$elemMatch": {"date": r["date"], "status": "active"}}}
         ]
     }
 
-    q = {"$and": [area_q, AVAILABLE_Q, svc_q(service), avail_q], "status": "approved", "days": weekday, "user_id": {"$ne": exclude}, "blocked_dates": {"$nin": dates}}
+    q = {"$and": [area_q, AVAILABLE_Q, svc_q(service), avail_q], "status": "approved", "user_id": {"$ne": exclude}, "blocked_dates": {"$nin": dates}}
     if r.get("service_type") == "outstation":
         q["acceptOutstationTrips"] = True
     vt = r.get("vehicle_type") or ""
