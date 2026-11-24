@@ -1,0 +1,37 @@
+{
+  "summary": "Iter18 health/regression pass after env fixes (resend installed, .env files created). Backend starts cleanly (/api reachable, LGD/geo startup tasks OK). New pytest suite test_iter18_health_regression.py: 15/15 PASS (passenger/driver login, bad login 401, admin blocked on app login, location search, Bengaluru->Chennai trip search (2 demo trips), trip detail, booking create + bookings list, chat send/get, cancel, notifications, driver earnings/trips/profile, real admin login returns must_change_password=true and /admin/stats 403 until changed, TEST admin forced-change -> stats + 17 admin list endpoints 200). Frontend (Expo web 390x844): language -> auth (OTP off, 'Use email instead') -> passenger login -> Home/Offer/Bookings/Messages/Notifications tabs + Profile load without red errors; search Bengaluru->Chennai via location picker shows '2 rides found'; trip detail renders (status, driver, price, seats, map). Driver login: Offer form, My rides (6 demo rides), More -> Earnings load. Admin: login -> forced /admin/change-password -> dashboard; all 19 admin tabs render. One bug found & fixed: admin dashboard MapDataCard used the app-user api client, so /api/admin/geo/report always 401'd in the admin portal (and could trigger the app user's onUnauthorized logout).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/admin/passengers", "issue": "No role filter - lists admins (e.g. 'Travoo Admin') and drivers as passengers; also N+1 (6 queries per user, up to 200 users)."},
+      {"endpoint": "/api/admin/stats", "issue": "'drivers' uses {driver_status: {$ne: 'not_submitted'}} which also counts users missing the field; 'Passengers' (distinct bookers) vs 'Registered passengers' labels are confusing (1 vs 2 shown)."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "MapDataCard (admin overview)", "issue": "Called /admin/geo/* with app-user `api` instead of `adminApi` -> 401 console errors, map database card failed to load. FIXED by tester (import adminApi as api).", "selector": "src/components/MapDataCard.tsx", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Earnings (driver)", "issues": ["'Earnings by trip' shows 'Publish your first ride to start earning' empty state although the driver has 6 scheduled rides (only trips with bookings are listed) - misleading copy."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_iter18_health_regression.py", "/app/test_reports/pytest/iter18_health.xml", "/app/backend/tests/ui_setup_iter18_admin.py", "/app/backend/tests/cleanup_iter18.py"],
+  "action_items": [
+    "Filter /api/admin/passengers by role (exclude admins/approved drivers or label them) and batch the per-user aggregates",
+    "Make admin stats driver count use $nin/['not_submitted', null] and clarify 'Passengers' vs 'Registered passengers' labels",
+    "Adjust Earnings 'by trip' empty state copy when driver has published rides without bookings"
+  ],
+  "critical_code_review_comments": [
+    "(tabs)/_layout.tsx: notifications polling useEffect has no `user` guard (unlike useUnreadMessages) - will fire /notifications every 15s even if signed out",
+    "server.py is 3700 lines - should be split into routers",
+    "Old regression suite tests/test_travoo_api.py relies on ADMIN_PASSWORD env and a non-forced admin; it now fails at admin fixture because the bootstrap admin must change password first. Use a TEST admin fixture like test_iter18_health_regression.py"
+  ],
+  "updated_files": ["/app/frontend/src/components/MapDataCard.tsx", "/app/backend/tests/test_iter18_health_regression.py", "/app/backend/tests/ui_setup_iter18_admin.py", "/app/backend/tests/cleanup_iter18.py"],
+  "success_rate": {"backend": "100% (15/15)", "frontend": "100% of tested flows after MapDataCard fix"},
+  "test_credentials": "From /app/memory/test_credentials.md. Real admin password was NOT changed (still forced-change state); admin dashboard tested with a temporary TEST admin inserted in DB and then deleted.",
+  "seed_data_creation": "Temporary TEST admin (deleted) and booking TRV-55BC10FF (passenger_names TEST_Rider) on a demo trip; booking, its messages, notifications, earnings_ledger entries and admin alert deleted via cleanup_iter18.py. Real admin has one extra admin.login audit/session entry from testing.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run tests with `-n 0` (ordered state). Auth screen defaults to phone OTP (not configured); click auth-toggle-mode for email login. Admin real account requires password change - use ui_setup_iter18_admin.py (TestAdmin123 -> change to TestAdmin789New) for admin UI; admin login rate limit 5/15min per email. Run cleanup_iter18.py after test_iter18_health_regression.py."
+}

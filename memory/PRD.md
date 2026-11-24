@@ -135,3 +135,9 @@ Pan-India intercity paid carpooling app (BlaBlaCar model) called TRAVOO, tagline
 ## 2026-11 — Test & build session
 - Restored deps (resend, emergentintegrations; npm reinstall). Fixed licence-documents endpoint (undefined fileUrl) and hire request/search 500 (empty $or in nearby_area). Updated stale iter17 test.
 - Backend regression + frontend smoke (auth, tabs, search, profile, hire, admin) all pass.
+
+## Iteration 18 (Jun 2026) — Run cleanly
+- Recreated missing backend/.env and frontend/.env; installed missing `resend` package; backend + Expo web start cleanly
+- Switched NativeTabs import to `expo-router/native-tabs` (deprecation)
+- Fixed admin MapDataCard using the wrong API client (401s); admin Passengers list excludes admins
+- Tested: iteration_18 — 15/15 backend, passenger/driver/admin UI flows pass

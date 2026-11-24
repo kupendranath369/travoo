@@ -1979,7 +1979,7 @@ async def admin_drivers(status: str = "under_review", q: str = "", _: dict = Dep
 async def admin_passengers(q: str = "", _: dict = Depends(get_admin)):
     """Get all passengers with their booking history and stats"""
     filt = {"$or": [{"name": {"$regex": re.escape(q), "$options": "i"}}, {"email": {"$regex": re.escape(q), "$options": "i"}}, {"phone": {"$regex": re.escape(re.sub(r"\D", "", q) or q)}}, {"phone_e164": {"$regex": re.escape(re.sub(r"\D", "", q) or q)}}]} if q else {}
-    users = await db.users.find(filt, USER_PRIVATE).to_list(200)
+    users = await db.users.find({**filt, "role": {"$ne": "admin"}}, USER_PRIVATE).to_list(200)
     for u in users:
         u["booking_count"] = await db.bookings.count_documents({"passenger_id": u["user_id"]})
         u["completed_trips"] = await db.bookings.count_documents({"passenger_id": u["user_id"], "status": "completed"})

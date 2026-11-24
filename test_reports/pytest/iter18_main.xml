@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="1" failures="0" skipped="0" tests="7" time="4.957" timestamp="2026-11-24T16:13:13.705760+00:00" hostname="agent-env-7d86e238-15d8-49a1-97de-ce69a72adff5"><testcase classname="tests.test_travoo_api.TestLocations" name="test_bengaluru_aliases[Bengaluru]" time="1.028" /><testcase classname="tests.test_travoo_api.TestDriverFlow" name="test_trip_forbidden_before_approval" time="0.469"><error message="failed on setup with &quot;AssertionError: {&quot;detail&quot;:&quot;Incorrect email or password&quot;}&#10;assert 401 == 200&#10; +  where 401 = &lt;Response [401]&gt;.status_code&quot;">@pytest.fixture(scope="module")
+    def admin():
+&gt;       return login("admin@travoo.in", os.environ.get("ADMIN_PASSWORD", "change-me"))
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_travoo_api.py:63: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+email = 'admin@travoo.in', pw = 'change-me'
+
+    def login(email, pw):
+        r = requests.post(f"{API}/auth/login", json={"email": email, "password": pw}, timeout=20)
+&gt;       assert r.status_code == 200, r.text
+E       AssertionError: {"detail":"Incorrect email or password"}
+E       assert 401 == 200
+E        +  where 401 = &lt;Response [401]&gt;.status_code
+
+tests/test_travoo_api.py:27: AssertionError</error></testcase><testcase classname="tests.test_travoo_api.TestLocations" name="test_bengaluru_aliases[Bangalore]" time="0.785" /><testcase classname="tests.test_travoo_api.TestLocations" name="test_bengaluru_aliases[\u0cac\u0cc6\u0c82\u0c97\u0cb3\u0cc2\u0cb0\u0cc1]" time="0.849" /><testcase classname="tests.test_travoo_api.TestLocations" name="test_bengaluru_aliases[\u092c\u0947\u0902\u0917\u0932\u0941\u0930\u0941]" time="0.655" /><testcase classname="tests.test_travoo_api.TestLocations" name="test_pin_prefix" time="0.131" /><testcase classname="tests.test_travoo_api.TestLocations" name="test_osm_village" time="1.084" /></testsuite></testsuites>

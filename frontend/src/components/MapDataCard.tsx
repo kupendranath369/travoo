@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { View } from "react-native";
 
-import { api } from "@/src/api";
+import { adminApi as api } from "@/src/adminApi";
 import { Badge, Btn, Section, T, space } from "@/src/components/ui";
 import { useI18n } from "@/src/i18n";
 import { useTheme } from "@/src/theme";
