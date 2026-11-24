@@ -2827,24 +2827,7 @@ async def pro_register(body: ProDriverIn, user: dict = Depends(get_user)):
         raise HTTPException(400, "Add at least one vehicle to offer Book a Driver")
     status = "approved" if (await get_settings()).get("instant_driver_approval") else "under_review"
     home = await home_snapshot(body.home)
-
-    # Process availability schedules
-    availability_records = []
-    for avail in body.availability:
-        if not avail.get("date") or not avail.get("from") or not avail.get("to"):
-            continue
-        # Validate time range
-        from_time = datetime.fromisoformat(avail["from"].replace("Z", "+00:00"))
-        to_time = datetime.fromisoformat(avail["to"].replace("Z", "+00:00"))
-        if to_time <= from_time:
-            raise HTTPException(400, "End time must be later than start time")
-        availability_records.append({
-            "date": avail["date"],
-            "from": avail["from"],
-            "to": avail["to"],
-            "created_at": now(),
-            "status": "active"
-        })
+    availability_records = availability_snapshot(body.availability)
 
     rec = {**body.model_dump(), "city": loc_snapshot(body.city), "home": home, "available": True, "availability_status": "available",
            "service_areas": [], "service_taluk_codes": [home["subdistrict_code"]], "vehicles": vehicles_snapshot(body.vehicles),
@@ -3080,6 +3063,25 @@ class ProSettingsIn(BaseModel):
     start_time: Optional[str] = Field(default=None, pattern=r"^\d{2}:\d{2}$")
     end_time: Optional[str] = Field(default=None, pattern=r"^\d{2}:\d{2}$")
     blocked_dates: Optional[List[str]] = Field(default=None, max_length=60)
+    availability: Optional[List[dict]] = Field(default=None, max_length=30)
+
+
+def availability_snapshot(items: List[dict]) -> list:
+    out = []
+    for a in items:
+        if not a.get("date") or not a.get("from") or not a.get("to"):
+            continue
+        try:
+            start = datetime.fromisoformat(str(a["from"]).replace("Z", "+00:00"))
+            end = datetime.fromisoformat(str(a["to"]).replace("Z", "+00:00"))
+        except ValueError:
+            raise HTTPException(400, "Invalid availability time")
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", str(a["date"])):
+            raise HTTPException(400, "Invalid date")
+        if end <= start:
+            raise HTTPException(400, "End time must be later than start time")
+        out.append({"id": str(a.get("id") or nid("av"))[:40], "date": a["date"], "from": a["from"], "to": a["to"], "created_at": now(), "status": "active"})
+    return out
 
 
 @api.put("/pro/settings")
@@ -3097,6 +3099,8 @@ async def pro_settings(body: ProSettingsIn, user: dict = Depends(get_user)):
         if any(not re.fullmatch(r"\d{4}-\d{2}-\d{2}", d) for d in body.blocked_dates):
             raise HTTPException(400, "Invalid date")
         upd["blocked_dates"] = sorted(set(body.blocked_dates))
+    if body.availability is not None:
+        upd["availability"] = availability_snapshot(body.availability)
     if body.availability_status:
         upd["available"] = body.availability_status == "available"
     if not upd:

@@ -1,0 +1,43 @@
+{
+  "summary": "Tested the reported AvailabilityPicker crash in the browser at 390x844. FIXED: /hire/register (passenger@travoo.in) renders with no ErrorBoundary or 'reading length' error. Add Availability on that screen works: date picker, end-before-start check, overlap check, add, edit (fields pre-filled, 'Edit Availability' title) and delete, with no pageerrors. DocPhotos shows Driving licence front, back and Aadhaar card tiles. The old 'Aadhaar Card (Front)' card is gone. Aadhaar upload via gallery -> preview -> upload sent POST /api/driver/documents/id_proof 200, the tile turned green, and there was no crash. The test file was then deleted (DELETE 200). Quick regression of /, /offer, /bookings, /messages, /notifications, /profile, /more, /hire and /hire/driver all OK. FOUND 2 BUGS on the approved driver dashboard Availability tab (/hire/driver): (1) saving always fails with a 'Nothing to update' toast (PUT /api/pro/settings 400), so nothing persists; (2) schedules saved at registration show as '12:00 AM - 12:00 AM' and have no id. ENV ISSUE FIXED: pyarrow was missing, so the LGD import failed silently, /api/lgd/states returned [] and the Home location picker was empty. Installed pyarrow==26.0.1 and the LGD data then loaded.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "PUT /api/pro/settings", "issue": "ProSettingsIn (server.py ~line 3075) has no 'availability' field. The dashboard sends {availability:[...]}, Pydantic drops the unknown key, upd is empty and the API returns 400 'Nothing to update'. Dashboard Availability add/edit/delete never persists. Add availability: Optional[List[...]] (date, from, to), validate and normalise it like /pro/register, and store it with ids.", "priority": "HIGH"}
+    ],
+    "minor": [
+      {"endpoint": "POST /api/pro/register", "issue": "Stored availability records have no 'id', and from/to are full ISO strings ('2026-12-04T09:00:00+05:30') instead of the 'HH:MM' that AvailabilityPicker expects. The client 'id' is dropped."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "AvailabilityPicker on /hire/driver (Availability tab)", "issue": "Schedules saved at registration show '12:00 AM - 12:00 AM'. formatTime splits the ISO string, gets NaN for the hour, and NaN%12||12 gives 12. The card testID is 'avail-schedule-undefined', and React warns 'Each child in a list should have a unique key' (red dev toast). Because handleDeleteSchedule filters with s.id !== undefined, deleting one id-less record removes ALL id-less records. Edit puts the ISO string into the From/To fields.", "selector": "[data-testid='avail-schedule-undefined']", "priority": "HIGH"}
+    ],
+    "integration_issues": [
+      {"flow": "Dashboard Availability add/edit/delete", "issue": "onSave -> save('availability', {availability}) -> PUT /pro/settings returns 400 'Nothing to update'. The card shows locally but is lost on reload.", "affected_selectors": ["[data-testid='avail-save']", "[data-testid^='avail-delete-']"]}
+    ],
+    "design_issues": [
+      {"screen": "/hire/register", "issues": ["Label above AvailabilityPicker says 'Available days' (t('v2.availability')), but the picker is date-specific. Consider 'Availability dates'."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/ui_setup_iter19_avail.py"],
+  "action_items": [
+    "Backend: add 'availability' to ProSettingsIn and handle it in PUT /pro/settings (validate date/from/to, store with id).",
+    "Store a consistent availability shape in both /pro/register and /pro/settings: {id, date, from:'HH:MM', to:'HH:MM'}, or convert to and from ISO on load in hire/driver.tsx. Generate an id server-side when it is missing.",
+    "In hire/driver.tsx load(), map p.availability to {id: a.id ?? `${a.date}-${i}`, date, from: a.from.slice(11,16) if ISO, to: ...} so existing records show correct times and have unique keys/ids.",
+    "Environment: pyarrow (in requirements.txt) was not installed in this fork, which broke the LGD import silently. Consider logging exceptions from the lgd_import background task."
+  ],
+  "critical_code_review_comments": [
+    "register.tsx still keeps the aadhaarFront state, set from the id_proof file, and sends aadhaar_front in the body. That is harmless, but it duplicates the id_proof document.",
+    "AvailabilityPicker formatDate uses new Date('YYYY-MM-DD'), which is parsed as UTC. In timezones west of UTC it can show the previous day.",
+    "AvailabilityPicker From/To are free-text Fields with no HH:MM format check. Input like '9' or 'ab' gives NaN, which passes validateTimeRange as false and shows a confusing message.",
+    "The lgd_import asyncio task swallows exceptions (no done-callback logging). That is why the missing pyarrow went unnoticed."
+  ],
+  "updated_files": ["/app/backend/tests/ui_setup_iter19_avail.py (new)", "env: pip install pyarrow==26.0.1 + backend restart"],
+  "success_rate": {"backend": "N/A (frontend-only request)", "frontend": "80% (register-screen crash fix, availability CRUD on register, Aadhaar upload and regression pass; dashboard Availability save fails)"},
+  "seed_data_creation": "Created TEST_Avail19 (test_avail19_c2a1ee@example.com) as an approved pro driver for the dashboard test. Deleted afterwards by user_id (users, pro_drivers, driver_documents). The Aadhaar test upload on passenger@travoo.in was deleted through the UI.",
+  "test_credentials": "passenger@travoo.in / Passenger@2026 works.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Language screen appears first: click language-continue-button, then auth-toggle-mode for email login. Dashboard tab testIDs are dash-tab-availability etc. To get an approved driver, run backend/tests/ui_setup_iter19_avail.py; it uses a direct DB update for approval because the admin password is unknown. Writing files under /app/backend triggers a backend hot reload, which restarts the LGD import. The browser clock is Nov 2026, so calendar day testIDs are avail-date-day-2026-11-DD.",
+  "rca of the issue": "Original crash: register.tsx passed value= but AvailabilityPicker reads availability, so availability was undefined and availability.length threw. Fixed by passing availability= and defaulting the prop to []. Verified. New dashboard bug: the backend /pro/settings model has no availability field (400), and the shape stored by /pro/register is incompatible with the picker (ISO times, no id)."
+}

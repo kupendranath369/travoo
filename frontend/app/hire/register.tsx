@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { api, Loc, locPayload } from "@/src/api";
 import { useAuth } from "@/src/auth";
-import { AvailabilityPicker, AvailabilitySchedule } from "@/src/components/AvailabilityPicker";
+import { AvailabilityPicker, AvailabilitySchedule, toAvailabilityPayload } from "@/src/components/AvailabilityPicker";
 import { TimeChips } from "@/src/components/DateChips";
 import { DocFile, DocKind, DocPhotos } from "@/src/components/DocPhotos";
 import { LanguagePicker } from "@/src/components/LanguagePicker";
@@ -78,12 +78,7 @@ export default function ProRegister() {
     if (!availability.length) return setErr("Add at least one availability schedule");
     setBusy(true);
     try {
-      // Convert availability to ISO 8601 format with IST timezone
-      const availabilityData = availability.map((schedule) => ({
-        date: schedule.date,
-        from: `${schedule.date}T${schedule.from}:00+05:30`,
-        to: `${schedule.date}T${schedule.to}:00+05:30`,
-      }));
+      const availabilityData = toAvailabilityPayload(availability);
 
       const r = await api("/pro/register", { body: { services, acceptOutstationTrips, vehicles: services.includes("book") ? vehicles : [], city: locPayload(city), home: { subdistrict_code: home.taluk.code, city: home.city.trim(), city_code: home.city_code, village_code: home.village_code }, areas: f.areas.split(",").map((x) => x.trim()).filter(Boolean), languages: langs, experience_years: exp, licence_no: f.licence_no.replace(/\s/g, ""), licence_expiry: f.licence_expiry, vehicle_types: vt, availability: availabilityData, bio: f.bio.trim(), rate_hourly: Number(f.rate_hourly), rate_half_day: Number(f.rate_half_day), rate_full_day: Number(f.rate_full_day), rate_one_way: f.rate_one_way ? Number(f.rate_one_way) : null, aadhaar_front: aadhaarFront?.file_id } });
       toast(t(`verify.status.${r.status}`));

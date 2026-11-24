@@ -14,6 +14,13 @@ export interface AvailabilitySchedule {
   to: string; // HH:MM format
 }
 
+export const toAvailabilityPayload = (list: AvailabilitySchedule[]) =>
+  list.map((s) => ({ id: s.id, date: s.date, from: `${s.date}T${s.from}:00+05:30`, to: `${s.date}T${s.to}:00+05:30` }));
+
+const hhmm = (v: string) => (v?.length > 5 ? v.slice(11, 16) : v);
+export const fromAvailabilityRecords = (list: any[] = []): AvailabilitySchedule[] =>
+  list.map((a, i) => ({ id: a.id ?? `${a.date}-${i}`, date: a.date, from: hhmm(a.from), to: hhmm(a.to) }));
+
 interface AvailabilityPickerProps {
   availability?: AvailabilitySchedule[];
   onChange: (schedules: AvailabilitySchedule[]) => void;

@@ -7,7 +7,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { api } from "@/src/api";
 import { DateField } from "@/src/components/Calendar";
 import { TimeChips } from "@/src/components/DateChips";
-import { AvailabilityPicker } from "@/src/components/AvailabilityPicker";
+import { AvailabilityPicker, fromAvailabilityRecords, toAvailabilityPayload } from "@/src/components/AvailabilityPicker";
 import { SERVICE_LABEL, ServicesPicker, STATUS_LABEL, Toggle, TYPE_LABEL, Vehicle, VehiclesEditor } from "@/src/components/LocalDriverParts";
 import { useToast } from "@/src/components/toast";
 import { Badge, Btn, Card, Chip, Empty, ErrorBox, Field, Header, Loading, T, space, statusTone } from "@/src/components/ui";
@@ -41,7 +41,7 @@ export default function LocalDriverDashboard() {
     if (p) {
       setVehicles(p.vehicles ?? []);
       setDays(p.days ?? []); setFrom(p.start_time ?? "08:00"); setTo(p.end_time ?? "20:00"); setBlocked(p.blocked_dates ?? []);
-      setAvailability(p.availability ?? []);
+      setAvailability(fromAvailabilityRecords(p.availability));
     }
   }).catch((e) => setErr(e.message)), []);
   useFocusEffect(useCallback(() => { load(); }, [load]));
@@ -172,7 +172,7 @@ export default function LocalDriverDashboard() {
             <AvailabilityPicker
               availability={availability}
               onChange={setAvailability}
-              onSave={(newAvailability) => save("availability", { availability: newAvailability })}
+              onSave={(newAvailability) => save("availability", { availability: toAvailabilityPayload(newAvailability) })}
               saving={saving === "availability"}
             />
           </>
