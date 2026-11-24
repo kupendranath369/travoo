@@ -3234,6 +3234,8 @@ def fits_window(p: dict, time: str, hours: int) -> bool:
 
 
 async def has_clash(driver_id: str, start: datetime, end: datetime, exclude_booking: Optional[str] = None) -> bool:
+    """Check if driver has conflicting bookings. Now also checks availability schedules."""
+    # First check existing bookings
     q = {"driver_id": driver_id, "status": {"$in": ["confirmed", "started"]},
          "starts_at": {"$lt": end.astimezone(timezone.utc), "$gte": (start - timedelta(days=31)).astimezone(timezone.utc)}}
     if exclude_booking:
@@ -3241,6 +3243,22 @@ async def has_clash(driver_id: str, start: datetime, end: datetime, exclude_book
     async for h in db.hires.find(q, {"_id": 0, "starts_at": 1, "hours": 1}):
         if h["starts_at"].replace(tzinfo=timezone.utc) + timedelta(hours=h.get("hours", 4)) > start.astimezone(timezone.utc):
             return True
+
+    # Also check availability schedules for conflicts
+    driver = await db.pro_drivers.find_one({"user_id": driver_id}, {"_id": 0, "availability": 1})
+    if driver and driver.get("availability"):
+        start_date = start.strftime("%Y-%m-%d")
+        start_time = start.strftime("%H:%M")
+        end_time = end.strftime("%H:%M")
+        for avail in driver["availability"]:
+            if avail["date"] == start_date and avail.get("status") == "active":
+                # Check if requested time conflicts with availability
+                avail_start = datetime.fromisoformat(avail["from"].replace("Z", "+00:00"))
+                avail_end = datetime.fromisoformat(avail["to"].replace("Z", "+00:00"))
+                req_start = datetime.strptime(f"{start_date} {start_time}", "%Y-%m-%d %H:%M")
+                req_end = datetime.strptime(f"{start_date} {end_time}", "%Y-%m-%d %H:%M")
+                if req_start < avail_end and req_end > avail_start:
+                    return True
     return False
 
 
@@ -3279,13 +3297,23 @@ def pick_vehicle(p: dict, category: str, passengers: int) -> Optional[dict]:
 
 
 async def eligible_local_drivers(area_q: dict, r: dict, exclude: str) -> list:
-    """Approved, Available local drivers offering the requested service, inside the area query, free for the whole trip."""
+    """Approved, Available local drivers offering the requested service, inside the area query, free for the whole trip.
+    Now checks availability schedules for specific dates."""
     service = r.get("service") or "rent"
     weekday = datetime.strptime(r["date"], "%Y-%m-%d").weekday()
     start = datetime.strptime(f"{r['date']} {r['time']}", "%Y-%m-%d %H:%M").replace(tzinfo=IST)
     end = start + timedelta(hours=r["hours"])
     dates = [(start + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(max(1, math.ceil(r["hours"] / 24)))]
-    q = {"$and": [area_q, AVAILABLE_Q, svc_q(service)], "status": "approved", "days": weekday, "user_id": {"$ne": exclude}, "blocked_dates": {"$nin": dates}}
+
+    # Check if driver has availability for this specific date and time
+    avail_q = {
+        "$or": [
+            {"availability": {"$exists": False}},  # No availability schedules - use old logic
+            {"availability": {"$elemMatch": {"date": r["date"], "status": "active"}}}
+        ]
+    }
+
+    q = {"$and": [area_q, AVAILABLE_Q, svc_q(service), avail_q], "status": "approved", "days": weekday, "user_id": {"$ne": exclude}, "blocked_dates": {"$nin": dates}}
     if r.get("service_type") == "outstation":
         q["acceptOutstationTrips"] = True
     vt = r.get("vehicle_type") or ""
@@ -3293,7 +3321,19 @@ async def eligible_local_drivers(area_q: dict, r: dict, exclude: str) -> list:
         q["vehicle_types"] = vt
     out = []
     for p in await db.pro_drivers.find(q, {"_id": 0, "licence_no": 0, "licence_expiry": 0, "city.geo": 0}).to_list(300):
-        if not fits_window(p, r["time"], r["hours"]):
+        # Check availability schedule for specific date/time
+        if p.get("availability"):
+            date_avail = next((a for a in p["availability"] if a["date"] == r["date"] and a.get("status") == "active"), None)
+            if not date_avail:
+                continue
+            # Check if requested time is within availability window
+            req_start = datetime.strptime(f"{r['date']} {r['time']}", "%Y-%m-%d %H:%M")
+            req_end = req_start + timedelta(hours=r["hours"])
+            avail_start = datetime.fromisoformat(date_avail["from"].replace("Z", "+00:00"))
+            avail_end = datetime.fromisoformat(date_avail["to"].replace("Z", "+00:00"))
+            if req_start < avail_start or req_end > avail_end:
+                continue
+        elif not fits_window(p, r["time"], r["hours"]):
             continue
         if service == "book":
             v = pick_vehicle(p, vt, r.get("passengers", 1))
@@ -3354,7 +3394,8 @@ async def hire_local_drivers(subdistrict_code: str = Query(max_length=10), date:
                              service: Literal["rent", "book"] = "rent", service_type: str = "hourly", vehicle_type: str = "", passengers: int = Query(1, ge=1, le=20),
                              pickup_subdistrict_code: Optional[str] = Query(None, max_length=10), nearby: bool = False,
                              language: Optional[str] = None, min_exp: int = 0, user: dict = Depends(get_user)):
-    """subdistrict_code = the DESTINATION taluk (primary matching criterion). Pickup taluk is only used for display/outstation fallback."""
+    """subdistrict_code = the DESTINATION taluk (primary matching criterion). Pickup taluk is only used for display/outstation fallback.
+    Now uses pickup location for Rent a Driver matching instead of destination."""
     sd = await subdistrict_doc(subdistrict_code)
     r = request_shape(service, service_type, date, time, hours, days, vehicle_type, passengers)
     favs = {f["driver_id"] for f in await db.favourite_drivers.find({"user_id": user["user_id"]}, {"_id": 0, "driver_id": 1}).to_list(100)}
@@ -3371,11 +3412,16 @@ async def hire_local_drivers(subdistrict_code: str = Query(max_length=10), date:
         res.sort(key=lambda x: (not x["favourite"], -(x["user"].get("rating_avg") or 0), x["estimate"]))
         return res
 
-    local = await present(await eligible_local_drivers(local_area(sd["code"]), r, user["user_id"]))
+    # For Rent a Driver, use pickup location as primary matching criterion
+    # For Book a Driver, use destination as primary matching criterion
+    match_code = pickup_subdistrict_code if (service == "rent" and pickup_subdistrict_code) else sd["code"]
+    match_sd = await subdistrict_doc(match_code) if match_code != sd["code"] else sd
+
+    local = await present(await eligible_local_drivers(local_area(match_sd["code"]), r, user["user_id"]))
     out = {"taluk": sd, "local": local, "nearby": None}
     if nearby:
-        out["nearby"] = await present(await eligible_local_drivers(await nearby_area(sd, pickup_subdistrict_code, service_type == "outstation"), r, user["user_id"]))
-        out["nearby_scope"] = (f"Drivers from other {sd['sub_label'].lower()}s of {sd['district_name']} district who accept trips outside their area"
+        out["nearby"] = await present(await eligible_local_drivers(await nearby_area(match_sd, pickup_subdistrict_code, service_type == "outstation"), r, user["user_id"]))
+        out["nearby_scope"] = (f"Drivers from other {match_sd['sub_label'].lower()}s of {match_sd['district_name']} district who accept trips outside their area"
                                + (" · outstation drivers from your pickup area" if service_type == "outstation" and pickup_subdistrict_code else ""))
     return out
 
@@ -3407,7 +3453,7 @@ def taluk_snap(sd: dict) -> dict:
 
 @api.post("/hire/requests")
 async def hire_request_create(body: LocalHireIn, user: dict = Depends(get_user)):
-    """Send a request to eligible drivers serving the DESTINATION taluk (home or declared service area), optionally nearby ones."""
+    """Send a request to eligible drivers. For Rent a Driver, uses pickup location; for Book a Driver, uses destination."""
     sd = await subdistrict_doc(body.subdistrict_code)
     psd = await subdistrict_doc(body.pickup_subdistrict_code) if body.pickup_subdistrict_code else None
     r = request_shape(body.service, body.service_type, body.date, body.time, body.hours, body.days, body.vehicle_type, body.passengers)
@@ -3416,15 +3462,20 @@ async def hire_request_create(body: LocalHireIn, user: dict = Depends(get_user))
         raise HTTPException(400, "Start time must be in the future")
     if await db.hire_requests.find_one({"passenger_id": user["user_id"], "date": body.date, "time": body.time, "status": "open"}):
         raise HTTPException(409, "You already have an open request for this date and time")
-    drivers = await eligible_local_drivers(local_area(sd["code"]), r, user["user_id"])
+
+    # Use pickup location for Rent a Driver, destination for Book a Driver
+    match_code = psd["code"] if (body.service == "rent" and psd) else sd["code"]
+    match_sd = psd if (body.service == "rent" and psd) else sd
+
+    drivers = await eligible_local_drivers(local_area(match_sd["code"]), r, user["user_id"])
     if body.include_nearby or body.driver_id:
-        drivers += await eligible_local_drivers(await nearby_area(sd, psd["code"] if psd else None, body.service_type == "outstation"), r, user["user_id"])
+        drivers += await eligible_local_drivers(await nearby_area(match_sd, psd["code"] if psd else None, body.service_type == "outstation"), r, user["user_id"])
     if body.driver_id:
         drivers = [p for p in drivers if p["user_id"] == body.driver_id]
         if not drivers:
             raise HTTPException(404, "This driver is no longer available for this trip")
     if not drivers:
-        raise HTTPException(404, f"No eligible {SERVICE_NAME[body.service]} drivers right now" + ("" if body.include_nearby else f" for {sd['name']}. Try including nearby areas."))
+        raise HTTPException(404, f"No eligible {SERVICE_NAME[body.service]} drivers right now" + ("" if body.include_nearby else f" for {match_sd['name']}. Try including nearby areas."))
     await rate_limit(f"hirereq:{user['user_id']}", 10, 3600, "Too many hire requests. Please try again later.")
     rid = "LHR-" + secrets.token_hex(4).upper()
     req = {"request_id": rid, **body.model_dump(exclude={"subdistrict_code", "pickup_subdistrict_code", "include_nearby", "driver_id"}), **r,
@@ -3434,14 +3485,14 @@ async def hire_request_create(body: LocalHireIn, user: dict = Depends(get_user))
     await db.hire_requests.insert_one(req)
     sent = 0
     for p in drivers:
-        group = match_group(p, sd["code"], psd["code"] if psd else None)
+        group = match_group(p, match_sd["code"], psd["code"] if psd else None)
         try:  # unique (request_id, driver_id) -> never notify the same driver twice for one request
             await db.hire_dispatches.insert_one({"request_id": rid, "driver_id": p["user_id"], "group": group, "service": body.service,
                                                  "notified_at": now(), "seen_at": None, "response": None})
         except DuplicateKeyError:
             continue
         sent += 1
-        await notify(p["user_id"], "local_hire_request", {"service": SERVICE_NAME[body.service], "pickup": body.pickup, "taluk": f"{sd['name']} {sd['sub_label']}",
+        await notify(p["user_id"], "local_hire_request", {"service": SERVICE_NAME[body.service], "pickup": body.pickup, "taluk": f"{match_sd['name']} {match_sd['sub_label']}",
                                                           "destination": body.destination, "date": dt.strftime("%d %b %Y"), "time": body.time,
                                                           "passengers": body.passengers, "local": group == "local"}, rid)
     req.pop("_id", None)

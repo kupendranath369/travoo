@@ -20,7 +20,7 @@ interface AvailabilityPickerProps {
   testPrefix?: string;
 }
 
-export function AvailabilityPicker({ value, onChange, testPrefix = "avail" }: AvailabilityPickerProps) {
+export function AvailabilityPicker({ availability, onChange, onSave, saving }: { availability: any[]; onChange: (a: any[]) => void; onSave: (a: any[]) => void; saving?: boolean }) {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const [showAddModal, setShowAddModal] = useState(false);
@@ -29,6 +29,7 @@ export function AvailabilityPicker({ value, onChange, testPrefix = "avail" }: Av
   const [newFrom, setNewFrom] = useState("09:00");
   const [newTo, setNewTo] = useState("18:00");
   const [err, setErr] = useState("");
+  const testPrefix = "avail"; // Hardcoded for consistency
 
   const validateTimeRange = (from: string, to: string): boolean => {
     const [fromH, fromM] = from.split(":").map(Number);
@@ -44,7 +45,7 @@ export function AvailabilityPicker({ value, onChange, testPrefix = "avail" }: Av
     const newFromMinutes = newFromH * 60 + newFromM;
     const newToMinutes = newToH * 60 + newToM;
 
-    return value.some((schedule) => {
+    return availability.some((schedule) => {
       if (schedule.id === excludeId || schedule.date !== date) return false;
       const [existingFromH, existingFromM] = schedule.from.split(":").map(Number);
       const [existingToH, existingToM] = schedule.to.split(":").map(Number);
@@ -63,24 +64,24 @@ export function AvailabilityPicker({ value, onChange, testPrefix = "avail" }: Av
     if (!validateTimeRange(newFrom, newTo)) return setErr("End time must be later than start time");
     if (checkOverlap(newDate, newFrom, newTo, editingSchedule?.id)) return setErr("This time slot overlaps with an existing schedule");
 
-    if (editingSchedule) {
-      // Update existing schedule
-      onChange(value.map((s) => s.id === editingSchedule.id ? { ...s, date: newDate, from: newFrom, to: newTo } : s));
-      setEditingSchedule(null);
-    } else {
-      // Add new schedule
-      const newSchedule: AvailabilitySchedule = {
-        id: Date.now().toString(),
-        date: newDate,
-        from: newFrom,
-        to: newTo,
-      };
-      onChange([...value, newSchedule]);
-    }
+    const newSchedule: AvailabilitySchedule = {
+      id: editingSchedule?.id || Date.now().toString(),
+      date: newDate,
+      from: newFrom,
+      to: newTo,
+    };
+
+    const updated = editingSchedule
+      ? availability.map((s) => s.id === editingSchedule.id ? newSchedule : s)
+      : [...availability, newSchedule];
+
+    onChange(updated);
+    onSave(updated);
 
     setNewDate(null);
     setNewFrom("09:00");
     setNewTo("18:00");
+    setEditingSchedule(null);
     setShowAddModal(false);
   };
 
@@ -93,7 +94,9 @@ export function AvailabilityPicker({ value, onChange, testPrefix = "avail" }: Av
   };
 
   const handleDeleteSchedule = (id: string) => {
-    onChange(value.filter((s) => s.id !== id));
+    const updated = availability.filter((s) => s.id !== id);
+    onChange(updated);
+    onSave(updated);
   };
 
   const formatTime = (time: string): string => {
@@ -111,7 +114,7 @@ export function AvailabilityPicker({ value, onChange, testPrefix = "avail" }: Av
   return (
     <View style={{ gap: space.md }}>
       <Pressable
-        testID={`${testPrefix}-add-button`}
+        testID={`avail-add-button`}
         onPress={() => {
           setEditingSchedule(null);
           setNewDate(null);
@@ -133,10 +136,10 @@ export function AvailabilityPicker({ value, onChange, testPrefix = "avail" }: Av
         <T weight="700" color={colors.onBrandPrimary}>Add Availability Date</T>
       </Pressable>
 
-      {value.length > 0 ? (
+      {availability.length > 0 ? (
         <View style={{ gap: space.sm }}>
-          {value.map((schedule) => (
-            <Card key={schedule.id} testID={`${testPrefix}-schedule-${schedule.id}`} style={{
+          {availability.map((schedule) => (
+            <Card key={schedule.id} testID={`avail-schedule-${schedule.id}`} style={{
               flexDirection: "row",
               alignItems: "center",
               gap: space.sm,
@@ -149,7 +152,7 @@ export function AvailabilityPicker({ value, onChange, testPrefix = "avail" }: Av
                 </T>
               </View>
               <Pressable
-                testID={`${testPrefix}-edit-${schedule.id}`}
+                testID={`avail-edit-${schedule.id}`}
                 onPress={() => handleEditSchedule(schedule)}
                 hitSlop={8}
                 style={{ padding: space.xs }}
@@ -157,7 +160,7 @@ export function AvailabilityPicker({ value, onChange, testPrefix = "avail" }: Av
                 <Ionicons name="pencil" size={18} color={colors.brandPrimary} />
               </Pressable>
               <Pressable
-                testID={`${testPrefix}-delete-${schedule.id}`}
+                testID={`avail-delete-${schedule.id}`}
                 onPress={() => handleDeleteSchedule(schedule.id)}
                 hitSlop={8}
                 style={{ padding: space.xs }}
@@ -183,7 +186,7 @@ export function AvailabilityPicker({ value, onChange, testPrefix = "avail" }: Av
             borderBottomWidth: 1,
             borderBottomColor: colors.border,
           }}>
-            <Pressable testID={`${testPrefix}-modal-close`} onPress={() => setShowAddModal(false)} hitSlop={8} style={{ width: 44, height: 44, alignItems: "center", justifyContent: "center" }}>
+            <Pressable testID={`avail-modal-close`} onPress={() => setShowAddModal(false)} hitSlop={8} style={{ width: 44, height: 44, alignItems: "center", justifyContent: "center" }}>
               <Ionicons name="close" size={24} color={colors.onSurface} />
             </Pressable>
             <T size={18} weight="800" style={{ flex: 1, textAlign: "center" }}>
@@ -194,15 +197,16 @@ export function AvailabilityPicker({ value, onChange, testPrefix = "avail" }: Av
 
           <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: space.lg, gap: space.md }}>
             <DateField
-              testID={`${testPrefix}-date`}
+              testID={`avail-date`}
               label="Available Date"
               value={newDate}
               onChange={setNewDate}
               allowClear={false}
+              minDate={new Date()} // Prevent past dates
             />
 
             <Field
-              testID={`${testPrefix}-from`}
+              testID={`avail-from`}
               label="Available From"
               value={newFrom}
               onChangeText={setNewFrom}
@@ -211,7 +215,7 @@ export function AvailabilityPicker({ value, onChange, testPrefix = "avail" }: Av
             />
 
             <Field
-              testID={`${testPrefix}-to`}
+              testID={`avail-to`}
               label="Available To"
               value={newTo}
               onChangeText={setNewTo}
@@ -222,9 +226,10 @@ export function AvailabilityPicker({ value, onChange, testPrefix = "avail" }: Av
             {err ? <T color={colors.error} weight="600">{err}</T> : null}
 
             <Btn
-              testID={`${testPrefix}-save`}
+              testID={`avail-save`}
               label={editingSchedule ? "Update Schedule" : "Add Schedule"}
               onPress={handleAddSchedule}
+              loading={saving}
               icon="checkmark"
             />
           </ScrollView>

@@ -7,13 +7,14 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { api } from "@/src/api";
 import { DateField } from "@/src/components/Calendar";
 import { TimeChips } from "@/src/components/DateChips";
+import { AvailabilityPicker } from "@/src/components/AvailabilityPicker";
 import { SERVICE_LABEL, ServicesPicker, STATUS_LABEL, Toggle, TYPE_LABEL, Vehicle, VehiclesEditor } from "@/src/components/LocalDriverParts";
 import { useToast } from "@/src/components/toast";
 import { Badge, Btn, Card, Chip, Empty, ErrorBox, Field, Header, Loading, T, space, statusTone } from "@/src/components/ui";
 import { inr, useI18n } from "@/src/i18n";
 import { useTheme } from "@/src/theme";
 
-type Tab = "requests" | "settings" | "vehicles";
+type Tab = "requests" | "settings" | "vehicles" | "availability";
 
 /** Single Local Driver dashboard: status, services, service areas, availability, vehicles, bookings, earnings. */
 export default function LocalDriverDashboard() {
@@ -32,6 +33,7 @@ export default function LocalDriverDashboard() {
   const [to, setTo] = useState("20:00");
   const [blocked, setBlocked] = useState<string[]>([]);
   const [blockPick, setBlockPick] = useState<string | null>(null);
+  const [availability, setAvailability] = useState<any[]>([]);
 
   const load = useCallback(() => api("/pro/dashboard").then((r) => {
     setD(r);
@@ -39,6 +41,7 @@ export default function LocalDriverDashboard() {
     if (p) {
       setVehicles(p.vehicles ?? []);
       setDays(p.days ?? []); setFrom(p.start_time ?? "08:00"); setTo(p.end_time ?? "20:00"); setBlocked(p.blocked_dates ?? []);
+      setAvailability(p.availability ?? []);
     }
   }).catch((e) => setErr(e.message)), []);
   useFocusEffect(useCallback(() => { load(); }, [load]));
@@ -111,7 +114,7 @@ export default function LocalDriverDashboard() {
         ) : null}
 
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: space.sm }}>
-          {([["requests", "Bookings"], ["settings", "Services & time"], ["vehicles", "Vehicles"]] as const).map(([k, l]) => (
+          {([["requests", "Bookings"], ["settings", "Services & time"], ["vehicles", "Vehicles"], ["availability", "Availability"]] as const).map(([k, l]) => (
             <Chip key={k} testID={`dash-tab-${k}`} label={l} active={tab === k} onPress={() => setTab(k)} />
           ))}
         </ScrollView>
@@ -160,6 +163,18 @@ export default function LocalDriverDashboard() {
             <T size={12} color={colors.muted}>Vehicles are only needed for Book a Driver. Mark a vehicle unavailable to stop matching it.</T>
             <VehiclesEditor testPrefix="dash-veh" vehicles={vehicles} onChange={setVehicles} />
             <Btn testID="dash-save-vehicles" label="Save vehicles" loading={saving === "veh"} onPress={() => save("veh", { vehicles }, "/pro/vehicles")} />
+          </>
+        ) : null}
+
+        {tab === "availability" ? (
+          <>
+            <T size={12} color={colors.muted}>Add specific dates and time slots when you're available for bookings.</T>
+            <AvailabilityPicker
+              availability={availability}
+              onChange={setAvailability}
+              onSave={(newAvailability) => save("availability", { availability: newAvailability })}
+              saving={saving === "availability"}
+            />
           </>
         ) : null}
       </KeyboardAwareScrollView>
