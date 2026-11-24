@@ -1,0 +1,23 @@
+{
+  "summary": "Frontend-only test of the ClockTimePicker in AvailabilityPicker and the 'Availability dates' label, at 390x844. On /hire/driver (approved TEST_Avail19 driver), tapping avail-from opens avail-from-clock with the hour dial. Tapping hour 7 switches automatically to the minute dial. Minute 30 and AM give the value '7:30 AM'. Opening avail-to closes the From clock, so only one is open at a time. To set to 2 + 15 + PM shows '2:15 PM'. mode-hour switches back to the hour dial, and done closes the clock. Saving on 5 Dec 2026 shows the card '7:30 AM - 2:15 PM', and it persists after reload. Edit prefills 7:30 AM / 2:15 PM, and the header shows 7:30. Changing From to 3:30 PM, or to an equal 2:15 PM, shows 'End time must be later than start time'. A valid edit to 8:00 AM persists after reload, and delete persists. The add modal resets to 9:00 AM / 6:00 PM. The dial renders well: it is 248px and centred, the 12 numbers sit in a circle, the selected number has a brand-blue fill with a hand, and nothing overflows or is clipped (all knobs stay inside the dial box). On /hire/register (new TEST user), the label reads 'Availability dates' and the old 'Available days' is gone. In Hindi it reads 'उपलब्धता की तारीखें'. Adding a 10:45 AM - 1:05 PM slot works there, and the page renders without a crash. No page errors.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "AvailabilityPicker modal", "issue": "Validation error state (err) is not cleared when the modal is closed or reopened (Add/Edit). 'Please select a date' still shows after close and reopen. Call setErr('') in the add-button and edit handlers.", "selector": "avail-add-button", "priority": "LOW"},
+      {"component": "AvailabilityPicker modal", "issue": "openClock is not reset when the modal closes or opens, so a clock left open is still expanded when the modal is reopened. Call setOpenClock(null) on open, close and save.", "selector": "avail-from-clock", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "ClockTimePicker", "issues": ["'Tap an hour' / 'Tap the minutes', 'Done', 'Available From/To' and 'Add Availability Date' are hardcoded in English and do not change in Hindi."]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": ["Reset err and openClock when the availability modal opens or closes (low).", "Optional: i18n for the clock and modal strings."],
+  "critical_code_review_comments": ["The HH:MM regex validation in handleAddSchedule is now effectively dead code because the clock always produces valid values. It is harmless.", "Minutes come only in 5-minute steps (by design). Existing records with off-step minutes (e.g. 7:12) show in the header, but no minute knob is highlighted and the hand is hidden. Acceptable."],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (skipped)", "frontend": "100% of requested flows"},
+  "seed_data_creation": "TEST_Avail19 (ui_setup_iter19_avail.py) and TEST_Reg22UI. Both were deleted by user_id, along with their pro_drivers and driver_documents records.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "The DateField needs a click on avail-date before avail-date-next / avail-date-day-YYYY-MM-DD. To use Hindi, click language-option-hi before language-continue-button. localStorage holds travoo_lang. The browser date is Nov 24 2026."
+}

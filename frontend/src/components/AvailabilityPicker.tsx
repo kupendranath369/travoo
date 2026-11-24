@@ -99,6 +99,8 @@ export function AvailabilityPicker({ availability = [], onChange, onSave, saving
 
   const handleEditSchedule = (schedule: AvailabilitySchedule) => {
     setEditingSchedule(schedule);
+    setErr("");
+    setOpenClock(null);
     setNewDate(schedule.date);
     setNewFrom(schedule.from);
     setNewTo(schedule.to);
@@ -129,6 +131,8 @@ export function AvailabilityPicker({ availability = [], onChange, onSave, saving
         testID={`avail-add-button`}
         onPress={() => {
           setEditingSchedule(null);
+          setErr("");
+          setOpenClock(null);
           setNewDate(null);
           setNewFrom("09:00");
           setNewTo("18:00");
