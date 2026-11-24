@@ -1,6 +1,6 @@
 import Ionicons from "@react-native-vector-icons/ionicons";
 import { Tabs, usePathname } from "expo-router";
-import { NativeTabs } from "expo-router/unstable-native-tabs";
+import { NativeTabs } from "expo-router/native-tabs";
 import React, { useEffect, useState } from "react";
 import { AppState, Platform, View } from "react-native";
 

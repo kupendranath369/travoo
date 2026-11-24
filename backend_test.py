@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
 
 # Configuration
-BASE_URL = "https://ci-pipeline-4--1cug8jiz.preview.emergentagent.com"
+BASE_URL = "https://mobile-app-build-11867--5jfyxu5q.preview.emergentagent.com"
 API = f"{BASE_URL}/api"
 IST = timezone(timedelta(hours=5, minutes=30))
 
