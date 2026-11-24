@@ -10,7 +10,8 @@ import { AvailabilityPicker, AvailabilitySchedule, toAvailabilityPayload } from 
 import { TimeChips } from "@/src/components/DateChips";
 import { DocFile, DocKind, DocPhotos } from "@/src/components/DocPhotos";
 import { LanguagePicker } from "@/src/components/LanguagePicker";
-import { ServicesPicker, Toggle, Vehicle, VehiclesEditor } from "@/src/components/LocalDriverParts";
+import { Toggle, Vehicle, VehiclesEditor } from "@/src/components/LocalDriverParts";
+import { YesNoSwipe } from "@/src/components/YesNoSwipe";
 import { LocationField } from "@/src/components/LocationField";
 import { HomeLoc, TalukPicker } from "@/src/components/TalukPicker";
 import { useToast } from "@/src/components/toast";
@@ -43,7 +44,8 @@ export default function ProRegister() {
   const [home, setHome] = useState<HomeLoc>({ taluk: null, city: "", city_code: null, village_code: null, village_name: null });
   const [docs, setDocs] = useState<{ files: DocFile[]; kinds: DocKind[] } | null>(null);
   const [avail, setAvail] = useState<boolean | null>(null);
-  const [services, setServices] = useState<string[]>(["rent"]);
+  const [hasVehicle, setHasVehicle] = useState(false);
+  const services = hasVehicle ? ["rent", "book"] : ["rent"];
   const [acceptOutstationTrips, setAcceptOutstationTrips] = useState(false);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [carpoolVehicles, setCarpoolVehicles] = useState<Vehicle[]>([]);
@@ -74,7 +76,7 @@ export default function ProRegister() {
     if (home.city.trim().length < 2) return setErr("Choose or type your City / Town");
     if (!langs.length) return setErr(`${t("v2.languages")} *`);
     if (!f.rate_hourly || !f.rate_half_day || !f.rate_full_day) return setErr(`${t("v2.rate_hourly")} *`);
-    if (services.includes("book") && !vehicles.length) return setErr("Add at least one vehicle to offer Book a Driver");
+    if (hasVehicle && !vehicles.length) return setErr("Add at least one vehicle, or choose NO for 'Do you have a vehicle?'");
     if (!availability.length) return setErr("Add at least one availability schedule");
     setBusy(true);
     try {
@@ -125,8 +127,6 @@ export default function ProRegister() {
           </Card>
         ) : (
           <>
-            <T weight="800">Services you offer (one registration for both)</T>
-            <ServicesPicker testPrefix="pro-svc" value={services} onChange={setServices} />
             <Card style={{ paddingVertical: space.xs, gap: 0 }}>
               <T weight="800" style={{ paddingTop: space.sm }}>Home location</T>
               <T size={12} color={colors.muted}>Select your home location to receive local hire requests in your area</T>
@@ -137,9 +137,19 @@ export default function ProRegister() {
               <Toggle testID="pro-outstation" label="Accept Outstation Trips" value={acceptOutstationTrips} onChange={setAcceptOutstationTrips} />
               <T size={12} color={colors.muted}>Enable this option to receive eligible booking requests outside your regular local service area.</T>
             </Card>
-            {services.includes("book") ? (
+            <Card testID="pro-has-vehicle-card" style={{ gap: space.sm }}>
+              <T weight="800">Rent a Driver & Book a Driver · one registration</T>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: space.md }}>
+                <T weight="700" style={{ flex: 1 }}>Do you have a vehicle?</T>
+                <YesNoSwipe testID="pro-has-vehicle" value={hasVehicle} onChange={setHasVehicle} />
+              </View>
+              <T testID="pro-has-vehicle-note" size={12} color={colors.muted}>
+                {hasVehicle ? "You'll get Rent a Driver (customer's car) and Book a Driver (your vehicle) requests." : "You'll get Rent a Driver requests: you drive the customer's own car."}
+              </T>
+            </Card>
+            {hasVehicle ? (
               <Card style={{ gap: space.sm }}>
-                <T weight="800">Vehicles for Book a Driver</T>
+                <T weight="800">Add vehicle</T>
                 <T size={12} color={colors.muted}>Your own vehicle or one you are authorised to provide.</T>
                 {carpoolVehicles.filter((c) => !vehicles.some((v) => v.reg_no === c.reg_no)).map((c) => (
                   <Btn key={c.reg_no} small variant="outline" icon="add" testID={`pro-use-carpool-${c.reg_no}`} label={`Use my Carpool vehicle: ${c.name} (${c.reg_no})`} onPress={() => setVehicles([...vehicles, c])} />
