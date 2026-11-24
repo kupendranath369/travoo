@@ -141,3 +141,9 @@ Pan-India intercity paid carpooling app (BlaBlaCar model) called TRAVOO, tagline
 - Switched NativeTabs import to `expo-router/native-tabs` (deprecation)
 - Fixed admin MapDataCard using the wrong API client (401s); admin Passengers list excludes admins
 - Tested: iteration_18 — 15/15 backend, passenger/driver/admin UI flows pass
+
+## Iteration 19–21 (Jun 2026) — "reading 'length'" crash fix
+- Fixed the crash on /hire/register (AvailabilityPicker got an undefined prop). The Aadhaar upload now uses the valid id_proof kind.
+- The driver dashboard Availability tab now saves through /pro/settings (ids, ISO storage, HH:MM normalising, list reloads when a save fails)
+- Fixed a 500 in local-driver matching (naive/aware datetimes). has_clash no longer treats availability windows as conflicts.
+- Tested: iteration_21 — backend 29/29, all frontend flows pass

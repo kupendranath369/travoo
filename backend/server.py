@@ -3317,8 +3317,8 @@ async def eligible_local_drivers(area_q: dict, r: dict, exclude: str) -> list:
     for p in await db.pro_drivers.find(q, {"_id": 0, "licence_no": 0, "licence_expiry": 0, "city.geo": 0}).to_list(300):
         # Check availability schedule for specific date/time
         if p.get("availability"):
-            windows = [a for a in p["availability"] if a["date"] == r["date"] and a.get("status") == "active"]
-            if not any(iso_dt(a["from"]) <= start and end <= iso_dt(a["to"]) for a in windows):
+            windows = [a for a in p["availability"] if a.get("date") == r["date"] and a.get("status") == "active"]
+            if not any(a.get("from") and a.get("to") and iso_dt(a["from"]) <= start and end <= iso_dt(a["to"]) for a in windows):
                 continue
         elif not fits_window(p, r["time"], r["hours"]):
             continue

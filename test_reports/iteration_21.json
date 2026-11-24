@@ -1,0 +1,28 @@
+{
+  "summary": "Retested the fix for the driver-matching 500 and the AvailabilityPicker/driver dashboard fixes. Backend: test_iter20_availability.py passes 15/15. The new test_iter21_matching_availability.py passes 14/14. It covers the exact start and end window boundaries (match), overrun and before-window (no match), another date (no match), fallback to days/start_time/end_time for drivers with no or empty availability, POST /hire/requests to a window driver followed by accept (200), has_clash excluding the driver for an overlapping slot after a confirmed booking while a non-overlapping slot still matches, and a broadcast request dispatching to the fallback driver but not to the out-of-window driver. backend.err.log has no new TypeErrors; the earlier ones are from iter20. UI at 390x844: on /hire/driver, '9:00'-'17:30' is normalised and saved (Saved toast, shown as 9:00 AM - 5:30 PM, persists after reload). 'ab' shows 'Enter times as HH:MM, e.g. 09:00' and no card is added. A save forced to fail (PUT /pro/settings intercepted with 400) shows the error toast and leaves no phantom card, because the list reloads from the server. Edit (prefilled 09:00/17:30, changed to 7:15-11:45) and delete persist after reload. /hire/register (new TEST user) renders with no 'reading length' crash, and add, overlap error, garbage error, edit and delete all work. The /hire Rent a Driver search (passenger, Hiriyur, 4 Dec 10:00 x2h) calls /hire/local-drivers with a 200 and lists the TEST_Avail19 window driver. No console or page errors.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "eligible_local_drivers", "issue": "Uses a['date'] (KeyError if a legacy availability item has no 'date'). availability_snapshot guards new writes, so this only affects old docs. Prefer a.get('date')."},
+      {"endpoint": "availability_snapshot (carried over from iter20)", "issue": "Does not cross-check a['date'] against the date of from/to, does not reject duplicate ids, and regenerates created_at on every save."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/hire/register", "issues": ["The label above Add Availability still reads 'Available days'. Suggest 'Availability dates' (carried over)."]},
+      {"screen": "/hire/driver Availability tab", "issues": ["Delete has no confirmation (carried over)."]},
+      {"screen": "/hire Rent search", "issues": ["The query sends days=2 for an hourly booking. It is harmless but noisy."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_iter20_availability.py", "/app/backend/tests/test_iter21_matching_availability.py", "/app/test_reports/pytest/iter21.xml", "/app/test_reports/pytest/iter21b.xml"],
+  "action_items": ["Optional: use a.get('date') in eligible_local_drivers. Rename the 'Available days' label. Add a delete confirmation."],
+  "critical_code_review_comments": ["iso_dt() makes datetimes IST-aware, so the naive/aware 500 is fixed.", "has_clash now checks only confirmed/started hires.", "server.py is ~3700 lines and should be split into hire/pro modules."],
+  "updated_files": ["/app/backend/tests/test_iter21_matching_availability.py"],
+  "success_rate": {"backend": "100% (29/29)", "frontend": "100% of requested flows"},
+  "seed_data_creation": "TEST_ users only: pytest drivers and passengers (self-cleaned), TEST_Avail19 (via ui_setup_iter19_avail.py) and TEST_Reg21UI. All were deleted by user_id. The demo passenger only ran a search and created no request.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Run from backend/tests: pytest test_iter20_availability.py test_iter21_matching_availability.py -c /dev/null -p no:xdist. The browser clock is Nov 24 2026. Calendar testIDs: avail-date-next / avail-date-day-YYYY-MM-DD and hire-date-next / hire-date-day-YYYY-MM-DD. For the location modal, type into location-search-input and click location-option-* (not location-clear). Login: language-continue-button, auth-toggle-mode, auth-email-input/auth-password-input/auth-submit-button."
+}
