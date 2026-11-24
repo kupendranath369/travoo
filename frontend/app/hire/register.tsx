@@ -52,7 +52,9 @@ export default function ProRegister() {
   const toggle = <X,>(arr: X[], x: X, fn: (a: X[]) => void) => fn(arr.includes(x) ? arr.filter((y) => y !== x) : [...arr, x]);
   const load = useCallback(() => {
     api("/driver/profile").then((r) => {
-      setDocs({ files: r.files ?? [], kinds: (r.kinds ?? []).filter((k: DocKind) => k.kind.startsWith("licence")) });
+      const files: DocFile[] = r.files ?? [];
+      setDocs({ files, kinds: (r.kinds ?? []).filter((k: DocKind) => k.kind.startsWith("licence") || k.kind === "id_proof") });
+      setAadhaarFront(files.find((x) => x.kind === "id_proof") ?? null);
       // Reuse vehicles already registered for Carpool
       setCarpoolVehicles((r.vehicles ?? []).filter((v: any) => v.reg_no && !String(v.reg_no).includes("•")).map((v: any) => ({ name: `${v.make} ${v.model}`.trim(), reg_no: String(v.reg_no).replace(/[\s-]/g, "").toUpperCase(), category: v.vtype ?? "sedan", seats: v.seats ?? 4, day_rate: 0, available: true })));
     }).catch(() => {});
@@ -120,15 +122,6 @@ export default function ProRegister() {
         </Card>
         <T weight="800">{t("verify.photos")}</T>
         {docs ? <DocPhotos files={docs.files} kinds={docs.kinds} editable={!locked && user?.driver_status !== "under_review" && user?.driver_status !== "approved"} onChanged={load} /> : null}
-        <Card style={{ gap: space.sm }}>
-          <T weight="800">Aadhaar Card (Front)</T>
-          <T size={12} color={colors.muted}>Upload the front side of your Aadhaar card for verification</T>
-          <DocPhotos files={aadhaarFront ? [aadhaarFront] : []} kinds={[{ kind: "aadhaar_front", file_id: aadhaarFront?.file_id ?? "" }]} editable={!locked} onChanged={(files, kinds) => {
-            if (files.length > 0 && kinds.length > 0) {
-              setAadhaarFront(files[0]);
-            }
-          }} />
-        </Card>
         {locked ? (
           <Card style={{ gap: 4 }}>
             <T weight="700">{me.profile.city?.name} · {t("v2.years", { n: me.profile.experience_years })}</T>
@@ -171,7 +164,7 @@ export default function ProRegister() {
             <T size={13} weight="600" color={colors.muted}>{t("v2.vehicle_types")}</T>
             <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.sm }}>{VTYPES.map((v) => <Chip key={v} testID={`pro-vt-${v}`} label={v.toUpperCase()} active={vt.includes(v)} onPress={() => toggle(vt, v, setVt)} />)}</View>
             <T size={13} weight="600" color={colors.muted}>{t("v2.availability")}</T>
-            <AvailabilityPicker testPrefix="pro-availability" value={availability} onChange={setAvailability} />
+            <AvailabilityPicker availability={availability} onChange={setAvailability} />
             <Field testID="pro-rate-hourly" label={t("v2.rate_hourly")} value={f.rate_hourly} onChangeText={set("rate_hourly")} keyboardType="number-pad" />
             <Field testID="pro-rate-half" label={t("v2.rate_half")} value={f.rate_half_day} onChangeText={set("rate_half_day")} keyboardType="number-pad" />
             <Field testID="pro-rate-full" label={t("v2.rate_full")} value={f.rate_full_day} onChangeText={set("rate_full_day")} keyboardType="number-pad" />

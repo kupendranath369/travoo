@@ -15,12 +15,13 @@ export interface AvailabilitySchedule {
 }
 
 interface AvailabilityPickerProps {
-  value: AvailabilitySchedule[];
+  availability?: AvailabilitySchedule[];
   onChange: (schedules: AvailabilitySchedule[]) => void;
-  testPrefix?: string;
+  onSave?: (schedules: AvailabilitySchedule[]) => void;
+  saving?: boolean;
 }
 
-export function AvailabilityPicker({ availability, onChange, onSave, saving }: { availability: any[]; onChange: (a: any[]) => void; onSave: (a: any[]) => void; saving?: boolean }) {
+export function AvailabilityPicker({ availability = [], onChange, onSave, saving }: AvailabilityPickerProps) {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const [showAddModal, setShowAddModal] = useState(false);
@@ -76,7 +77,7 @@ export function AvailabilityPicker({ availability, onChange, onSave, saving }: {
       : [...availability, newSchedule];
 
     onChange(updated);
-    onSave(updated);
+    onSave?.(updated);
 
     setNewDate(null);
     setNewFrom("09:00");
@@ -96,7 +97,7 @@ export function AvailabilityPicker({ availability, onChange, onSave, saving }: {
   const handleDeleteSchedule = (id: string) => {
     const updated = availability.filter((s) => s.id !== id);
     onChange(updated);
-    onSave(updated);
+    onSave?.(updated);
   };
 
   const formatTime = (time: string): string => {
