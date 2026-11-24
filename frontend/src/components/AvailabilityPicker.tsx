@@ -67,16 +67,18 @@ export function AvailabilityPicker({ availability = [], onChange, onSave, saving
 
   const handleAddSchedule = () => {
     setErr("");
+    const norm = (v: string) => { const m = v.trim().match(/^(\d{1,2}):(\d{2})$/); return m ? `${m[1].padStart(2, "0")}:${m[2]}` : ""; };
+    const from = norm(newFrom), to = norm(newTo);
     if (!newDate) return setErr("Please select a date");
-    if (!newFrom || !newTo) return setErr("Please select start and end times");
-    if (!validateTimeRange(newFrom, newTo)) return setErr("End time must be later than start time");
-    if (checkOverlap(newDate, newFrom, newTo, editingSchedule?.id)) return setErr("This time slot overlaps with an existing schedule");
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(from) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(to)) return setErr("Enter times as HH:MM, e.g. 09:00");
+    if (!validateTimeRange(from, to)) return setErr("End time must be later than start time");
+    if (checkOverlap(newDate, from, to, editingSchedule?.id)) return setErr("This time slot overlaps with an existing schedule");
 
     const newSchedule: AvailabilitySchedule = {
       id: editingSchedule?.id || Date.now().toString(),
       date: newDate,
-      from: newFrom,
-      to: newTo,
+      from,
+      to,
     };
 
     const updated = editingSchedule

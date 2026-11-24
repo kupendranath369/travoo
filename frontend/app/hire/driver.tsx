@@ -60,7 +60,7 @@ export default function LocalDriverDashboard() {
 
   const save = async (key: string, body: any, path = "/pro/settings") => {
     setSaving(key);
-    try { await api(path, { method: "PUT", body }); toast("Saved"); await load(); } catch (e: any) { toast(e.message, "error"); }
+    try { await api(path, { method: "PUT", body }); toast("Saved"); await load(); } catch (e: any) { toast(e.message, "error"); await load(); }
     setSaving("");
   };
   const status = p.availability_status ?? "available";

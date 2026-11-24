@@ -1,0 +1,42 @@
+{
+  "summary": "Retested the availability fixes. Backend: 13 of 15 pytest cases pass. /pro/register and PUT /pro/settings store ISO availability with ids, generate ids server-side, keep client ids, delete only the targeted record, and return 400 for end<=start, a bad date, a bad hour or a garbage time. UI at 390x844: the approved driver dashboard (/hire/driver) Availability tab works. Add shows the 'Saved' toast, reload persists '9:00 AM - 6:00 PM', the edit fields are prefilled and an edit to 10:30-16:45 persists, and delete removes only that schedule. /hire/register renders with no crash, and add, overlap error, edit and delete work. No duplicate-key or 'Cannot read' console errors. CRITICAL REGRESSION: GET /hire/local-drivers (and POST /hire/requests and accept, which use eligible_local_drivers) returns 500 whenever a matched driver has an active availability record for the requested date.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "GET /api/hire/local-drivers, POST /api/hire/requests, POST /api/hire/requests/{id}/accept (eligible_local_drivers ~line 3330, server.py)", "issue": "500 TypeError: can't compare offset-naive and offset-aware datetimes. req_start = datetime.strptime(...) is naive, but avail_start/avail_end come from fromisoformat('...+05:30') and are aware. One driver with an availability record on the date breaks the WHOLE search for every passenger in that taluk. Fix: req_start = datetime.strptime(...).replace(tzinfo=IST) (or reuse the aware `start`).", "priority": "CRITICAL"},
+      {"endpoint": "has_clash() ~line 3240", "issue": "Has the same naive-vs-aware comparison, so it will crash in the same way once the bug above is fixed. The logic is also inverted: an overlap with the driver's AVAILABLE window counts as a clash and returns True. A driver whose window contains the request passes eligible_local_drivers and is then dropped by has_clash, so drivers with availability can never be matched. Remove the availability block from has_clash. Availability is already enforced in eligible_local_drivers.", "priority": "CRITICAL"}
+    ],
+    "minor": [
+      {"endpoint": "availability_snapshot()", "issue": "It does not check that a['date'] equals the date part of from/to, does not normalise from/to, and regenerates created_at on every save. Items missing date/from/to are skipped silently instead of returning 400. Duplicate ids are not rejected."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "AvailabilityPicker time fields", "issue": "From/To are free-text fields. '9:00' (no leading zero) passes the client check, but the server rejects it ('Invalid availability time' toast). The card still shows locally because onChange runs before the save and is not reverted on error, then disappears on reload. Normalise HH:MM (pad the hour, validate with ^([01]\\d|2[0-3]):[0-5]\\d$) or use a time picker, and reload/revert on a save error.", "selector": "[data-testid='avail-from'], [data-testid='avail-to']", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/hire/register", "issues": ["The section label above the Add Availability button still reads 'Available days'. Should be 'Availability dates'."]},
+      {"screen": "/hire/driver Availability tab", "issues": ["Delete has no confirmation. One tap removes the schedule and saves immediately."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_iter20_availability.py", "/app/test_reports/pytest/iter20.xml"],
+  "action_items": [
+    "Fix the naive/aware datetime comparison in eligible_local_drivers (make req_start/req_end IST-aware). Currently 500 on /hire/local-drivers and /hire/requests.",
+    "Remove or fix the availability block in has_clash. It treats the available window as a conflict and also compares naive with aware datetimes.",
+    "Frontend: validate and normalise HH:MM in AvailabilityPicker, and revert or reload state when PUT /pro/settings fails.",
+    "Run backend/tests/test_iter20_availability.py. The TestMatching cases must pass."
+  ],
+  "critical_code_review_comments": [
+    "server.py ~3330: req_start naive vs avail_start aware gives TypeError (confirmed in backend.err.log).",
+    "server.py has_clash: availability overlap returns True (inverted semantics), and the same naive/aware issue.",
+    "availability_snapshot should cross-check date against the from/to date and enforce unique ids.",
+    "server.py is very large (>3500 lines). Split the hire/pro modules."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter20_availability.py"],
+  "success_rate": {"backend": "87% (13/15; both matching failures are the critical 500)", "frontend": "100% of requested flows (register and dashboard add/edit/delete/persist); 1 medium validation issue"},
+  "seed_data_creation": "Created TEST_ users (pytest drivers and passenger, TEST_Avail19 approved driver via ui_setup_iter19_avail.py, TEST_Reg20UI). All were deleted by user_id afterwards. No pro_drivers with availability remain.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run: cd /app/backend/tests && REACT_APP_BACKEND_URL=... PYTHONPATH=. pytest test_iter20_availability.py -c /dev/null -p no:xdist -v (it cleans up its own users). The browser clock is Nov 24 2026: use avail-date-next and then avail-date-day-2026-12-DD. Login: language-continue-button, auth-toggle-mode, auth-email-input/auth-password-input/auth-submit-button. The dashboard tab is dash-tab-availability.",
+  "rca of the issue": "Availability is now stored as ISO strings with +05:30 (aware datetimes when parsed), but the matching code builds request datetimes with strptime (naive). Python refuses to compare them, so the request returns 500. Repro: register a driver in Hiriyur with availability 09:00-13:00 on date D, approve it, then GET /api/hire/local-drivers?subdistrict_code=5508&date=D&time=10:00&hours=2 gives 500."
+}

@@ -3248,21 +3248,6 @@ async def has_clash(driver_id: str, start: datetime, end: datetime, exclude_book
         if h["starts_at"].replace(tzinfo=timezone.utc) + timedelta(hours=h.get("hours", 4)) > start.astimezone(timezone.utc):
             return True
 
-    # Also check availability schedules for conflicts
-    driver = await db.pro_drivers.find_one({"user_id": driver_id}, {"_id": 0, "availability": 1})
-    if driver and driver.get("availability"):
-        start_date = start.strftime("%Y-%m-%d")
-        start_time = start.strftime("%H:%M")
-        end_time = end.strftime("%H:%M")
-        for avail in driver["availability"]:
-            if avail["date"] == start_date and avail.get("status") == "active":
-                # Check if requested time conflicts with availability
-                avail_start = datetime.fromisoformat(avail["from"].replace("Z", "+00:00"))
-                avail_end = datetime.fromisoformat(avail["to"].replace("Z", "+00:00"))
-                req_start = datetime.strptime(f"{start_date} {start_time}", "%Y-%m-%d %H:%M")
-                req_end = datetime.strptime(f"{start_date} {end_time}", "%Y-%m-%d %H:%M")
-                if req_start < avail_end and req_end > avail_start:
-                    return True
     return False
 
 
@@ -3300,6 +3285,11 @@ def pick_vehicle(p: dict, category: str, passengers: int) -> Optional[dict]:
     return min(fits, key=lambda v: (v["seats"], v.get("day_rate", 0))) if fits else None
 
 
+def iso_dt(v: str) -> datetime:
+    d = datetime.fromisoformat(str(v).replace("Z", "+00:00"))
+    return d if d.tzinfo else d.replace(tzinfo=IST)
+
+
 async def eligible_local_drivers(area_q: dict, r: dict, exclude: str) -> list:
     """Approved, Available local drivers offering the requested service, inside the area query, free for the whole trip.
     Now checks availability schedules for specific dates."""
@@ -3312,7 +3302,7 @@ async def eligible_local_drivers(area_q: dict, r: dict, exclude: str) -> list:
     # Check if driver has availability for this specific date and time
     avail_q = {
         "$or": [
-            {"availability": {"$exists": False}},  # No availability schedules - use old logic
+            {"availability": {"$in": [None, []]}},  # No availability schedules - use old logic
             {"availability": {"$elemMatch": {"date": r["date"], "status": "active"}}}
         ]
     }
@@ -3327,15 +3317,8 @@ async def eligible_local_drivers(area_q: dict, r: dict, exclude: str) -> list:
     for p in await db.pro_drivers.find(q, {"_id": 0, "licence_no": 0, "licence_expiry": 0, "city.geo": 0}).to_list(300):
         # Check availability schedule for specific date/time
         if p.get("availability"):
-            date_avail = next((a for a in p["availability"] if a["date"] == r["date"] and a.get("status") == "active"), None)
-            if not date_avail:
-                continue
-            # Check if requested time is within availability window
-            req_start = datetime.strptime(f"{r['date']} {r['time']}", "%Y-%m-%d %H:%M")
-            req_end = req_start + timedelta(hours=r["hours"])
-            avail_start = datetime.fromisoformat(date_avail["from"].replace("Z", "+00:00"))
-            avail_end = datetime.fromisoformat(date_avail["to"].replace("Z", "+00:00"))
-            if req_start < avail_start or req_end > avail_end:
+            windows = [a for a in p["availability"] if a["date"] == r["date"] and a.get("status") == "active"]
+            if not any(iso_dt(a["from"]) <= start and end <= iso_dt(a["to"]) for a in windows):
                 continue
         elif not fits_window(p, r["time"], r["hours"]):
             continue
