@@ -13,11 +13,17 @@ import { Logo } from "@/src/components/Logo";
 import { RideCard } from "@/src/components/RideCard";
 import { Avatar, Btn, Card, IconName, Stepper, T, radius, space } from "@/src/components/ui";
 import { useAuth } from "@/src/auth";
+import { DriverHome } from "@/src/components/DriverHome";
 import { useI18n } from "@/src/i18n";
 import { usesNativeTabs } from "@/src/navigation";
 import { useTheme } from "@/src/theme";
 
 export default function Home() {
+  const { user } = useAuth();
+  return user?.account_type === "driver" ? <DriverHome /> : <PassengerHome />;
+}
+
+function PassengerHome() {
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
   const { t, fmtDate } = useI18n();

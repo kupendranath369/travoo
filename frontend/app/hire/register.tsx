@@ -54,14 +54,14 @@ export default function LocalDriverRegister() {
   const { colors } = useTheme();
   const router = useRouter();
   const toast = useToast();
-  const { view } = useLocalSearchParams<{ view?: string }>();
+  const { view, service } = useLocalSearchParams<{ view?: string; service?: string }>();
   const [me, setMe] = useState<any>(null);
   const [err, setErr] = useState("");
   const [editing, setEditing] = useState(false);
   const [step, setStep] = useState(0);
   const [stepErr, setStepErr] = useState("");
   const [busy, setBusy] = useState(false);
-  const [d, setD] = useState<Draft>({ place: null, taluk: null, languages: [], licence_no: "", licence_expiry: "", services: ["rent"], vehicle_ids: [] });
+  const [d, setD] = useState<Draft>({ place: null, taluk: null, languages: [], licence_no: "", licence_expiry: "", services: service === "book" ? ["book"] : ["rent"], vehicle_ids: [] });
   const set = (p: Partial<Draft>) => { setStepErr(""); setD((x) => ({ ...x, ...p })); };
 
   const load = useCallback(async () => {

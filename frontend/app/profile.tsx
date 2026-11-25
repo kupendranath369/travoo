@@ -15,6 +15,7 @@ import { PhoneOtp } from "@/src/components/PhoneOtp";
 import { LANGUAGES, useI18n } from "@/src/i18n";
 import { useTheme } from "@/src/theme";
 import { useOtpEnabled } from "@/src/useOtp";
+import { useSetMode } from "@/src/useMode";
 import { uploadWithProgress } from "@/src/utils/upload";
 
 function Row({ icon, label, onPress, right, testID }: { icon: IconName; label: string; onPress: () => void; right?: React.ReactNode; testID: string }) {
@@ -34,6 +35,7 @@ function Row({ icon, label, onPress, right, testID }: { icon: IconName; label: s
 
 export default function ProfileScreen() {
   const otpOn = useOtpEnabled();
+  const setMode = useSetMode();
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
   const { t, lang } = useI18n();
@@ -150,6 +152,24 @@ export default function ProfileScreen() {
             <PhoneOtp testPrefix="link" sendPath="/me/phone/send" verifyPath="/me/phone/verify" submitLabel="Verify number" onVerified={async () => { await refresh(); toast("Mobile number verified"); }} />
           </Card>
         ) : null}
+
+        <Card testID="profile-mode-card" style={{ gap: space.sm, padding: space.md, backgroundColor: colors.surfaceSecondary, borderRadius: radius.lg, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 3 }}>
+          <T weight="800" size={16}>My mode</T>
+          <View style={{ flexDirection: "row", gap: space.sm }}>
+            {(["passenger", "driver"] as const).map((m) => {
+              const on = (user.account_type ?? "passenger") === m;
+              return (
+                <Pressable key={m} testID={`profile-mode-${m}`} disabled={on} onPress={async () => {
+                  try { await setMode(m); toast(m === "driver" ? "Switched to Driver mode" : "Switched to Passenger mode"); router.replace("/"); } catch (e: any) { toast(e.message, "error"); }
+                }} style={{ flex: 1, minHeight: 52, flexDirection: "row", gap: 6, alignItems: "center", justifyContent: "center", borderRadius: radius.md,
+                  backgroundColor: on ? colors.brandTertiary : colors.surfaceTertiary }}>
+                  <Ionicons name={m === "driver" ? "car-sport-outline" : "person-outline"} size={18} color={on ? "#fff" : colors.onSurface} />
+                  <T weight="800" color={on ? "#fff" : colors.onSurface}>{m === "driver" ? "Driver" : "Passenger"}</T>
+                </Pressable>
+              );
+            })}
+          </View>
+        </Card>
 
         <Card testID="personal-profile-card" style={{ gap: space.sm, padding: space.md, backgroundColor: colors.surfaceSecondary, borderRadius: radius.lg, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 3 }}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>

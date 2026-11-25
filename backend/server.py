@@ -336,7 +336,7 @@ def new_user_doc(email: Optional[str], name: str, **extra) -> dict:
             "upi_id": "", "bio": "", "driver_status": extra.get("driver_status", "not_submitted"),
             "rating_avg": 0, "rating_count": 0, "suspended": False, "consent_at": now(), "created_at": now(),
             "auth_provider": extra.get("auth_provider", "password"), "is_demo": extra.get("is_demo", False),
-            "account_type": extra.get("account_type", "passenger")}
+            "account_type": extra.get("account_type", "passenger"), "mode_chosen": "account_type" in extra or bool(extra.get("is_demo"))}
     if email:
         doc["email"] = email.lower()
     if extra.get("phone_e164"):
@@ -749,11 +749,14 @@ class ProfileIn(BaseModel):
     picture: Optional[str] = Field(default=None, max_length=100)
     dob: Optional[str] = Field(default=None, pattern=r"^(\d{2}-\d{2}-\d{4})?$")
     gender: Optional[Literal["male", "female", "other", ""]] = None
+    account_type: Optional[Literal["passenger", "driver"]] = None  # app mode, switchable any time
 
 
 @api.put("/me")
 async def update_me(body: ProfileIn, user: dict = Depends(get_user)):
     upd = {k: v for k, v in body.model_dump().items() if v is not None}
+    if body.account_type:
+        upd["mode_chosen"] = True
     if "phone" in upd:
         raw = upd["phone"].strip()
         digits = re.sub(r"\D", "", raw)[-10:]

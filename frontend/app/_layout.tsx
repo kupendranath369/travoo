@@ -34,6 +34,7 @@ function Gate() {
     if (loading || !ready) return;
     if (!chosen && top !== "language" && top !== "admin") router.replace("/language");
     else if (chosen && !user && !PUBLIC.has(top ?? "")) router.replace("/auth");
+    else if (user && user.mode_chosen === false && top !== "mode" && top !== "admin" && top !== "legal") router.replace("/mode");
     else if (user && top === "auth") router.replace("/");
   }, [loading, ready, chosen, user, top, router]);
 

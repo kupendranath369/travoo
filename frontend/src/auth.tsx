@@ -28,6 +28,7 @@ export type User = {
   phone_verified?: boolean;
   phone_e164?: string;
   account_type?: "passenger" | "driver";
+  mode_chosen?: boolean;
 };
 
 type Ctx = {
