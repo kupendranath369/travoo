@@ -3673,13 +3673,16 @@ async def hire_request_create(body: LocalHireIn, user: dict = Depends(get_user))
         if p.get("matched_by") == "online":
             online_ids.append(p["user_id"])
             push_fare[p["user_id"]] = quote(p, r, p.get("match_vehicle"))
-    for uid in online_ids:  # ring Online drivers' phones; never blocks the request
+    async def ring(uid: str):  # ring Online drivers' phones in the background; never delays the request
         try:
             await send_push([uid], {"title": f"New {SERVICE_NAME[body.service]} request",
                                     "message": f"{body.pickup} → {body.destination} · {dt.strftime('%d %b')} {body.time} · ₹{push_fare[uid]}",
                                     "action_url": "/hire/requests"}, idempotency_key=f"{rid}:{uid}")
         except Exception as e:
             logger.warning("push failed (non-blocking): %s", e)
+    for uid in online_ids:
+        _bg_tasks.add(t := asyncio.create_task(ring(uid)))
+        t.add_done_callback(_bg_tasks.discard)
     req.pop("_id", None)
     req["notified"] = sent
     return req
@@ -3939,6 +3942,7 @@ async def earnings_summary(user: dict = Depends(get_user)):
 
 # ---------------------------------------------------------------- push notifications (Emergent managed relay)
 PUSH_BASE_URL = "https://integrations.emergentagent.com"
+_bg_tasks: set = set()
 _push_client = httpx.AsyncClient(base_url=PUSH_BASE_URL, headers={"X-Push-Key": os.environ.get("EMERGENT_PUSH_KEY", "placeholder")}, timeout=10.0)
 
 

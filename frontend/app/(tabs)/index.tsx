@@ -96,12 +96,14 @@ function PassengerHome() {
         </View>
         <Animated.View entering={FadeInDown.duration(400)} style={{ marginHorizontal: space.lg, marginTop: -90 }}>
           <Card testID="home-search-card" style={{ gap: space.sm, borderWidth: 0, shadowColor: "#14233A", shadowOpacity: 0.1, shadowRadius: 16, shadowOffset: { width: 0, height: 8 }, elevation: 5 }}>
+<View style={{ paddingRight: 44, gap: space.sm }}>
             <LocationField testID="home-from-field" label="Leaving from" value={from} onChange={(l) => { setFrom(l); setFormErr(""); }} icon="location" />
             <Pressable testID="home-swap-button" accessibilityLabel="Swap Leaving from and Going to" onPress={() => { setFrom(to); setTo(from); setFormErr(""); }} hitSlop={8}
-              style={{ position: "absolute", right: space.md, top: 58, zIndex: 2, width: 36, height: 36, borderRadius: 18, backgroundColor: colors.brandSoft, alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: colors.surfaceSecondary }}>
+              style={{ position: "absolute", right: 0, top: 46, zIndex: 2, width: 36, height: 36, borderRadius: 18, backgroundColor: colors.brandSoft, alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: colors.surfaceSecondary }}>
               <Ionicons name="swap-vertical" size={18} color={colors.brandPrimary} />
             </Pressable>
             <LocationField testID="home-to-field" label="Going to" value={to} onChange={(l) => { setTo(l); setFormErr(""); }} icon="location" />
+            </View>
             <DateField testID="home-date" label="Date (any date if empty)" value={date} onChange={setDate} allowClear />
             {formErr ? <T testID="home-form-error" color={colors.error} weight="600">{formErr}</T> : null}
             <Btn testID="home-find-ride-button" icon="search" label="Find a Ride" onPress={find} />

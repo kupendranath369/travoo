@@ -1,0 +1,35 @@
+{
+  "summary": "Iteration 33: tested the swap-locations button, the passenger profile cleanup and push request alerts (register-push plus hire-request push, which must not block the request). Backend 6/6 pytest pass. Frontend (390x844): swap works, a search after the swap uses the swapped values, passenger profile has no 'New driver' line, driver profile shows it, and there are no console or page errors on web from expo-notifications.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/hire/requests", "issue": "send_push is awaited one driver at a time inside the request. It has a 10s httpx timeout and retries up to 3x with a 3s sleep on idempotency_key_in_progress. With N online drivers and a slow relay, the passenger's request can block for N*10s or more. Suggest asyncio.create_task / BackgroundTasks, or one send_push(online_ids) call (the relay accepts up to 100 recipients)."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Home search card", "issues": ["home-swap-button is absolutely positioned (right: space.md, top: 58) at x 326-362 and overlaps the right edge of both LocationFields, which have no paddingRight. Short names like Bengaluru/Mysuru are fine. A long place name or subtitle (e.g. a village with a long district/state/pin) would run under the button. Add paddingRight ~44 to the field text column, or compute top from layout instead of the hardcoded 58."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_iter33_push.py", "/app/test_reports/pytest/iter33_push.xml"],
+  "action_items": [
+    "Optional: move push sending in hire_request_create to the background (create_task) or batch the recipients so a slow relay cannot delay the passenger's request.",
+    "Optional: add right padding to the home LocationField text so long names don't go under the swap button.",
+    "Data hygiene: real approved drivers user_310f8c4adcfb (upendra.uppi143@gmail.com) and user_4afc0ee3a4dc (k.upendranath369@gmail.com) are Online in subdistrict 5508 (Hiriyur), the same taluk that ui_setup_iter29.py and older test helpers use. TEST hire requests send them real in-app notifications and dispatches, and in a native build they would also get real push alerts. Leftover TEST notifications/dispatches from earlier runs (refs LHR-5C3E0135, LHR-0DBBC103, created at 18:15 and 18:54 today, not by this agent) are still on those real accounts. Ask the user before deleting them. Point test helpers at another taluk (this iteration used 5436 Gokak)."
+  ],
+  "critical_code_review_comments": [
+    "register_push maps upstream 401 to 500, but other 4xx go through resp.raise_for_status(), which raises httpx.HTTPStatusError and becomes an unhandled 500 with no detail. Map them to a 502/400 with a message.",
+    "_push_client uses os.environ.get('EMERGENT_PUSH_KEY', 'placeholder'), a default value that goes against the 'no defaults, fail fast' env rule.",
+    "send_push failures are only logged with the exception text. Adding rid/uid to the warning would make logs easier to link to a request.",
+    "Frontend push.ts: registerForPush runs on every app open for all users, passengers included. That's fine, but errors are swallowed silently. Web is properly guarded (Platform.OS checks in push.ts and _layout.tsx)."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter33_push.py"],
+  "success_rate": {"backend": "100% (6/6)", "frontend": "100%"},
+  "seed_data_creation": "test_iter33_push.py creates 3 TEST users (passenger, online driver, scheduled-only offline driver) in taluk 5436 Gokak and deletes them by user_id at teardown; verified 0 remain. My first run used 5508 and created 1 dispatch + 1 notification on each of 2 real drivers (ref LHR-31190065); I deleted those by that ref.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run: cd /app/backend/tests && pytest test_iter33_push.py -c /dev/null -p no:xdist -v. It counts 'push failed (non-blocking)' lines in the backend logs: exactly 1 per request means only the online driver got a push attempt, not the scheduled one. Use taluk 5436, not 5508, because 5508 has real online drivers. Login: the 'Log in' text button (Enter key was flaky). Home testids: home-from-field, home-swap-button, home-to-field, home-find-ride-button, location-search-input, location-option-*. EXPO_PUBLIC_BACKEND_URL in frontend/.env is mobile-app-build-11867--5jfyxu5q.preview.emergentagent.com (it differs from the URL in the review request).",
+  "rca of the issue": ""
+}
