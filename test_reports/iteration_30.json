@@ -1,0 +1,29 @@
+{
+  "summary": "Iteration 30 (frontend only, 390x844, preview URL): retest of the driver bottom tabs after the iteration 29 fixes. All requested items PASS. FIX 1: for an approved TEST local driver, dash-messages, dash-notifications and dash-offer-ride (labels now 'Chat', 'Alerts', 'Offer', no longer cut off) open /messages, /notifications and /offer. Going to those URLs directly also works. For a driver-mode user with no profile, driver-messages, driver-notifications and driver-offer-ride (driver-home) work the same way. In every case the bottom bar shows only tab-dashboard, tab-requests, tab-trips and tab-earnings. The renamed routes /driver-requests, /driver-trips and /driver-earnings work. For a passenger, /earnings and /hire/requests open the root stack screens with a back arrow and no tab bar. FIX 2: the tab-requests badge showed 2, dropped to 1 after Accept (back on the tabs), and cleared after Decline once the driver moved to another tab. The Dashboard 'Booking Requests' tile badge also cleared. Passenger mode shows exactly 5 tabs (home, offer, bookings, messages, notifications). Switching mode in Profile (driver->passenger->driver) updates the bar each time. Regression: the Trips tab has the 3 chips and shows the accepted hire (confirmed, Rs 450) under upcoming. The Earnings and Dashboard tabs render correctly.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Requests badge refresh", "issue": "After Decline on the Requests screen, the badge keeps the old count until the user navigates or the 15 s poll runs. The refresh is keyed on path, and Decline does not change the path. Acceptable under 'refreshes on navigation', but an immediate refetch after the action would be cleaner.", "selector": "[data-testid=tab-requests]", "priority": "LOW"},
+      {"component": "Messages/Notifications/Offer in driver mode", "issue": "These open as hidden tabs, so they have no back arrow. The user gets back through the Dashboard tab, which works. Consider adding a back button when these are opened from the dashboard.", "selector": "[data-testid=dash-messages]", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Offer (driver mode, local driver not carpool-verified)", "issues": ["The 'Get verified to publish rides' screen is shown as expected. No issue."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/ui_setup_iter29.py"],
+  "action_items": [
+    "Optional: refetch the Requests badge straight after Accept/Decline, without waiting for navigation.",
+    "Optional: show a back arrow on Messages, Notifications and Offer when they are opened in driver mode.",
+    "Optional: passengers can still reach /driver-requests, /driver-trips and /driver-earnings by URL as hidden tabs. This is harmless, but those routes could redirect to the stack versions."
+  ],
+  "critical_code_review_comments": [
+    "_layout.tsx: the badge effect depends on [driver, path], and the interval is recreated on every navigation. That is fine, but /notifications and /hire/requests are refetched on every route change."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (frontend only)", "frontend": "100% of the requested checks"},
+  "seed_data_creation": "Created TEST_UiDrv29, TEST_UiPax29 (2 hire requests) and TEST_UiFresh29 with ui_setup_iter29.py, then removed them with its cleanup command. Afterwards 0 TEST_Ui*29 users remain, driver@ is still in driver mode and passenger@ is still in passenger mode (the demo accounts were not used).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Setup: cd /app/backend/tests && export REACT_APP_BACKEND_URL=<preview url> && python3 ui_setup_iter29.py create && python3 ui_setup_iter29.py hire 10:00 11:00. Clean up with: python3 ui_setup_iter29.py cleanup. Accept goes to /hire/HIR-.. (a stack screen with no tab bar). Use .filter(visible=True) for tab buttons."
+}
