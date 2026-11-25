@@ -255,7 +255,7 @@ export default function OfferScreen() {
             </View>
             <View style={{ gap: space.xs }}>
               <T size={13} weight="600" color={colors.muted}>{t("offer.time")}: <T weight="800">{time}</T>{est ? `  ·  ${t("offer.est_arrival")}: ${est.arrival}` : ""}</T>
-              <TimeChips value={time} onChange={setTime} />
+              <TimeChips testID="offer-time" value={time} onChange={setTime} />
             </View>
             <View style={{ gap: space.xs }}>
               <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
@@ -304,7 +304,7 @@ export default function OfferScreen() {
               <>
                 <DateField testID="offer-return-date" label={t("v2.return_date")} value={retDate ?? date} onChange={setRetDate} />
                 <T size={13} weight="600" color={colors.muted}>{t("v2.return_time")}: {retTime}</T>
-                <TimeChips value={retTime} onChange={setRetTime} />
+                <TimeChips testID="offer-return-time" value={retTime} onChange={setRetTime} />
               </>
             ) : null}
             {err ? <T testID="offer-error" color={colors.error}>{err}</T> : null}

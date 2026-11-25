@@ -1,3 +1,4 @@
+import { ClockTimePicker } from "@/src/components/ClockTimePicker";
 import React, { useMemo } from "react";
 import { ScrollView } from "react-native";
 
@@ -19,23 +20,7 @@ export function DateChips({ value, onChange, allowAny, days = 45, testID = "date
   );
 }
 
-const HOURS = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, "0"));
-const MINS = ["00", "15", "30", "45"];
-
-export function TimeChips({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  const [h, m] = value.split(":");
-  return (
-    <>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: space.sm, paddingVertical: space.xs }}>
-        {HOURS.map((x) => (
-          <Chip key={x} testID={`hour-${x}`} label={`${x}h`} active={x === h} onPress={() => onChange(`${x}:${m}`)} />
-        ))}
-      </ScrollView>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: space.sm, paddingVertical: space.xs }}>
-        {MINS.map((x) => (
-          <Chip key={x} testID={`minute-${x}`} label={`:${x}`} active={x === m} onPress={() => onChange(`${h}:${x}`)} />
-        ))}
-      </ScrollView>
-    </>
-  );
+/** Time selection: digital hour/minute picker with AM/PM and quick presets. */
+export function TimeChips({ value, onChange, testID = "time-picker" }: { value: string; onChange: (v: string) => void; testID?: string }) {
+  return <ClockTimePicker testID={testID} label="" value={value} onChange={onChange} />;
 }
