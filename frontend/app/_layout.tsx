@@ -4,15 +4,13 @@ import { Stack, useRouter, useSegments } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import React, { useEffect, useState } from "react";
 import * as Notifications from "expo-notifications";
-import { LogBox, Platform, StyleSheet, Text, View } from "react-native";
-import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
+import { LogBox, Platform, StyleSheet, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 
 import { AuthProvider, useAuth } from "@/src/auth";
 import { ErrorBoundary } from "@/src/components/error-boundary";
-import { BrandPin, IMG, Wordmark } from "@/src/components/Brand";
-import { Image } from "expo-image";
+import { Splash } from "@/src/components/Splash";
 import { ToastProvider } from "@/src/components/toast";
 import { api } from "@/src/api";
 import { I18nProvider, useI18n } from "@/src/i18n";
@@ -66,14 +64,7 @@ function Gate() {
 
   if (showSplash) {
     return (
-      <Animated.View entering={FadeIn.duration(600)} exiting={FadeOut.duration(600)} testID="splash-screen" style={{ flex: 1, backgroundColor: "#EAF5FB" }}>
-        <Image source={{ uri: IMG.splash }} style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: "62%" }} contentFit="cover" />
-        <View style={{ alignItems: "center", paddingTop: "22%", gap: 10 }}>
-          <BrandPin size={64} />
-          <Wordmark size={56} />
-          <Text style={{ fontFamily: "PJS-SemiBold", fontSize: 15, color: "#14233A" }}>Your Travel. Your Driver. Your Way.</Text>
-        </View>
-      </Animated.View>
+      <Splash />
     );
   }
 
