@@ -5,7 +5,6 @@ import { Pressable, RefreshControl, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { api, pictureUrl } from "@/src/api";
-import { Wordmark } from "@/src/components/Brand";
 import { float, ServiceCard, Switch } from "@/src/components/localdriver/parts";
 import { useToast } from "@/src/components/toast";
 import { Avatar, Badge, ErrorBox, Header, IconName, Loading, T, radius, space } from "@/src/components/ui";
@@ -65,13 +64,6 @@ export function LocalDriverDashboard({ embedded = false }: { embedded?: boolean 
     <View style={{ flex: 1, backgroundColor: colors.surface }}>
       {embedded ? null : <Header title="Local Driver" />}
       <ScrollView refreshControl={<RefreshControl refreshing={false} onRefresh={load} />} contentContainerStyle={{ padding: space.lg, paddingTop: embedded ? insets.top + space.sm : space.lg, gap: space.lg, paddingBottom: insets.bottom + space.xxl }}>
-        {embedded ? (
-          <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
-            <View style={{ flex: 1 }}><Wordmark size={28} pin /></View>
-            <View testID="dash-mode-pill" style={{ paddingHorizontal: space.md, paddingVertical: 6, borderRadius: radius.pill, backgroundColor: colors.brandSecondary }}><T size={12} weight="800" color="#fff">Driver Mode</T></View>
-            <Pressable testID="dash-notifications" onPress={() => router.push("/notifications")} hitSlop={8}><Ionicons name="notifications-outline" size={24} color={colors.onSurface} /></Pressable>
-          </View>
-        ) : null}
         <Pressable testID="dash-header" onPress={() => router.push("/profile")} style={{ flexDirection: "row", alignItems: "center", gap: space.md }}>
           <Avatar name={p.name} uri={pictureUrl(d.photos?.profile)} size={60} />
           <View style={{ flex: 1, gap: 3 }}>
@@ -82,6 +74,7 @@ export function LocalDriverDashboard({ embedded = false }: { embedded?: boolean 
               <T testID="dash-taluk" size={12} color={colors.muted}>{p.home?.subdistrict_name}, {p.home?.district_name}</T>
             </View>
           </View>
+          {embedded ? <View testID="dash-mode-pill" style={{ alignSelf: "flex-start", paddingHorizontal: space.md, paddingVertical: 6, borderRadius: radius.pill, backgroundColor: colors.brandSecondary }}><T size={12} weight="800" color="#fff">Driver Mode</T></View> : null}
         </Pressable>
 
         <View testID="dash-online-card" style={[float, { flexDirection: "row", alignItems: "center", gap: space.md, padding: space.md, borderRadius: radius.lg, backgroundColor: p.online ? colors.brandSoft : colors.surfaceSecondary }]}>

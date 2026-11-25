@@ -147,13 +147,13 @@ export default function ProfileScreen() {
         <Pressable testID="profile-switch-mode-row" onPress={() => setModeSheet(true)} style={{ flexDirection: "row", alignItems: "center", gap: space.md, padding: space.md, borderRadius: radius.lg, backgroundColor: colors.brandSoft }}>
           <Ionicons name="swap-horizontal" size={26} color={colors.brandPrimary} />
           <View style={{ flex: 1 }}>
-            <T weight="800">Switch Mode</T>
+            <T weight="800">Change Role</T>
             <T size={12} color={colors.muted}>Now: {(user.account_type ?? "passenger") === "driver" ? "Driver" : "Passenger"} · change to {(user.account_type ?? "passenger") === "driver" ? "Passenger" : "Driver"}</T>
           </View>
           <Ionicons name="chevron-forward" size={20} color={colors.muted} />
         </Pressable>
         <ModeSheet open={modeSheet} current={user.account_type ?? "passenger"} onClose={() => setModeSheet(false)}
-          onSwitch={async (m) => { try { await setMode(m); setModeSheet(false); toast(m === "driver" ? "Switched to Driver mode" : "Switched to Passenger mode"); router.replace("/"); } catch (e: any) { toast(e.message, "error"); } }} />
+          onSwitch={async (m) => { try { await setMode(m); setModeSheet(false); toast(m === "driver" ? "You're now a Driver" : "You're now a Passenger"); router.replace("/"); } catch (e: any) { toast(e.message, "error"); } }} />
 
         <Card testID="personal-profile-card" style={{ gap: space.sm, padding: space.md, backgroundColor: colors.surfaceSecondary, borderRadius: radius.lg, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 3 }}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>

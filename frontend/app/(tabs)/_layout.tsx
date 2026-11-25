@@ -6,6 +6,7 @@ import { AppState, Platform, View } from "react-native";
 
 import { api } from "@/src/api";
 import { useAuth } from "@/src/auth";
+import { RoleChooser } from "@/src/components/RoleChooser";
 import { useI18n } from "@/src/i18n";
 import { usesNativeTabs } from "@/src/navigation";
 import { useTheme } from "@/src/theme";
@@ -26,8 +27,8 @@ function useUnreadMessages() {
   return n;
 }
 
-const DRIVER_TABS = ["index", "driver-trips", "driver-earnings", "messages", "account"];
-const PASSENGER_TABS = ["index", "bookings", "messages", "notifications", "account"];
+const DRIVER_TABS = ["index", "driver-trips", "driver-earnings", "messages", "notifications"];
+const PASSENGER_TABS = ["index", "bookings", "offer", "messages", "notifications"];
 
 export default function TabsLayout() {
   const { t } = useI18n();
@@ -60,6 +61,8 @@ export default function TabsLayout() {
 
   if (usesNativeTabs) {
     return (
+      <>
+      <RoleChooser visible={user?.mode_chosen === false} />
       <NativeTabs tintColor={colors.brandPrimary}>
         <NativeTabs.Trigger name="index">
           <NativeTabs.Trigger.Icon sf="house.fill" />
@@ -77,29 +80,30 @@ export default function TabsLayout() {
           <NativeTabs.Trigger.Icon sf="indianrupeesign.circle.fill" />
           <NativeTabs.Trigger.Label>Earnings</NativeTabs.Trigger.Label>
         </NativeTabs.Trigger>
-        <NativeTabs.Trigger name="offer" hidden>
-          <NativeTabs.Trigger.Icon sf="plus.circle.fill" />
-          <NativeTabs.Trigger.Label>{t("tab.offer")}</NativeTabs.Trigger.Label>
-        </NativeTabs.Trigger>
         <NativeTabs.Trigger name="bookings" hidden={driver}>
           <NativeTabs.Trigger.Icon sf="ticket.fill" />
           <NativeTabs.Trigger.Label>{t("tab.bookings")}</NativeTabs.Trigger.Label>
+        </NativeTabs.Trigger>
+        <NativeTabs.Trigger name="offer" hidden={driver}>
+          <NativeTabs.Trigger.Icon sf="plus.circle.fill" />
+          <NativeTabs.Trigger.Label>Offer Ride</NativeTabs.Trigger.Label>
         </NativeTabs.Trigger>
         <NativeTabs.Trigger name="messages">
           <NativeTabs.Trigger.Icon sf="bubble.left.and.bubble.right.fill" />
           <NativeTabs.Trigger.Label>{t("v2.messages")}</NativeTabs.Trigger.Label>
           {unread ? <NativeTabs.Trigger.Badge>{String(unread)}</NativeTabs.Trigger.Badge> : null}
         </NativeTabs.Trigger>
-        <NativeTabs.Trigger name="notifications" hidden={driver}>
+        <NativeTabs.Trigger name="notifications">
           <NativeTabs.Trigger.Icon sf="bell.fill" />
           <NativeTabs.Trigger.Label>{t("profile.notifications")}</NativeTabs.Trigger.Label>
           {unreadNotifications ? <NativeTabs.Trigger.Badge>{String(unreadNotifications)}</NativeTabs.Trigger.Badge> : null}
         </NativeTabs.Trigger>
-        <NativeTabs.Trigger name="account">
+        <NativeTabs.Trigger name="account" hidden>
           <NativeTabs.Trigger.Icon sf="person.crop.circle" />
           <NativeTabs.Trigger.Label>Account</NativeTabs.Trigger.Label>
         </NativeTabs.Trigger>
       </NativeTabs>
+      </>
     );
   }
 
@@ -108,6 +112,8 @@ export default function TabsLayout() {
       return <Ionicons name={focused ? on : off} size={23} color={color} />;
     };
   return (
+    <>
+    <RoleChooser visible={user?.mode_chosen === false} />
     <Tabs
       screenOptions={{
         headerShown: false,
@@ -122,24 +128,12 @@ export default function TabsLayout() {
       <Tabs.Screen name="driver-requests" options={{ ...hide("driver-requests"), title: "Requests", tabBarButtonTestID: "tab-requests", tabBarIcon: icon("notifications", "notifications-outline"), tabBarBadge: openRequests || undefined, tabBarBadgeStyle: { backgroundColor: colors.brandTertiary, color: colors.onBrandTertiary, fontSize: 10 } }} />
       <Tabs.Screen name="driver-trips" options={{ ...hide("driver-trips"), title: "My Trips", tabBarButtonTestID: "tab-trips", tabBarIcon: icon("car", "car-outline") }} />
       <Tabs.Screen name="driver-earnings" options={{ ...hide("driver-earnings"), title: "Earnings", tabBarButtonTestID: "tab-earnings", tabBarIcon: icon("wallet", "wallet-outline") }} />
-      <Tabs.Screen
-        name="offer"
-        options={{
-          ...hide("offer"),
-          title: t("tab.offer"),
-          tabBarButtonTestID: "tab-offer",
-          tabBarActiveTintColor: colors.brandTertiary,
-          tabBarIcon: ({ focused }) => (
-            <View style={{ width: 44, height: 44, borderRadius: 22, marginTop: -14, backgroundColor: colors.brandTertiary, alignItems: "center", justifyContent: "center", borderWidth: 3, borderColor: focused ? colors.brand : colors.surfaceSecondary }}>
-              <Ionicons name="add" size={26} color={colors.onBrandTertiary} />
-            </View>
-          ),
-        }}
-      />
       <Tabs.Screen name="bookings" options={{ ...hide("bookings"), title: t("tab.bookings"), tabBarButtonTestID: "tab-bookings", tabBarIcon: icon("ticket", "ticket-outline") }} />
+      <Tabs.Screen name="offer" options={{ ...hide("offer"), title: "Offer Ride", tabBarButtonTestID: "tab-offer", tabBarIcon: icon("add-circle", "add-circle-outline") }} />
       <Tabs.Screen name="messages" options={{ ...hide("messages"), title: t("v2.messages"), tabBarButtonTestID: "tab-messages", tabBarIcon: icon("chatbubbles", "chatbubbles-outline"), tabBarBadge: unread ? unread : undefined, tabBarBadgeStyle: { backgroundColor: colors.brandTertiary, color: colors.onBrandTertiary, fontSize: 10 } }} />
       <Tabs.Screen name="notifications" options={{ ...hide("notifications"), title: t("profile.notifications"), tabBarButtonTestID: "tab-notifications", tabBarIcon: icon("notifications", "notifications-outline"), tabBarBadge: unreadNotifications ? unreadNotifications : undefined, tabBarBadgeStyle: { backgroundColor: colors.brandTertiary, color: colors.onBrandTertiary, fontSize: 10 } }} />
       <Tabs.Screen name="account" options={{ ...hide("account"), title: "Account", tabBarButtonTestID: "tab-account", tabBarIcon: icon("person-circle", "person-circle-outline") }} />
     </Tabs>
+    </>
   );
 }

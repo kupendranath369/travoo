@@ -5,12 +5,15 @@ import { Pressable, RefreshControl, ScrollView, View } from "react-native";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { api } from "@/src/api";
-import { IMG, Wordmark } from "@/src/components/Brand";
+import { api, Loc, pictureUrl } from "@/src/api";
+import { DateField } from "@/src/components/Calendar";
+import { FloatingImage } from "@/src/components/FloatingImage";
+import { LocationField } from "@/src/components/LocationField";
+import { IMG } from "@/src/components/Brand";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { RideCard } from "@/src/components/RideCard";
-import { Card, IconName, T, radius, space } from "@/src/components/ui";
+import { Avatar, Btn, Card, IconName, T, radius, space } from "@/src/components/ui";
 import { useAuth } from "@/src/auth";
 import { DriverHome } from "@/src/components/DriverHome";
 import { useI18n } from "@/src/i18n";
@@ -29,6 +32,10 @@ function PassengerHome() {
   const router = useRouter();
   const { user } = useAuth();
   const [recent, setRecent] = useState<any[]>([]);
+  const [from, setFrom] = useState<Loc | null>(null);
+  const [to, setTo] = useState<Loc | null>(null);
+  const [date, setDate] = useState<string | null>(null);
+  const [formErr, setFormErr] = useState("");
   const [featured, setFeatured] = useState<any[]>([]);
   const [unread, setUnread] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
@@ -53,11 +60,18 @@ function PassengerHome() {
     else router.push({ pathname: "/search", params: { from: JSON.stringify(s.origin), to: JSON.stringify(s.destination), date: s.date && s.date >= new Date().toISOString().slice(0, 10) ? s.date : "", seats: String(s.seats || 1) } });
   };
 
-  const tile = (testID: string, ic: IconName, title: string, onPress: () => void) => (
-    <Pressable testID={testID} onPress={onPress} style={({ pressed }) => ({ flex: 1, minHeight: 112, borderRadius: radius.lg, backgroundColor: colors.surfaceSecondary, alignItems: "center",
-      justifyContent: "center", gap: 6, padding: space.sm, shadowColor: "#14233A", shadowOpacity: 0.1, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 4, transform: [{ scale: pressed ? 0.96 : 1 }] })}>
-      <Ionicons name={ic} size={36} color={testID === "home-tile-find" ? colors.brandPrimary : colors.brandSecondary} />
-      <T size={14} weight="800" center>{title}</T>
+  const find = () => {
+    if (!from || !to) return setFormErr(t("search.pick_both"));
+    if (from.loc_id === to.loc_id) return setFormErr(t("home.same_place"));
+    setFormErr("");
+    router.push({ pathname: "/search", params: { from: JSON.stringify(from), to: JSON.stringify(to), date: date ?? "", seats: "1" } });
+  };
+  const art = (testID: string, img: string, title: string, sub: string, bg: string, onPress: () => void, delay: number) => (
+    <Pressable testID={testID} onPress={onPress} style={({ pressed }) => ({ flex: 1, borderRadius: radius.lg, backgroundColor: bg, overflow: "hidden", padding: space.sm, gap: 2,
+      shadowColor: "#14233A", shadowOpacity: 0.08, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 3, transform: [{ scale: pressed ? 0.97 : 1 }] })}>
+      <FloatingImage uri={img} delay={delay} style={{ width: "100%", height: 120 }} />
+      <T size={15} weight="800" center>{title}</T>
+      <T size={11} color={colors.muted} center>{sub}</T>
     </Pressable>
   );
 
@@ -68,28 +82,31 @@ function PassengerHome() {
         contentContainerStyle={{ gap: space.md, paddingBottom: (usesNativeTabs ? insets.bottom : 0) + space.xl }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); await load(); setRefreshing(false); }} />}
       >
-        <View testID="home-header" style={{ height: 250 + insets.top }}>
+        <View testID="home-header" style={{ height: 190 + insets.top }}>
           <Image source={{ uri: IMG.header }} style={{ position: "absolute", width: "100%", height: "100%" }} contentFit="cover" />
-          <LinearGradient colors={["rgba(255,255,255,0.95)", "rgba(255,255,255,0.55)", "rgba(255,255,255,0)"]} style={{ position: "absolute", width: "100%", height: "75%" }} />
-          <View style={{ paddingTop: insets.top + space.sm, paddingHorizontal: space.lg, flexDirection: "row", alignItems: "center", gap: space.sm }}>
-            <View style={{ flex: 1 }}><Wordmark size={30} pin /></View>
+          <LinearGradient colors={["rgba(255,255,255,0.95)", "rgba(255,255,255,0.6)", "rgba(255,255,255,0)"]} style={{ position: "absolute", width: "100%", height: "80%" }} />
+          <Pressable testID="home-profile-section" onPress={() => router.push("/profile")} style={{ paddingTop: insets.top + space.sm, paddingHorizontal: space.lg, flexDirection: "row", alignItems: "center", gap: space.md }}>
+            <Avatar name={user?.name ?? ""} uri={pictureUrl(user?.picture)} size={48} />
+            <View style={{ flex: 1 }}>
+              <T size={20} weight="800">Hi, {user?.name?.split(" ")[0] || "there"}</T>
+              <T size={13}>Plan your next trip with Travoo</T>
+            </View>
             {user?.role === "admin" && icon("shield-checkmark-outline", () => router.push("/admin/login"), "home-admin-button")}
-            {icon("notifications-outline", () => router.push("/notifications"), "home-notifications-button", !!unread)}
-          </View>
-          <Pressable testID="home-profile-section" onPress={() => router.push("/profile")} style={{ paddingHorizontal: space.lg, marginTop: space.md }}>
-            <T size={26} weight="800">Hi, {user?.name?.split(" ")[0] || "there"}</T>
-            <T size={14} color={colors.onSurface}>Plan your next trip with Travoo</T>
           </Pressable>
         </View>
-        <Animated.View entering={FadeInDown.duration(400)} style={{ flexDirection: "row", gap: space.md, paddingHorizontal: space.lg, marginTop: -70 }}>
-          {tile("home-tile-find", "car-sport", "Find a Ride", () => router.push("/find"))}
-          {tile("home-rent-driver-card", "person", "Rent a Driver", () => router.push("/hire?service=rent"))}
-          {tile("home-book-driver-card", "car", "Book a Driver", () => router.push("/hire?service=book"))}
+        <Animated.View entering={FadeInDown.duration(400)} style={{ marginHorizontal: space.lg, marginTop: -90 }}>
+          <Card testID="home-search-card" style={{ gap: space.sm, borderWidth: 0, shadowColor: "#14233A", shadowOpacity: 0.1, shadowRadius: 16, shadowOffset: { width: 0, height: 8 }, elevation: 5 }}>
+            <LocationField testID="home-from-field" label="Leaving from" value={from} onChange={(l) => { setFrom(l); setFormErr(""); }} icon="location" />
+            <LocationField testID="home-to-field" label="Going to" value={to} onChange={(l) => { setTo(l); setFormErr(""); }} icon="location" />
+            <DateField testID="home-date" label="Date (any date if empty)" value={date} onChange={setDate} allowClear />
+            {formErr ? <T testID="home-form-error" color={colors.error} weight="600">{formErr}</T> : null}
+            <Btn testID="home-find-ride-button" icon="search" label="Find a Ride" onPress={find} />
+          </Card>
         </Animated.View>
-        <Pressable testID="home-offer-ride-link" onPress={() => router.push("/offer")} style={{ flexDirection: "row", alignItems: "center", gap: 6, alignSelf: "center", padding: space.sm }}>
-          <Ionicons name="add-circle-outline" size={18} color={colors.brandSecondary} />
-          <T size={13} weight="700" color={colors.brandSecondary}>Driving somewhere? Offer a ride</T>
-        </Pressable>
+        <Animated.View entering={FadeInDown.delay(80).duration(400)} style={{ flexDirection: "row", gap: space.md, paddingHorizontal: space.lg }}>
+          {art("home-rent-driver-card", IMG.rent, "Rent a Driver", "Driver for your car", colors.brandSoft, () => router.push("/hire?service=rent"), 0)}
+          {art("home-book-driver-card", IMG.book, "Book a Driver", "Car with driver", colors.accentSoft, () => router.push("/hire?service=book"), 400)}
+        </Animated.View>
 
         <Animated.View entering={FadeInDown.delay(120).duration(400)} style={{ gap: space.sm, paddingHorizontal: space.lg }}>
           <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>

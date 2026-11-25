@@ -4,11 +4,11 @@ import React, { useCallback, useState } from "react";
 import { Pressable, RefreshControl, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { api } from "@/src/api";
-import { Wordmark } from "@/src/components/Brand";
+import { api, pictureUrl } from "@/src/api";
+import { useAuth } from "@/src/auth";
 import { LocalDriverDashboard } from "@/src/components/localdriver/Dashboard";
 import { float, PRO_STATUS } from "@/src/components/localdriver/parts";
-import { Badge, Btn, IconName, T, radius, space } from "@/src/components/ui";
+import { Avatar, Badge, Btn, IconName, T, radius, space } from "@/src/components/ui";
 import { useTheme } from "@/src/theme";
 
 function Option({ icon, tint, title, desc, on, onPress, testID }: { icon: IconName; tint: string; title: string; desc: string; on: boolean; onPress: () => void; testID: string }) {
@@ -33,6 +33,7 @@ export function DriverHome() {
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
   const router = useRouter();
+  const { user } = useAuth();
   const [me, setMe] = useState<any>(null);
   const [pick, setPick] = useState<string[]>(["rent"]);
   const load = useCallback(() => api("/pro/me").then(setMe).catch(() => setMe({ profile: null })), []);
@@ -49,10 +50,11 @@ export function DriverHome() {
   return (
     <ScrollView testID="driver-home" refreshControl={<RefreshControl refreshing={false} onRefresh={load} />}
       contentContainerStyle={{ padding: space.lg, paddingTop: insets.top + space.md, gap: space.lg, paddingBottom: insets.bottom + 120 }}>
-      <View style={{ flexDirection: "row", alignItems: "center" }}>
-        <View style={{ flex: 1 }}><Wordmark size={28} pin /></View>
+      <Pressable testID="driver-home-profile" onPress={() => router.push("/profile")} style={{ flexDirection: "row", alignItems: "center", gap: space.md }}>
+        <Avatar name={user?.name ?? ""} uri={pictureUrl(user?.picture)} size={48} />
+        <T size={20} weight="800" style={{ flex: 1 }}>Hi, {user?.name?.split(" ")[0]}</T>
         <Badge testID="driver-home-mode" label="Driver Mode" tone="info" />
-      </View>
+      </Pressable>
       {!me ? null : !p ? (
         <>
           <View style={{ gap: 4 }}>
@@ -75,7 +77,6 @@ export function DriverHome() {
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.sm }}>
           <Btn small style={{ flex: 1 }} testID="driver-offer-ride" variant="outline" icon="add-circle-outline" label="Offer" onPress={() => router.push("/offer")} />
           <Btn small style={{ flex: 1 }} testID="driver-carpool-verify" variant="outline" icon="shield-checkmark-outline" label="Verify" onPress={() => router.push("/driver")} />
-          <Btn small style={{ flex: 1 }} testID="driver-notifications" variant="outline" icon="notifications-outline" label="Alerts" onPress={() => router.push("/notifications")} />
         </View>
       ) : null}
     </ScrollView>
