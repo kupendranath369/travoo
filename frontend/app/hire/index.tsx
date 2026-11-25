@@ -195,7 +195,7 @@ export default function HireScreen() {
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: space.sm }}>
         {opts.map(([k, l]) => <Chip key={k} testID={`hire-type-${k}`} label={l} active={stype === k} onPress={() => setStype(k)} />)}
       </ScrollView>
-      <T size={13} weight="600" color={colors.muted}>{t("v2.start_time")}: {time}</T>
+      <T size={13} weight="600" color={colors.muted}>{t("v2.start_time")}</T>
       <TimeChips testID="hire-time" value={time} onChange={setTime} />
       {multi ? (
         <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
@@ -205,7 +205,7 @@ export default function HireScreen() {
       ) : stype === "round_trip" ? (
         <View testID="hire-return-section" style={{ gap: space.sm }}>
           <DateField testID="hire-return-date" label="Return date" value={retDate} onChange={setRetDate} />
-          <T size={13} weight="600" color={colors.muted}>Return time: {retTime}</T>
+          <T size={13} weight="600" color={colors.muted}>Return time</T>
           <TimeChips testID="hire-return-time" value={retTime} onChange={setRetTime} />
         </View>
       ) : ["hourly", "one_way"].includes(stype) ? (

@@ -8,6 +8,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { api, Loc, locPayload } from "@/src/api";
 import { useAuth } from "@/src/auth";
 import { DateField } from "@/src/components/Calendar";
+import { formatClock } from "@/src/components/ClockTimePicker";
 import { TimeChips, isoDate } from "@/src/components/DateChips";
 import { LocationField, LocationSearchModal } from "@/src/components/LocationField";
 import { MapPicker } from "@/src/components/MapPicker";
@@ -254,7 +255,7 @@ export default function OfferScreen() {
               <DateField testID="offer-date" label={t("offer.date")} value={date} onChange={setDate} />
             </View>
             <View style={{ gap: space.xs }}>
-              <T size={13} weight="600" color={colors.muted}>{t("offer.time")}: <T weight="800">{time}</T>{est ? `  ·  ${t("offer.est_arrival")}: ${est.arrival}` : ""}</T>
+              <T size={13} weight="600" color={colors.muted}>{t("offer.time")}{est ? `  ·  ${t("offer.est_arrival")}: ${formatClock(est.arrival)}` : ""}</T>
               <TimeChips testID="offer-time" value={time} onChange={setTime} />
             </View>
             <View style={{ gap: space.xs }}>
@@ -303,7 +304,7 @@ export default function OfferScreen() {
             {retOn ? (
               <>
                 <DateField testID="offer-return-date" label={t("v2.return_date")} value={retDate ?? date} onChange={setRetDate} />
-                <T size={13} weight="600" color={colors.muted}>{t("v2.return_time")}: {retTime}</T>
+                <T size={13} weight="600" color={colors.muted}>{t("v2.return_time")}</T>
                 <TimeChips testID="offer-return-time" value={retTime} onChange={setRetTime} />
               </>
             ) : null}

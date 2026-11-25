@@ -22,7 +22,7 @@ function Arrow({ dir, onStep, testID }: { dir: "up" | "down"; onStep: () => void
   const stop = () => { if (timer.current) clearInterval(timer.current); timer.current = null; };
   return (
     <Pressable testID={testID} accessibilityLabel={dir === "up" ? "Increase" : "Decrease"} onPress={onStep} onLongPress={() => { timer.current = setInterval(onStep, 120); }} onPressOut={stop} hitSlop={6}
-      style={({ pressed }) => ({ width: 64, height: 40, borderRadius: radius.md, alignItems: "center", justifyContent: "center", backgroundColor: pressed ? colors.brandSoft : "transparent" })}>
+      style={({ pressed }) => ({ width: 64, height: 44, borderRadius: radius.md, alignItems: "center", justifyContent: "center", backgroundColor: pressed ? colors.brandSoft : "transparent" })}>
       <Ionicons name={dir === "up" ? "chevron-up" : "chevron-down"} size={26} color={colors.brandPrimary} />
     </Pressable>
   );
@@ -49,7 +49,10 @@ export function ClockTimePicker({ label, value, onChange, open: openProp, onTogg
   const toggle = onToggle ?? (() => setOwn((x) => !x));
   const { h12, m, pm } = parse(value);
   const set = (h: number, mm: number, p: boolean) => onChange(to24(h, mm, p));
-  const stepH = (d: number) => set(((h12 - 1 + d + 12) % 12) + 1, m, pm);
+  const stepH = (d: number) => { // walk through the 24 hours so 11 AM -> 12 PM (noon) and 11 PM -> 12 AM
+    const h24 = ((h12 % 12) + (pm ? 12 : 0) + d + 24) % 24;
+    onChange(`${String(h24).padStart(2, "0")}:${String(m).padStart(2, "0")}`);
+  };
   const stepM = (d: number) => set(h12, (Math.round(m / 5) * 5 + d * 5 + 60) % 60, pm);
   return (
     <View style={{ gap: space.xs }}>
@@ -79,15 +82,15 @@ export function ClockTimePicker({ label, value, onChange, open: openProp, onTogg
               })}
             </View>
           </View>
-          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.xs, justifyContent: "center" }}>
+          <View style={{ flexDirection: "row", flexWrap: "wrap", rowGap: space.xs, justifyContent: "space-between" }}>
             {PRESETS.map(([v, l]) => (
               <Pressable key={v} testID={`${testID}-preset-${v.replace(":", "")}`} onPress={() => onChange(v)}
-                style={{ paddingHorizontal: space.md, minHeight: 34, justifyContent: "center", borderRadius: radius.pill, backgroundColor: value === v ? colors.brandSoft : colors.surfaceTertiary, borderWidth: 1, borderColor: value === v ? colors.brandPrimary : "transparent" }}>
+                style={{ width: "31%", minHeight: 44, alignItems: "center", justifyContent: "center", borderRadius: radius.pill, backgroundColor: value === v ? colors.brandSoft : colors.surfaceTertiary, borderWidth: 1, borderColor: value === v ? colors.brandPrimary : "transparent" }}>
                 <T size={12} weight="700" color={value === v ? colors.brandPrimary : colors.onSurface}>{l}</T>
               </Pressable>
             ))}
           </View>
-          <Pressable testID={`${testID}-done`} onPress={toggle} style={{ alignSelf: "stretch", alignItems: "center", paddingVertical: space.sm, borderRadius: radius.pill, backgroundColor: colors.brandPrimary }}>
+          <Pressable testID={`${testID}-done`} onPress={toggle} style={{ alignSelf: "stretch", alignItems: "center", justifyContent: "center", minHeight: 48, borderRadius: radius.pill, backgroundColor: colors.brandPrimary }}>
             <T weight="800" color="#fff">Done · {formatClock(value)}</T>
           </Pressable>
         </Animated.View>

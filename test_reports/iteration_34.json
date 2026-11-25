@@ -1,0 +1,32 @@
+{
+  "summary": "Frontend-only test of the new digital ClockTimePicker at 390x844 on the EXPO_PUBLIC_BACKEND_URL preview. All requested flows PASS. Picker: field shows '8:00 AM'/'9:00 AM'; tapping opens the <id>-clock panel; hours wrap 12->01 and 01->12; minutes step by 5 and wrap 00->55 and 55->00; AM/PM toggles; all 6 presets set the right times (6:00 AM ... 9:00 PM); 'Done · <time>' shows the current value and closes the panel. Availability (approved TEST local driver, taluk 5436): only one of avail-from-time and avail-to-time is open at a time; 2:30 PM-9:45 PM saved as 14:30/21:45 +05:30 in the DB and listed correctly; Edit loads 2:30 PM/9:45 PM; Until 12:00 PM shows avail-error \"'Available Until' must be later than 'Available From'\"; changing it to 6:00 PM saves. Hire Rent: hire-time 2:35 PM -> local-drivers query time=14:35 -> 'Request this driver' POST time=14:35, stored hire_request time '14:35'. Hire Book round trip: hire-return-section shows; hire-time 6:55 AM and hire-return-time 10:10 PM display right. There are no book drivers in 5436, so no request was sent and return_time in the POST was NOT checked end to end (the code sends retTime). Offer (driver@travoo.in at /offer): offer-time 2:30 PM and offer-return-time 7:15 PM -> published trip time 14:30 plus a return trip at 19:15 (return_of set); the trip page shows 14:30. Mobile: no horizontal overflow (scrollWidth 390); digits are 44px white on a dark background; arrows 64x40, AM/PM 56x44.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Hire (/hire) and Offer a Ride", "issues": ["The label above the picker still shows 24h time ('Start time: 14:35', 'Return time: 22:10', 'Return departure time: 19:15', offer 'Time: 14:30'), right next to the 12h picker value '2:35 PM'. This is repeated and mixes formats. Remove the time from the label or use formatClock (hire/index.tsx L198, L208; offer.tsx L257 and return label)."]},
+      {"screen": "ClockTimePicker panel", "issues": ["Some touch targets are below 44px: the Done button is about 35px tall, the preset pills 34px, the arrows 40px tall (hitSlop 6 helps the arrows). Raise Done and the presets to minHeight 44.", "Stepping the hour 11 -> 12 keeps AM/PM as it is, so 11:00 AM up gives 12:00 AM (midnight), not noon. Users may expect noon. Consider flipping AM/PM when crossing 11<->12, or accept this as the design.", "The 6 presets wrap to 5 + 1 ('9 PM' alone on the second row) at 390px. A 3x2 grid would look tidier."]},
+      {"screen": "Other places that show time (trip page, offer preview)", "issues": ["These still show 24h time (e.g. '14:30 → 15:31'). Optional: use formatClock everywhere for consistency."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/ui_setup_iter34.py"],
+  "action_items": [
+    "Remove the 24h time from the labels next to TimeChips, or format it as 12h (hire Start/Return time labels, offer Time/Return departure time labels).",
+    "Raise the Done button and preset pills in ClockTimePicker to at least 44px tall.",
+    "Optional: flip AM/PM when the hour crosses 11<->12; use 12h formatting on the trip/preview screens."
+  ],
+  "critical_code_review_comments": [
+    "ClockTimePicker Arrow: the long-press setInterval is only cleared on onPressOut. If the panel unmounts while the arrow is held (e.g. Done is tapped with another finger), the interval leaks. Add a useEffect cleanup.",
+    "stepM uses Math.round(m/5)*5, so a non-5 minute (e.g. 57 from an existing value) skips a step (57 down -> 50). This is minor.",
+    "src/components/AvailabilityPicker.tsx is not imported anywhere (dead code) and reuses the testIDs avail-from/avail-to. Delete it to avoid confusion.",
+    "On /hire, the two TimeChips (hire-time, hire-return-time) each keep their own open state, so both panels can be open at once. Availability uses a single controlled 'clock' state. Consider the same for hire/offer."
+  ],
+  "updated_files": ["/app/backend/tests/ui_setup_iter34.py (new: copy of iter29 setup using taluk 5436 Gokak)"],
+  "success_rate": {"backend": "N/A (skipped)", "frontend": "100% of requested flows (book round-trip return_time POST not checked end to end: no book drivers)"},
+  "seed_data_creation": "Created TEST users UiDrv34/UiPax34/UiFresh34 plus an approved rent pro_driver in 5436, 1 availability and 1 hire_request. All removed with 'python ui_setup_iter34.py cleanup'. Published 2 TEST trips as driver@travoo.in (trip_57377220ffb9 and return trip_dae0cddab48f) and deleted both by id. No seed or real data was changed.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Setup: cd /app/backend/tests && python ui_setup_iter34.py create|cleanup (state in /tmp/ui34.json, password Passw0rd!x, taluk 5436). Log in with the 'Log in' text button. Location search for 'Gokak' works for hire/offer; the hire form at /hire?service=rent or ?service=book. Picker testIDs: <id>, <id>-value, <id>-clock, <id>-hour(-up/-down), <id>-minute(-up/-down), <id>-am/-pm, <id>-preset-HHMM, <id>-done. On the availability page the picker ids are avail-from-time / avail-to-time.",
+  "rca of the issue": ""
+}
