@@ -7,9 +7,9 @@ import { useTheme } from "@/src/theme";
 export const IMG = {
   splash: "https://static.prod-images.emergentagent.com/jobs/8861967f-87dd-44ec-b25c-0477aae62e47/images/f74c3d700280347d5382e8f192406fc0d7bd2030a7e669db5040b8e540eba608.jpeg",
   header: "https://static.prod-images.emergentagent.com/jobs/8861967f-87dd-44ec-b25c-0477aae62e47/images/ad180fc88f16ea4ddbf1d8ad8db5798d59206ae260bbda474a93662ae7203fe5.jpeg",
-  passenger: "https://static.prod-images.emergentagent.com/jobs/8861967f-87dd-44ec-b25c-0477aae62e47/images/82b78f74f737ca5ce04b846f62de5b502a27971ae4e34f70e01402a2c87ddc93.jpeg",
+  passenger: "https://static.prod-images.emergentagent.com/jobs/8861967f-87dd-44ec-b25c-0477aae62e47/images/65fa52ce6eb171b0778aa975b4819a4c4005770287696cd301acb31c93a7d5d5.jpeg",
   driver: "https://static.prod-images.emergentagent.com/jobs/8861967f-87dd-44ec-b25c-0477aae62e47/images/71922a61cab6ae957992b1521ec7cb56cc44470306a0e3e22f345d4b87b7707c.jpeg",
-  rent: "https://static.prod-images.emergentagent.com/jobs/8861967f-87dd-44ec-b25c-0477aae62e47/images/8aaf983877caa6930531baa7b42e9da8e1caebb97a6737fcdfbaf539e5e29232.jpeg",
+  rent: "https://static.prod-images.emergentagent.com/jobs/8861967f-87dd-44ec-b25c-0477aae62e47/images/2b668f0914c762c59239912eeeadc308c5b150e5b8b1ee84a25f4cb4630d8c8b.jpeg",
   book: "https://static.prod-images.emergentagent.com/jobs/8861967f-87dd-44ec-b25c-0477aae62e47/images/7e4a868a55a07fbaa4cb0bbde437f9b5b190f58f0a191a67076b13a3c581cac8.jpeg",
 };
 

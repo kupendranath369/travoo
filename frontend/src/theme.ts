@@ -56,7 +56,7 @@ const light = {
   // ---------------------------------------------------------------------------
   brand: "#1565D8", // base hue, anchor only; Primary, Secondary, Tertiary are weights of it
   onBrand: "#FFFFFF", // text and icons placed directly on brand
-  brandPrimary: "#1FAA4B", // primary CTA, active tab indicator, selected states
+  brandPrimary: "#1E73E8", // primary CTA, active tab indicator, selected states
   onBrandPrimary: "#FFFFFF", // text and icons on brandPrimary
   brandSecondary: "#1E73E8", // secondary CTA, less prominent accents
   onBrandSecondary: "#FFFFFF", // text and icons on brandSecondary
@@ -68,7 +68,7 @@ const light = {
   // toasts; the `on` key is text on that fill. The plain key is also safe as
   // text on `surface`.
   // ---------------------------------------------------------------------------
-  success: "#1FAA4B",
+  success: "#1565D8",
   onSuccess: "#FFFFFF",
   warning: "#F5CD47",
   onWarning: "#172B4D",
@@ -83,9 +83,9 @@ const light = {
   border: "#DFE1E6", // hairline outline, 0.5pt or 1pt max: inputs, cards
   borderStrong: "#B3BAC5", // focus rings, selected outlines, 1.5pt max
   divider: "#DFE1E6", // subtle list separators
-  brandSoft: "#E6F6EB", // pale blue fills
+  brandSoft: "#E8F1FD", // pale blue fills
   accentSoft: "#FFF4E0", // pale orange fills
-  successSoft: "#E3F5EC",
+  successSoft: "#E3EEFC",
   scrim: "rgba(20,35,58,0.55)",
 };
 
