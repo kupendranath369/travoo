@@ -73,7 +73,7 @@ export function DriverHome() {
       )}
       {me ? (
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.sm }}>
-          <Btn small style={{ flex: 1 }} testID="driver-offer-ride" variant="outline" icon="add-circle-outline" label="Offer a ride" onPress={() => router.push("/offer")} />
+          <Btn small style={{ flex: 1 }} testID="driver-offer-ride" variant="outline" icon="add-circle-outline" label="Offer" onPress={() => router.push("/offer")} />
           <Btn small style={{ flex: 1 }} testID="driver-carpool-verify" variant="outline" icon="shield-checkmark-outline" label="Verify" onPress={() => router.push("/driver")} />
           <Btn small style={{ flex: 1 }} testID="driver-notifications" variant="outline" icon="notifications-outline" label="Alerts" onPress={() => router.push("/notifications")} />
         </View>

@@ -166,3 +166,9 @@ Pan-India intercity paid carpooling app (BlaBlaCar model) called TRAVOO, tagline
 - Tested iteration_25/26: 32/32 backend, UI flows pass.
 ### Backlog
 - Google Places key (GOOGLE_PLACES_API_KEY) not set: OSM search used. MSG91 OTP not configured. Push notifications (FCM) not set up. Translate new local-driver strings into 22 languages. Admin login rate limit counts successful logins.
+
+## Iteration 27–31 (Jun 2026)
+- OTP off until MSG91 (email default, phone optional), password eye, language dropdown
+- Passenger/Driver app mode (/mode chooser, Profile switch sheet). Driver tabs: Home(dashboard)/My Trips/Earnings/Messages/Account. Passenger tabs: Home/Bookings/Messages/Notifications/Account.
+- UI redesign from the user's "Travoo Light" sheet: green CTA + blue wordmark/pin (Brand.tsx), scenic splash/home header, 3 home tiles, /find screen, illustrated mode cards, "Become a Travoo Driver" selection, numbered registration progress, dashboard with earnings row + 3x2 tiles, Set Availability with outstation toggle, centred profile + Switch Mode sheet.
+- Tested iteration_31: backend 18/18, frontend 100%

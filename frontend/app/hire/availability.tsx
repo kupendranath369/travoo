@@ -96,7 +96,7 @@ export default function ScheduleAvailability() {
                 <T size={13} weight="700">From {fmt(a.from)}</T>
                 <T size={13} weight="700">Until {fmt(a.to)}</T>
               </View>
-              <Badge label="Active" tone="success" />
+              {new Date(a.from) <= new Date() ? <Badge label="Active" tone="success" /> : <Badge label="Upcoming" tone="info" />}
               <Pressable testID={`avail-edit-${a.id}`} hitSlop={10} onPress={() => { setErr(""); setClock(null); setEdit({ id: a.id, from: split(a.from), to: split(a.to) }); }}><Ionicons name="create-outline" size={20} color={colors.muted} /></Pressable>
               <Pressable testID={`avail-delete-${a.id}`} hitSlop={10} onPress={() => confirmAction("Delete this period?", "You will stop getting scheduled requests for it.", () => persist((list ?? []).filter((x) => x.id !== a.id), "Deleted"))}>
                 <Ionicons name="trash-outline" size={20} color={colors.error} />

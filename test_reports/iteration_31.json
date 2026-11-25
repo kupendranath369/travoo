@@ -1,0 +1,41 @@
+{
+  "summary": "Iteration 31 (frontend + backend, 390x844, preview URL 7d86e238...): checked the Travoo light UI redesign and its regressions. Backend: the new test_iter31_ui_redesign.py plus test_iter28_mode.py ran 18 of 18 passing. Register rejects the mobile numbers 12345, 5876543210, an 11-digit number and letters with a 400 error. An empty, missing or valid mobile registers. The mode switch round trip works. Frontend: every requested item passes. The splash shows the pin, 'Travoo', the tagline and the scenic car image. Auth works: Welcome back, Create Your Account, the eye toggle, the invalid-mobile error, then success with an empty or valid mobile, and the redirect to /mode. Choose Mode shows both cards. On Passenger Home all 4 tile/link routes go to the right place. The active tab is green rgb(31,170,75), and there are 5 passenger tabs with no Offer tab. Find a Ride works: the error, swap, and /search, and Popular Routes and Recent Searches repeat the search. Driver mode shows tabs home/trips/earnings/messages/account. The Become a Travoo Driver routing works for rent, both and carpool, and Continue is disabled when nothing is chosen. Driver registration: the 1-2-3 progress, the blue Next rgb(21,101,216), step 1 and step 2 checks, Rent and Book preselected on step 3 for service=both, and the green 'Submit for Verification' (not submitted). The approved driver dashboard shows all elements. The online toggle round trip works, the services panel opens and closes, and all 8 tiles/links go to the right place. Availability: the outstation toggle survives a reload and matches the dashboard toggle; add, edit and delete (confirm dialog) work, and items show the Active badge. Profile and mode sheet: Switch is disabled for the current mode and blue. Switching driver->passenger->driver changes the tabs and goes to Home. The documents and vehicles rows are present. Regression: the hire accept goes to /hire/HIR-..; the booking shows on driver My Trips (confirmed, Rs 450) and in the passenger's notifications. Admin login reaches /admin/dashboard. No blocking bugs; only minor UX points below.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/auth/register", "issue": "The mobile number is not checked for uniqueness. Two accounts can register with the same phone, which may clash with OTP login later."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "DriverHome (unregistered driver)", "issue": "The 'Offer a ride' outline button in the 3-button row is cut off to 'Offer a ri...' at 390px", "selector": "[data-testid='driver-offer-ride']", "priority": "LOW"},
+      {"component": "DriverHome", "issue": "A carpool-approved driver (driver@travoo.in) still sees 'Become a Travoo Driver'. The 'Offer a Ride' (carpool) option is unchecked and shows no approved state. Driver Only is preselected by default.", "selector": "[data-testid='driver-choose-carpool']", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Profile", "issues": ["An approved LOCAL driver (whose dashboard shows 'Verified Driver') sees 'Not submitted' + 'New driver' under the name. This badge only reflects carpool verification, which is confusing. Passengers also see 'Not submitted / New driver'."]},
+      {"screen": "Auth register", "issues": ["The green register button says 'Create account', not 'Register' as in the design (minor wording)."]},
+      {"screen": "DriverHome (not approved)", "issues": ["It has no 'Hi, name' greeting or bell, unlike the approved dashboard header."]},
+      {"screen": "Availability", "issues": ["Every upcoming schedule shows the 'Active' badge even before it starts (e.g. tomorrow). Consider 'Upcoming' vs 'Active'."]},
+      {"screen": "Passenger notifications tab", "issues": ["The tab badge still showed 1 right after the passenger opened the Notifications tab."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_iter31_ui_redesign.py", "/app/backend/tests/test_iter28_mode.py", "/app/test_reports/pytest/iter31.xml"],
+  "action_items": [
+    "Optional: make the driver-offer-ride label fit, or shorten it to 'Offer', in DriverHome",
+    "Optional: on Profile, show the local-driver approval (Verified Driver) when the pro profile is approved, and hide 'Not submitted' for passengers",
+    "Optional: on DriverHome, show carpool as already approved for carpool-verified drivers",
+    "Optional: check for duplicate phone numbers on /auth/register"
+  ],
+  "critical_code_review_comments": [
+    "In auth.tsx, the register code keeps only the last 10 digits of the phone (replace(/\\D/g,'').slice(-10)). A pasted 12-digit '91XXXXXXXXXX' is accepted, but any longer junk is silently cut to its last 10 digits instead of being rejected.",
+    "In (tabs)/_layout.tsx, a native-tabs 'notifications' Trigger is hidden for drivers. That is fine, but the 'driver-requests' screen is still registered and always hidden, so its open-requests polling (loadRequests every 15s) now only feeds a hidden tab badge. The polling could be removed."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter31_ui_redesign.py"],
+  "success_rate": {"backend": "100%", "frontend": "100% of requested flows (minor UX notes only)"},
+  "seed_data_creation": "TEST users from ui_setup_iter29.py (drv/pax/fresh) plus 2 TEST_ UI-registered users. All were deleted by id/email. The demo modes are confirmed: driver@ = driver, passenger@ = passenger. While testing Find a Ride, one search (Mysuru -> Bengaluru) was added to passenger@travoo.in's Recent Searches. It is left in place; the user can clear it.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Setup: cd /app/backend/tests && python3 ui_setup_iter29.py create && python3 ui_setup_iter29.py hire 10:00; TEST user password is Passw0rd!x; cleanup with python3 ui_setup_iter29.py cleanup. The language screen comes first (language-continue-button). Use .filter(visible=True) for the tab-* buttons. Driver tabs: tab-home, tab-trips, tab-earnings, tab-messages, tab-account. Requests is reached from dash-tile-requests (/hire/requests). Language picker in registration: pro-lang-dropdown, then pro-lang-kannada. For step 3 of registration, upload docs via the API (/driver/documents/{licence_front,licence_back,id_proof}).",
+  "rca of the issue": ""
+}

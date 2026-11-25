@@ -130,7 +130,7 @@ export default function ProfileScreen() {
           <T size={13} color={colors.muted}>{user.phone ? `+91 ${user.phone}` : user.email ?? (user.phone_e164 ? `+${user.phone_e164}` : "")}</T>
           <View style={{ flexDirection: "row", gap: space.sm }}>
             {user.driver_status === "approved" ? <Badge testID="profile-driver-status" icon="shield-checkmark" label="Verified Driver" tone="warning" />
-              : <Badge testID="profile-driver-status" label={t(`verify.status.${user.driver_status}`)} tone={statusTone(user.driver_status)} />}
+              : user.driver_status && user.driver_status !== "not_submitted" ? <Badge testID="profile-driver-status" label={t(`verify.status.${user.driver_status}`)} tone={statusTone(user.driver_status)} /> : null}
             {user.role === "admin" ? <Badge label="Admin" tone="accent" /> : null}
           </View>
           <Rating value={user.rating_avg} count={user.rating_count} />
