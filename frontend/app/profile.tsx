@@ -133,7 +133,7 @@ export default function ProfileScreen() {
               : user.driver_status && user.driver_status !== "not_submitted" ? <Badge testID="profile-driver-status" label={t(`verify.status.${user.driver_status}`)} tone={statusTone(user.driver_status)} /> : null}
             {user.role === "admin" ? <Badge label="Admin" tone="accent" /> : null}
           </View>
-          <Rating value={user.rating_avg} count={user.rating_count} />
+          {user.account_type === "driver" || user.rating_count ? <Rating value={user.rating_avg} count={user.rating_count} /> : null}
         </View>
 
         {otpOn && !user.phone_verified ? (

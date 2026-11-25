@@ -3656,6 +3656,8 @@ async def hire_request_create(body: LocalHireIn, user: dict = Depends(get_user))
            "created_at": now(), "driver_id": None, "booking_id": None}
     await db.hire_requests.insert_one(req)
     sent = 0
+    online_ids: list = []
+    push_fare: dict = {}
     for p in drivers:
         group = match_group(p, match_sd["code"], psd["code"] if psd else None)
         try:  # unique (request_id, driver_id) -> never notify the same driver twice for one request
@@ -3668,6 +3670,16 @@ async def hire_request_create(body: LocalHireIn, user: dict = Depends(get_user))
         await notify(p["user_id"], "local_hire_request", {"service": SERVICE_NAME[body.service], "pickup": body.pickup, "taluk": f"{match_sd['name']} {match_sd['sub_label']}",
                                                           "destination": body.destination, "date": dt.strftime("%d %b %Y"), "time": body.time,
                                                           "passengers": body.passengers, "local": group == "local"}, rid)
+        if p.get("matched_by") == "online":
+            online_ids.append(p["user_id"])
+            push_fare[p["user_id"]] = quote(p, r, p.get("match_vehicle"))
+    for uid in online_ids:  # ring Online drivers' phones; never blocks the request
+        try:
+            await send_push([uid], {"title": f"New {SERVICE_NAME[body.service]} request",
+                                    "message": f"{body.pickup} → {body.destination} · {dt.strftime('%d %b')} {body.time} · ₹{push_fare[uid]}",
+                                    "action_url": "/hire/requests"}, idempotency_key=f"{rid}:{uid}")
+        except Exception as e:
+            logger.warning("push failed (non-blocking): %s", e)
     req.pop("_id", None)
     req["notified"] = sent
     return req
@@ -3923,6 +3935,49 @@ async def earnings_summary(user: dict = Depends(get_user)):
                     tt["trips"] += 1
     items.sort(key=lambda x: x["at"], reverse=True)
     return {"commission_pct": pct, "totals": totals, "items": items[:200]}
+
+
+# ---------------------------------------------------------------- push notifications (Emergent managed relay)
+PUSH_BASE_URL = "https://integrations.emergentagent.com"
+_push_client = httpx.AsyncClient(base_url=PUSH_BASE_URL, headers={"X-Push-Key": os.environ.get("EMERGENT_PUSH_KEY", "placeholder")}, timeout=10.0)
+
+
+class RegisterPushBody(BaseModel):
+    user_id: Optional[str] = None  # ignored: the signed-in user is always used
+    platform: Literal["android", "ios"]
+    device_token: str = Field(min_length=10, max_length=4096)
+
+
+@api.post("/register-push", status_code=201)
+async def register_push(body: RegisterPushBody, user: dict = Depends(get_user)):
+    resp = await _push_client.post("/api/v1/push/users/register", json={"user_id": user["user_id"], "platform": body.platform, "device_token": body.device_token})
+    if resp.status_code == 401:
+        raise HTTPException(500, "EMERGENT_PUSH_KEY missing or invalid")
+    if resp.status_code >= 500:
+        raise HTTPException(502, "Push provider unavailable")
+    resp.raise_for_status()
+    return {"status": "registered"}
+
+
+async def send_push(recipients: list, data: dict, idempotency_key: Optional[str] = None, _attempt: int = 0) -> None:
+    if not recipients:
+        return
+    payload: dict = {"recipients": recipients[:100], "data": data}
+    if idempotency_key:
+        payload["$idempotency_key"] = idempotency_key
+    resp = await _push_client.post("/api/v1/push/trigger", json=payload)
+    if resp.status_code == 401:
+        raise HTTPException(500, "EMERGENT_PUSH_KEY missing or invalid")
+    code = resp.json().get("code", "") if resp.headers.get("content-type", "").startswith("application/json") else ""
+    if code == "idempotency_key_in_progress" and idempotency_key and _attempt < 3:
+        await asyncio.sleep(3)
+        return await send_push(recipients, data, idempotency_key=idempotency_key, _attempt=_attempt + 1)
+    if code in ("insufficient_credits", "integration_disabled", "daily_limit_reached"):
+        logger.warning("Push paused: %s (%s): %s", code, resp.status_code, resp.json().get("message", ""))
+        return
+    if resp.status_code >= 500:
+        raise HTTPException(502, "Push provider unavailable")
+    resp.raise_for_status()
 
 
 async def migrate_local_drivers():

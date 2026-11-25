@@ -3,7 +3,8 @@ import { useFonts } from "expo-font";
 import { Stack, useRouter, useSegments } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import React, { useEffect, useState } from "react";
-import { LogBox, StyleSheet, Text, View } from "react-native";
+import * as Notifications from "expo-notifications";
+import { LogBox, Platform, StyleSheet, Text, View } from "react-native";
 import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
@@ -15,10 +16,21 @@ import { Image } from "expo-image";
 import { ToastProvider } from "@/src/components/toast";
 import { api } from "@/src/api";
 import { I18nProvider, useI18n } from "@/src/i18n";
+import { usePushNotifications } from "@/src/push";
 import { queryClient } from "@/src/query-client";
 import { useTheme } from "@/src/theme";
 
 LogBox.ignoreAllLogs(true);
+
+// push: foreground display + Android channel must exist before any push arrives (module scope)
+if (Platform.OS !== "web") {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({ shouldShowAlert: true, shouldPlaySound: true, shouldSetBadge: false, shouldShowBanner: true, shouldShowList: true }),
+  });
+}
+if (Platform.OS === "android") {
+  Notifications.setNotificationChannelAsync("default", { name: "Default", importance: Notifications.AndroidImportance.MAX, sound: "default" });
+}
 
 const PUBLIC = new Set(["auth", "language", "legal", "forgot-password", "reset-password", "admin"]);
 
@@ -30,6 +42,7 @@ function Gate() {
   const { colors } = useTheme();
   const top = segments[0] as string | undefined;
   const [showSplash, setShowSplash] = useState(true);
+  usePushNotifications(user?.user_id);
 
   useEffect(() => {
     if (loading || !ready) return;
