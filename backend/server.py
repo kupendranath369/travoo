@@ -961,6 +961,16 @@ REQUIRED_KINDS = [k for k, m in DOC_META.items() if m[1]]
 LOCAL_DOC_KINDS = ("licence_front", "licence_back", "id_proof")  # local driver: licence both sides + Aadhaar front only
 
 
+async def local_doc_blocked(uid: str, kind: str) -> bool:
+    p = await db.pro_drivers.find_one({"user_id": uid}, {"_id": 0, "status": 1, "resubmit_items": 1})
+    if not p:
+        return False
+    if p.get("status") in ("under_review", "approved"):
+        return True
+    items = [k for k in p.get("resubmit_items") or [] if k in LOCAL_DOC_KINDS]
+    return bool(items) and kind not in items
+
+
 async def pro_unlocked(uid: str, kind: str) -> bool:
     """Admin asked this local driver to resubmit exactly this document."""
     if kind in LOCAL_DOC_KINDS and kind in missing_kinds(await active_files(uid)):
@@ -1000,6 +1010,8 @@ async def upload_document(kind: str, request: Request, file: UploadFile = File(.
         raise HTTPException(400, "Unknown document type")
     if kind != "vehicle_rc" and user.get("driver_status") in LOCKED_STATUSES and not await pro_unlocked(user["user_id"], kind):
         raise HTTPException(400, "Documents are locked while your verification is pending or approved")
+    if kind in LOCAL_DOC_KINDS and await local_doc_blocked(user["user_id"], kind):
+        raise HTTPException(400, "This document is locked while your local driver verification is pending or approved")
     await rate_limit(f"upload:{user['user_id']}", 60, 3600, "Too many uploads. Please try again later.")
     label, _, max_files, pdf_ok = DOC_META[kind]
     data = await file.read(MAX_UPLOAD + 1)

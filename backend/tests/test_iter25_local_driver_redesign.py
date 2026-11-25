@@ -366,6 +366,10 @@ class TestTrip:
         assert "driver_location" not in requests.get(u, headers=h(ptok)).json()
         assert all("driver_location" not in x for x in requests.get(f"{API}/hire/bookings", headers=h(ptok)).json())
         assert requests.post(f"{u}/arrived", headers=h(dtok), json={}).status_code == 200
+        # start guard (iter26): > 2 h before starts_at -> 400; within 2 h -> 200
+        early = requests.post(f"{u}/start", headers=h(dtok), json={})
+        assert early.status_code == 400 and "2 hours" in early.json()["detail"], early.text
+        db.hires.update_one({"booking_id": bid}, {"$set": {"starts_at": datetime.utcnow() + timedelta(minutes=90)}})
         assert requests.post(f"{u}/start", headers=h(dtok), json={}).status_code == 200
         assert requests.post(f"{u}/complete", headers=h(dtok), json={}).status_code == 200
         assert requests.get(f"{u}/location", headers=h(ptok)).json() is None

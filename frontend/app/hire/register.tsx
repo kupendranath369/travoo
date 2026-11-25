@@ -92,6 +92,9 @@ export default function LocalDriverRegister() {
     }
     if (step === 1) {
       if (me.missing.length) return "Upload your licence front, licence back and Aadhaar front";
+      const since = me.profile?.reviewed_at ? new Date(me.profile.reviewed_at).getTime() : 0;
+      const stale = items.filter((k) => ["licence_front", "licence_back", "id_proof"].includes(k) && !me.files.some((f: any) => f.kind === k && new Date(f.created_at).getTime() > since));
+      if (since && stale.length) return "Please upload a new photo for the items marked 'Fix'";
       if (!me.licence_on_file || items.includes("licence_no")) {
         if (d.licence_no.replace(/\s/g, "").length < 8 && !me.profile?.licence_no) return "Enter your driving licence number";
         if (!/^\d{2}-\d{2}-\d{4}$/.test(d.licence_expiry)) return "Enter licence expiry as DD-MM-YYYY";

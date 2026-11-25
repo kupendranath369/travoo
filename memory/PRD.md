@@ -153,3 +153,16 @@ Pan-India intercity paid carpooling app (BlaBlaCar model) called TRAVOO, tagline
 - Local driver verification is now one form for Rent and Book. A YES/NO swipe switch asks "Do you have a vehicle?". YES shows Add vehicle and offers both services, NO offers Rent only.
 - Fixed: registration from the UI failed with 'days: Field required'. These fields now have backend defaults, and date availability governs matching.
 - Tested: iteration_24 — backend 39/39, frontend 100%
+
+## Iteration 25–26 (Jun 2026) — Local Driver redesign
+- 3-step registration (/hire/register): 1) profile info auto-filled + home place search → taluk (stored with loc_id/geo) + language chips; 2) licence front/back + Aadhaar front, reusing carpool docs/licence; 3) Rent / Book service cards, vehicles only for Book. Status screen for pending/approved/rejected/resubmit with admin reason + flagged items; approved → dashboard.
+- Dashboard (/hire/driver): header, Go Online/Offline, My Services (Book needs an approved vehicle), outstation switch, 2x2 tiles, verification details, upcoming trips.
+- /hire/availability (From/Until date+time periods, no overlaps, ≤14 days), /hire/vehicles (shared list, Book approval needs RC + permit + insurance).
+- Matching: destination/pickup taluk, Online OR covering period, outstation pref, reachability (35 km/h, ×1.3, ≤300 km), approved vehicle, no clash, not suspended. Round trip return date/time.
+- Trip: arriving → arrived → start (≥2h before) → complete; live location only to the customer, cleared at the end.
+- Unified earnings /driver/earnings-summary (carpool/rent/book × today/week/month; commission_pct setting, default 0).
+- Admin: review with reason + items, resubmission, vehicle approval, suspend/reactivate, availability/earnings, /admin/audit-log.
+- Migration: embedded pro vehicles → shared vehicles (idempotent).
+- Tested iteration_25/26: 32/32 backend, UI flows pass.
+### Backlog
+- Google Places key (GOOGLE_PLACES_API_KEY) not set: OSM search used. MSG91 OTP not configured. Push notifications (FCM) not set up. Translate new local-driver strings into 22 languages. Admin login rate limit counts successful logins.

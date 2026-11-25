@@ -45,7 +45,7 @@ export function ServiceCard({ title, desc, icon, active, onPress, testID, note, 
   return (
     <Pressable testID={testID} onPress={onPress} disabled={disabled} accessibilityRole="checkbox" accessibilityState={{ checked: active, disabled }}
       style={({ pressed }) => [float, { flex: 1, minHeight: 148, padding: space.md, gap: space.sm, borderRadius: radius.lg, backgroundColor: active ? colors.accentSoft : colors.surfaceSecondary,
-        borderWidth: 2, borderColor: active ? colors.brandTertiary : "transparent", opacity: disabled ? 0.55 : 1, transform: [{ scale: pressed ? 0.98 : 1 }] }]}>
+        borderWidth: 2, borderColor: active ? colors.brandTertiary : "transparent", opacity: disabled ? 0.8 : 1, transform: [{ scale: pressed ? 0.98 : 1 }] }]}>
       <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
         <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: active ? colors.brandTertiary : colors.surfaceTertiary, alignItems: "center", justifyContent: "center" }}>
           <Ionicons name={icon} size={22} color={active ? "#fff" : colors.onSurface} />

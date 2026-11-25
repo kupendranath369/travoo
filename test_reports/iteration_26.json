@@ -1,0 +1,36 @@
+{
+  "summary": "Retested the iter25 fixes. Backend: the new test_iter26_retest_fixes.py passed 6 of 7 tests. The 1 failure is a new finding outside the requested scope. The updated test_iter25 suite passed 25 of 25 after I changed TestTrip to cover the 2 h start guard. All 8 requested items pass: suspended driver cannot go online (400); resubmitting with place=null in the same taluk keeps home.geo, loc_id and place_name (a different taluk drops geo); a flagged licence_back must be re-uploaded (exact 400 message), then submit succeeds; start more than 2 h before (and at 2h10m) gives 400, at 1h50m gives 200; migration keeps a 'rejected' vehicle and sets a 'none' vehicle to approved. UI at 390px: dash-service-book is unchecked and dimmed with 'Needs an approved vehicle' when book_ready=false and services has 'book'; pro-error clears on the next input change, for both the backend error and the step check; the VehicleForm Make/Model row fits (158px each, no horizontal scroll); the admin pro status badge is not clipped; /hire Book shows only HATCHBACK/SEDAN/SUV/MUV/ANY, and the choice resets to SEDAN after switching from Rent with LUXURY picked.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/driver/documents/{kind}", "issue": "Local-only drivers (no carpool driver_status) are never locked. The lock checks users.driver_status in LOCKED_STATUSES, not pro_drivers.status. An approved or under_review local driver can replace licence_front, licence_back or id_proof at any time. Single-file kinds soft-delete the old verified file, so the verified photo can be swapped without a new review. It also means flagged-only uploads during resubmit are not enforced for these drivers: licence_front upload returned 200 when only licence_back was flagged. The new re-upload check in pro_register still works."},
+      {"endpoint": "POST /api/admin/auth/login", "issue": "The rate limit (5 per 15 min per email and IP) also counts successful logins, so test runs lock admin login. I deleted only the 2 adminlogin rate_limits keys my runs created."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "Resubmit wizard step 2 (documents)", "issue": "Continue moves on even when a flagged doc (pro-flag-licence_back) was not re-uploaded. The driver only sees 'Please upload a new photo for: Driving licence (back)' on step 3 after Submit, and must go back. Add the same check in check() for step 1 (compare file created_at with profile.reviewed_at).", "affected_selectors": ["pro-next-button", "pro-flag-licence_back", "pro-error"]}
+    ],
+    "design_issues": [
+      {"screen": "/hire/driver dashboard", "issues": ["The disabled Book card uses opacity 0.55, so the orange note 'Needs an approved vehicle' has low contrast on the grey card"]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_iter26_retest_fixes.py", "/app/backend/tests/test_iter25_local_driver_redesign.py", "/app/backend/tests/ui_setup_iter26.py", "/app/test_reports/pytest/iter26_retest.xml", "/app/test_reports/pytest/iter25_rerun.xml"],
+  "action_items": [
+    "Lock local-driver doc uploads by pro_drivers.status: block licence_front, licence_back and id_proof when the profile is under_review or approved, and allow only the resubmit_items when it is resubmit or rejected. Today the lock uses only the carpool users.driver_status.",
+    "Optional: in register.tsx step 1, block Continue until the flagged doc kinds are re-uploaded.",
+    "Optional: do not count successful admin logins toward the admin login rate limit."
+  ],
+  "critical_code_review_comments": [
+    "pro_unlocked and LOCKED_STATUSES depend on carpool driver_status. A pure local driver bypasses the locks completely (see action item 1).",
+    "The hire start guard uses h['starts_at'].replace(tzinfo=utc). This is fine for naive UTC from Mongo. 'complete' has no time guard, but that is acceptable because it needs 'started'.",
+    "server.py is very large (more than 3900 lines). The local-driver routes should be split into their own module."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter25_local_driver_redesign.py (TestTrip now checks the 400 when early, then sets starts_at to now+90min and checks start gives 200)", "/app/backend/tests/test_iter26_retest_fixes.py (new)", "/app/backend/tests/ui_setup_iter26.py (new)"],
+  "success_rate": {"backend": "100% of the requested fixes (31/32 tests pass; the 1 failure is a new finding about the upload lock)", "frontend": "100% of the requested UI fixes"},
+  "seed_data_creation": "Only TEST_ users, vehicles and hires, plus user_TEST_mig26. All were deleted by their ids or by the uids saved in state. I deleted the adminlogin rate_limits keys (2 keys, 11 entries) that my runs created.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run: cd /app/backend/tests && pytest test_iter26_retest_fixes.py -c /dev/null -p no:xdist -v (it uses helpers from test_iter25), and the same for test_iter25_local_driver_redesign.py. test_local_only_docs_locked_when_approved fails on purpose until the upload lock is fixed. Each suite logs in as admin once and the 5-per-15-min limit counts successful logins too, so you may need to delete the adminlogin:* rate_limits keys. UI: python ui_setup_iter26.py create|cleanup (/tmp/ui26.json; drv = approved with a pending vehicle, res = resubmit with licence_back flagged; password Passw0rd!x). On /hire you first click the 'BOOK A DRIVER' text card, and then the hire-service-tab-* chips appear. The frontend URL is EXPO_PUBLIC_BACKEND_URL in frontend/.env."
+}
