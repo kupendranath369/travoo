@@ -1,6 +1,6 @@
 import Ionicons from "@react-native-vector-icons/ionicons";
-import React from "react";
-import { Pressable, View, ViewStyle } from "react-native";
+import React, { useState } from "react";
+import { Pressable, ScrollView, View, ViewStyle } from "react-native";
 
 import { IconName, T, radius, space } from "@/src/components/ui";
 import { useTheme } from "@/src/theme";
@@ -90,6 +90,46 @@ export function ChipSelect({ options, value, onChange, testPrefix }: { options: 
           </Pressable>
         );
       })}
+    </View>
+  );
+}
+
+/** Pick languages one at a time from a dropdown; chosen ones show as removable chips. */
+export function LanguageSelect({ value, onChange, testPrefix }: { value: string[]; onChange: (v: string[]) => void; testPrefix: string }) {
+  const { colors } = useTheme();
+  const [open, setOpen] = useState(false);
+  const rest = LANG_OPTIONS.filter((o) => !value.includes(o));
+  return (
+    <View style={{ gap: space.sm }}>
+      {value.length ? (
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.sm }}>
+          {value.map((o) => (
+            <Pressable key={o} testID={`${testPrefix}-selected-${o.toLowerCase()}`} onPress={() => onChange(value.filter((x) => x !== o))} accessibilityLabel={`Remove ${o}`}
+              style={[float, { flexDirection: "row", alignItems: "center", gap: 6, minHeight: 36, paddingHorizontal: space.md, borderRadius: radius.pill, backgroundColor: colors.brandTertiary }]}>
+              <T size={13} weight="700" color="#fff">{o}</T>
+              <Ionicons name="close" size={14} color="#fff" />
+            </Pressable>
+          ))}
+        </View>
+      ) : null}
+      <Pressable testID={`${testPrefix}-dropdown`} onPress={() => setOpen(!open)} style={{ flexDirection: "row", alignItems: "center", gap: space.sm, minHeight: 52, paddingHorizontal: space.md,
+        borderRadius: radius.md, borderWidth: open ? 2 : 1, borderColor: open ? colors.brandTertiary : colors.border, backgroundColor: colors.surfaceSecondary }}>
+        <Ionicons name="language-outline" size={20} color={colors.brandTertiary} />
+        <T style={{ flex: 1 }} color={colors.muted}>{value.length ? "Add another language" : "Choose a language"}</T>
+        <Ionicons name={open ? "chevron-up" : "chevron-down"} size={18} color={colors.muted} />
+      </Pressable>
+      {open ? (
+        <View testID={`${testPrefix}-options`} style={[float, { borderRadius: radius.md, backgroundColor: colors.surfaceSecondary, maxHeight: 260, overflow: "hidden" }]}>
+          <ScrollView nestedScrollEnabled>
+            {rest.map((o) => (
+              <Pressable key={o} testID={`${testPrefix}-${o.toLowerCase()}`} onPress={() => { onChange([...value, o]); setOpen(false); }}
+                style={({ pressed }) => ({ minHeight: 46, justifyContent: "center", paddingHorizontal: space.md, backgroundColor: pressed ? colors.accentSoft : "transparent", borderBottomWidth: 1, borderBottomColor: colors.border })}>
+                <T weight="600">{o}</T>
+              </Pressable>
+            ))}
+          </ScrollView>
+        </View>
+      ) : null}
     </View>
   );
 }

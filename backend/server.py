@@ -1129,7 +1129,7 @@ async def submit_verification(body: VerificationIn, user: dict = Depends(get_use
     if missing:
         raise HTTPException(400, f"Please upload: {', '.join(DOC_META[k][0] for k in missing)}")
     phone = re.sub(r"\D", "", user.get("phone") or "")[-10:]
-    if not re.fullmatch(r"[6-9]\d{9}", phone):
+    if otp_configured() and not re.fullmatch(r"[6-9]\d{9}", phone):  # mobile required only once MSG91 OTP is live
         raise HTTPException(400, "Add a valid 10-digit mobile number in Profile → Edit profile first. We use your registered number for verification.")
     if not (re.fullmatch(DMY, body.licence_expiry) and valid_dmy(body.licence_expiry)):
         raise HTTPException(400, "Licence expiry: enter a real date as DD-MM-YYYY")
@@ -2906,7 +2906,7 @@ async def pro_me(user: dict = Depends(get_user)):
 @api.post("/pro/register")
 async def pro_register(body: ProDriverIn, user: dict = Depends(get_user)):
     uid = user["user_id"]
-    if not (user.get("phone") and re.fullmatch(r"[6-9]\d{9}", user["phone"])):
+    if otp_configured() and not (user.get("phone") and re.fullmatch(r"[6-9]\d{9}", user["phone"])):
         raise HTTPException(400, "Add a valid registered mobile number in your profile first")
     existing = await db.pro_drivers.find_one({"user_id": uid}, {"_id": 0}) or {}
     if existing.get("status") in ("under_review", "approved"):

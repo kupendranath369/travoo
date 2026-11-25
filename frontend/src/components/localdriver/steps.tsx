@@ -6,12 +6,13 @@ import { Pressable, View } from "react-native";
 import { api, Loc, pictureUrl } from "@/src/api";
 import { DocPhotos } from "@/src/components/DocPhotos";
 import { LocationField } from "@/src/components/LocationField";
-import { ChipSelect, float, ITEM_LABEL, LANG_OPTIONS, ServiceCard } from "@/src/components/localdriver/parts";
+import { float, ITEM_LABEL, LanguageSelect, ServiceCard } from "@/src/components/localdriver/parts";
 import { VehicleForm } from "@/src/components/localdriver/VehicleForm";
 import { VehicleRow } from "@/src/components/localdriver/VehicleRow";
 import { Taluk, TalukPicker } from "@/src/components/TalukPicker";
 import { Avatar, Badge, Btn, Card, Field, T, radius, space } from "@/src/components/ui";
 import { useTheme } from "@/src/theme";
+import { useOtpEnabled } from "@/src/useOtp";
 
 export type Draft = { place: Loc | null; taluk: Taluk | null; languages: string[]; licence_no: string; licence_expiry: string; services: string[]; vehicle_ids: string[] };
 
@@ -22,6 +23,7 @@ export function StepBasic({ me, d, set, items }: { me: any; d: Draft; set: (p: P
   const router = useRouter();
   const [finding, setFinding] = useState(false);
   const [manual, setManual] = useState(false);
+  const otpOn = useOtpEnabled();
   const p = me.personal;
   const pickPlace = async (l: Loc) => {
     set({ place: l });
@@ -43,7 +45,7 @@ export function StepBasic({ me, d, set, items }: { me: any; d: Draft; set: (p: P
         </View>
         <Pressable testID="pro-edit-profile" onPress={() => router.push("/profile")} hitSlop={10}><Ionicons name="create-outline" size={20} color={colors.brandTertiary} /></Pressable>
       </Card>
-      {!p.phone_ok ? <T testID="pro-phone-warning" size={13} color={colors.error}>Add your mobile number in Profile before submitting.</T> : null}
+      {otpOn && !p.phone_ok ? <T testID="pro-phone-warning" size={13} color={colors.error}>Add your mobile number in Profile before submitting.</T> : null}
       <View style={{ gap: space.sm }}>
         <T weight="800">Home location</T>
         <Flag k="home" items={items} />
@@ -63,7 +65,7 @@ export function StepBasic({ me, d, set, items }: { me: any; d: Draft; set: (p: P
       <View style={{ gap: space.sm }}>
         <T weight="800">Languages you speak</T>
         <Flag k="languages" items={items} />
-        <ChipSelect testPrefix="pro-lang" options={LANG_OPTIONS} value={d.languages} onChange={(languages) => set({ languages })} />
+        <LanguageSelect testPrefix="pro-lang" value={d.languages} onChange={(languages) => set({ languages })} />
       </View>
     </View>
   );

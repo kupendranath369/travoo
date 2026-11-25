@@ -12,6 +12,7 @@ import { useAuth } from "@/src/auth";
 import { Logo } from "@/src/components/Logo";
 import { PhoneOtp } from "@/src/components/PhoneOtp";
 import { Btn, Field, T, radius, space } from "@/src/components/ui";
+import { useOtpEnabled } from "@/src/useOtp";
 import { useI18n } from "@/src/i18n";
 import { useTheme } from "@/src/theme";
 
@@ -23,7 +24,9 @@ export default function AuthScreen() {
   const { t, lang } = useI18n();
   const { login, register, googleLogin, signInWith } = useAuth();
   const router = useRouter();
-  const [mode, setMode] = useState<"phone" | "email">("phone");
+  const otpOn = useOtpEnabled();
+  const [mode, setMode] = useState<"phone" | "email">("email");
+  const [showPw, setShowPw] = useState(false);
   const [f, setF] = useState({ email: "", password: "", name: "" });
   const [ticket, setTicket] = useState<{ ticket: string; phone: string } | null>(null);
   const [accountType, setAccountType] = useState<"passenger" | "driver">("passenger");
@@ -123,7 +126,13 @@ export default function AuthScreen() {
           {mode === "email" ? (
             <>
               <Field testID="auth-email-input" label={t("auth.email")} value={f.email} onChangeText={set("email")} autoCapitalize="none" keyboardType="email-address" />
-              <Field testID="auth-password-input" label={t("auth.password")} value={f.password} onChangeText={set("password")} secureTextEntry />
+              <View>
+                <Field testID="auth-password-input" label={t("auth.password")} value={f.password} onChangeText={set("password")} secureTextEntry={!showPw} autoCapitalize="none" />
+                <Pressable testID="auth-password-toggle" accessibilityLabel={showPw ? "Hide password" : "Show password"} onPress={() => setShowPw(!showPw)} hitSlop={10}
+                  style={{ position: "absolute", right: space.md, bottom: 14 }}>
+                  <Ionicons name={showPw ? "eye-off-outline" : "eye-outline"} size={22} color={colors.muted} />
+                </Pressable>
+              </View>
               {emailMode === "register" ? (
                 <>
                   <Field testID="auth-name-input" label={t("auth.name")} value={f.name} onChangeText={set("name")} autoCapitalize="words" />
@@ -160,9 +169,11 @@ export default function AuthScreen() {
             <View style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
           </View>
           <Btn testID="auth-google-button" variant="outline" icon="logo-google" label={t("auth.google")} onPress={googleLogin} />
-          <Pressable testID="auth-toggle-mode" onPress={() => { setErr(""); setTicket(null); setEmailMode("login"); setMode(mode === "phone" ? "email" : "phone"); }} style={{ padding: space.md }}>
-            <T center weight="700" color={colors.brandPrimary}>{mode === "phone" ? "Use email instead" : "Use mobile number & OTP"}</T>
-          </Pressable>
+          {otpOn ? (
+            <Pressable testID="auth-toggle-mode" onPress={() => { setErr(""); setTicket(null); setEmailMode("login"); setMode(mode === "phone" ? "email" : "phone"); }} style={{ padding: space.md }}>
+              <T center weight="700" color={colors.brandPrimary}>{mode === "phone" ? "Use email instead" : "Use mobile number & OTP"}</T>
+            </Pressable>
+          ) : null}
         </View>
       </KeyboardAwareScrollView>
     </View>

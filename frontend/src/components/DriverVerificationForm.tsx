@@ -11,6 +11,7 @@ import { useToast } from "@/src/components/toast";
 import { Btn, Card, Field, Header, Loading, T, space } from "@/src/components/ui";
 import { useI18n } from "@/src/i18n";
 import { useTheme } from "@/src/theme";
+import { useOtpEnabled } from "@/src/useOtp";
 
 const EMPTY = { licence_no: "", rc_no: "", licence_expiry: "", vehicle_name: "" };
 const DMY = /^\d{2}-\d{2}-\d{4}$/;
@@ -27,6 +28,7 @@ const dmyMask = (x: string) => {
 
 /** Manual driver verification: 4 documents (licence front/back, Aadhaar, RC) + 4 typed details. Admin approves by hand. */
 export function DriverVerificationForm() {
+  const otpOn = useOtpEnabled();
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
   const { t } = useI18n();
@@ -61,7 +63,7 @@ export function DriverVerificationForm() {
     setFieldErr(fe);
     if (missing.length) return setErr(`Please upload: ${missing.map(labelOf).join(", ")}`);
     if (Object.keys(fe).length) return setErr("Please fix the highlighted fields");
-    if (!phoneOk) return setErr("Verify your mobile number in Profile first");
+    if (otpOn && !phoneOk) return setErr("Verify your mobile number in Profile first");
     setBusy(true);
     setErr("");
     try {
@@ -102,8 +104,8 @@ export function DriverVerificationForm() {
           {fld("licence_expiry", "Driving Licence Expiry Date", { placeholder: "DD-MM-YYYY", keyboardType: "number-pad", maxLength: 10 })}
           {fld("vehicle_name", "Vehicle Name", { placeholder: "Maruti Suzuki Dzire" })}
           <View testID="verify-registered-phone" style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
-            <T size={13} color={colors.muted} style={{ flex: 1 }}>{phoneOk ? `Registered mobile: ${phone}${user?.phone_verified ? " (verified)" : ""}` : "No mobile number on your account. Add it in Profile (Edit profile, or verify by OTP)."}</T>
-            {!phoneOk ? <Btn small variant="ghost" testID="verify-add-phone" label="Add" onPress={() => router.push("/profile")} /> : null}
+            <T size={13} color={colors.muted} style={{ flex: 1 }}>{phoneOk ? `Registered mobile: ${phone}${user?.phone_verified ? " (verified)" : ""}` : otpOn ? "No mobile number on your account. Add it in Profile (Edit profile, or verify by OTP)." : "Mobile number is optional for now. You can add it in Profile."}</T>
+            {!phoneOk && otpOn ? <Btn small variant="ghost" testID="verify-add-phone" label="Add" onPress={() => router.push("/profile")} /> : null}
           </View>
         </Card>
 

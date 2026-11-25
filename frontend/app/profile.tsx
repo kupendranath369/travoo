@@ -14,6 +14,7 @@ import { Avatar, Badge, Btn, Card, Chip, Field, Header, IconName, Rating, T, rad
 import { PhoneOtp } from "@/src/components/PhoneOtp";
 import { LANGUAGES, useI18n } from "@/src/i18n";
 import { useTheme } from "@/src/theme";
+import { useOtpEnabled } from "@/src/useOtp";
 import { uploadWithProgress } from "@/src/utils/upload";
 
 function Row({ icon, label, onPress, right, testID }: { icon: IconName; label: string; onPress: () => void; right?: React.ReactNode; testID: string }) {
@@ -32,6 +33,7 @@ function Row({ icon, label, onPress, right, testID }: { icon: IconName; label: s
 }
 
 export default function ProfileScreen() {
+  const otpOn = useOtpEnabled();
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
   const { t, lang } = useI18n();
@@ -141,7 +143,7 @@ export default function ProfileScreen() {
           </View>
         </Card>
 
-        {!user.phone_verified ? (
+        {otpOn && !user.phone_verified ? (
           <Card testID="profile-verify-phone-card" style={{ gap: space.md }}>
             <T weight="800">Verify your mobile number</T>
             <T size={12} color={colors.muted}>Sign in with OTP next time and use it for driver verification. Your email login keeps working.</T>
