@@ -1,0 +1,27 @@
+{
+  "summary": "Frontend-only test (390x844) of the role-chooser modal, new bottom tabs, passenger home redesign, driver home headers, Change Role sheet, plus regression checks. Everything requested passed. 1) Fresh email registration (2 TEST users): the role-chooser modal appears over a dim scrim that also covers the tab bar. It has mode-passenger 'I am a Passenger' and mode-driver 'I am a Driver' cards, and both images load (1024px) and float (the translateY changes over time). Picking Driver gave the driver tabs; picking Passenger gave the passenger tabs. The modal closes after a pick and does not come back after reload. Demo passenger, demo driver and the approved TEST driver never saw it. 2) Passenger tabs appear in this order: tab-home, tab-bookings, tab-offer 'Offer Ride' (normal icon), tab-messages, tab-notifications. There is no tab-account. 3) Passenger Home has no wordmark or bell. home-profile-section shows initials and 'Hi, <first name>' and opens /profile. The labels are 'Leaving from', 'Going to', 'Date (any date if empty)' and 'Find a Ride'. An empty submit shows home-form-error. Bengaluru→Mysuru goes to /search. The rent and book cards go to /hire?service=rent and /hire?service=book. 'Recent Searches' with its empty state shows. 4) Driver tabs: home, trips, earnings, messages, notifications. The notifications badge shows 2 for an approved driver with a hire request. driver-home-profile (unregistered driver) and dash-header (approved driver) both open /profile. dash-mode-pill is present. 5) Profile row 'Change Role' opens a sheet titled 'Change Role' with Passenger and Driver options. The 'Change Role' button is disabled until a different role is picked. Switching to Driver and back gave the toasts 'You're now a Driver' and 'You're now a Passenger'. 6) Regression: /find, the Offer Ride tab (verification gate for an unverified user), the Notifications tab and admin login (lands on /admin/dashboard) all work.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Home 'Hi, name'", "issues": ["Shows only the first word of the name, so 'TEST Role Chooser' shows as 'Hi, TEST' (as intended; noted only for awareness)"]},
+      {"screen": "Profile (demo passenger)", "issues": ["The subtitle under the name says 'New driver' for a passenger-mode user (left over from iteration 31)"]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/ui_setup_iter29.py", "/app/backend/tests/ui_cleanup_iter32.py"],
+  "action_items": [
+    "Optional cleanup: PassengerHome (app/(tabs)/index.tsx) still keeps the `unread` state, calls /notifications on every focus, and has the `icon` helper with the dot. The bell was removed, so the unread state and the /notifications call are no longer needed.",
+    "Optional: RoleChooser's <Modal> has no onRequestClose. On Android, the hardware back button then does nothing and React Native logs a warning. Add onRequestClose={() => {}} (which keeps the modal open on purpose)."
+  ],
+  "critical_code_review_comments": [
+    "RoleChooser is shown when user.mode_chosen === false. The backend sets mode_chosen=false only for email registrations without account_type. OTP registration passes account_type, so the modal is skipped there (consistent with the in-form choice).",
+    "PassengerHome has dead code: unread state, the /notifications fetch and the icon() helper (no longer used except for the admin shield)."
+  ],
+  "updated_files": ["/app/backend/tests/ui_cleanup_iter32.py"],
+  "success_rate": {"backend": "N/A (skipped)", "frontend": "100%"},
+  "seed_data_creation": "Created 2 UI-registered TEST users (test_rolechooser_*), plus the iteration-29 setup users (drv, pax, fresh) and one hire request. All were deleted: ui_cleanup_iter32.py <emails> and ui_setup_iter29.py cleanup. Demo modes checked: driver@ = driver, passenger@ = passenger.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Language screen first (language-continue-button), then /auth (email login by default; auth-register-link for sign-up). A fresh email sign-up shows role-chooser (mode-passenger / mode-driver). Use .filter(visible=True) for tab-* buttons. Passenger tabs: home, bookings, offer, messages, notifications. Driver tabs: home, trips, earnings, messages, notifications. To get an approved driver: python3 ui_setup_iter29.py create && hire 10:00 (password Passw0rd!x); clean up with ui_setup_iter29.py cleanup. To delete UI-registered TEST users by email: python3 ui_cleanup_iter32.py <emails>."
+}

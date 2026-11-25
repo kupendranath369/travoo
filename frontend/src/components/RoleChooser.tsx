@@ -39,7 +39,7 @@ export function RoleChooser({ visible }: { visible: boolean }) {
     setBusy(false);
   };
   return (
-    <Modal visible={visible} transparent animationType="fade" statusBarTranslucent>
+    <Modal visible={visible} transparent animationType="fade" statusBarTranslucent onRequestClose={() => {}}>
       <View style={{ flex: 1, backgroundColor: colors.scrim, justifyContent: "center", padding: space.lg }}>
         <Animated.View entering={ZoomIn.duration(350)} testID="role-chooser" style={{ backgroundColor: colors.surface, borderRadius: 24, maxHeight: "92%" }}>
           <ScrollView contentContainerStyle={{ padding: space.lg, gap: space.md }}>
