@@ -1,0 +1,53 @@
+{
+  "summary": "Iteration 25: full-stack test of the Local Driver redesign. Backend: new pytest suite test_iter25_local_driver_redesign.py (25 tests); 24 pass after one route fix, 1 fails (a suspended driver can go Online). The migration was checked separately (legacy doc inserted, backend restarted 3 times): it is idempotent and makes no duplicates. Found and fixed 2 bugs: (1) CRITICAL: POST /api/hire/bookings/{bid}/location always returned 422 because /hire/bookings/{bid}/{action} was declared first and caught it, so live location never worked; I moved the location routes above it. (2) Admin Local-driver card document thumbnails and 'View RC' got 401 because AdminProCard used the user-app fileUrl and not adminFileUrl; I fixed the import. Frontend at 390x844, all on the preview URL: profile Personal and Driver cards, the 3-step wizard (progress, place search giving the taluk chip, language chips, reuse banner and licence on file, Book card showing the vehicle form with a real RC upload, permit and insurance), Submit giving 'Verification pending', approved redirecting to /hire/driver, the dashboard (online toggle and label, outstation toggle, 4 tiles, verification details), availability add/edit/invalid order/delete, the vehicles list, unified earnings chips and cards, the requests inbox (earning, km to pickup, duration) with Accept going to /hire/[id], the full trip timeline arriving -> arrived -> start -> complete, the customer live map after arriving, the admin pro tab (filters including suspended/all, docs, vehicle approve, note + item chips, Request resubmission, Suspend/Reactivate), the driver resubmit view (reason + items + Fix and resubmit) and the carpool 'Manage / edit all vehicles' button.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "POST /api/hire/bookings/{bid}/location", "issue": "FIXED by testing agent. The route was shadowed by POST /hire/bookings/{bid}/{action} (Literal action) and always returned 422 literal_error, so the driver's live location was never saved. The HireLocIn and both location routes now sit above hire_action in server.py.", "priority": "CRITICAL"},
+      {"endpoint": "PUT /api/pro/settings", "issue": "A suspended driver (pro_drivers.suspended=true) can set availability_status='available' and becomes Online again. Only p.status=='approved' is checked. Matching still excludes them, but the dashboard and admin show them Online. Add a check for p.get('suspended') that returns 400.", "priority": "HIGH"},
+      {"endpoint": "POST /api/pro/register (resubmission from UI)", "issue": "On 'Fix and resubmit' the wizard draft has place=null, so the client sends home.place=null and home_snapshot drops home.geo and loc_id. Verified in the DB: geo None after a UI resubmit. reach_km() then returns None and the reachability/300 km rule is silently skipped for that driver. Fix: keep the existing home geo/loc_id on the server when place is omitted, or prefill d.place from profile.home on the client.", "priority": "HIGH"}
+    ],
+    "minor": [
+      {"endpoint": "POST /api/pro/register (resubmit)", "issue": "Items the admin flagged (e.g. licence_back) are not required to be re-uploaded. The driver can press Continue/Submit without replacing the flagged photo, and the server accepts it. Consider requiring a file newer than reviewed_at for each flagged doc kind."},
+      {"endpoint": "POST /api/hire/bookings/{bid}/start|complete", "issue": "No time guard. A driver can start and complete a trip days before its scheduled time (I completed a 28 Nov trip on 25 Nov), which inflates unified earnings."},
+      {"endpoint": "migrate_local_drivers", "issue": "For an existing shared vehicle with the same reg, it sets commercial_status to approved/pending even when the vehicle was 'rejected' by admin (only 'approved' is protected)."},
+      {"endpoint": "Book matching (pick_vehicle/hire_vehicle)", "issue": "The category comes from vtype (hatchback/sedan/suv/muv only), but request_shape accepts van/luxury/other. Book requests for those categories can never match."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "AdminProCard", "issue": "FIXED: doc thumbnails were blank and View RC failed (401, token empty) because it imported fileUrl from src/api. It now uses adminFileUrl from src/adminApi.", "selector": "[data-testid^=admin-pro-doc-]", "priority": "HIGH"},
+      {"component": "Dashboard My Services", "issue": "dash-service-book shows as active/checked right after approval when services contains 'book' but the vehicle is still pending approval. It shows 'Needs an approved vehicle' but looks enabled. Only after tapping it pauses and greys out. It should render disabled/unchecked when book_ready is false.", "selector": "[data-testid=dash-service-book]", "priority": "MEDIUM"},
+      {"component": "Register wizard step error", "issue": "pro-error ('Choose your home location (taluk)') stays on screen after the user picks a place. It is not cleared on change.", "selector": "[data-testid=pro-error]", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "VehicleForm (register step 3) 390px", "issues": ["The Model input in the Manufacturer/Model row overflows past the right edge of the card"]},
+      {"screen": "Admin Local drivers card 390px", "issues": ["The status badge in the card header is clipped ('Verification pe…', 'Resubmission r…')", "The filter chips row is cut off at the right (it scrolls horizontally, but there is no affordance)"]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_iter25_local_driver_redesign.py", "/app/backend/tests/iter25_migration_check.py", "/app/backend/tests/ui_setup_iter25.py", "/app/test_reports/pytest/iter25_results.xml"],
+  "action_items": [
+    "Block PUT /pro/settings availability_status='available' for suspended local drivers (400).",
+    "Keep home.geo/loc_id on resubmission: prefill the wizard place from profile.home, or have pro_register keep existing.home geo when body.home.place is null.",
+    "Make dash-service-book disabled/unchecked when book_ready is false (do not show it active while the vehicle is pending).",
+    "Optionally require re-upload of the doc kinds the admin flagged before resubmitting.",
+    "Optionally add a start-time guard for hire start/complete.",
+    "Fix the VehicleForm Model field overflow and the clipped admin status badge at mobile width.",
+    "Clear the wizard pro-error when the user changes the input."
+  ],
+  "critical_code_review_comments": [
+    "Route order: any POST /hire/bookings/{bid}/<x> route must be declared before the /{action} catch-all (now fixed for location).",
+    "server.py is about 3970 lines. Split the local-driver/hire/admin-pro sections into routers.",
+    "eligible_local_drivers runs per-driver awaits (approved_vehicles, users.find_one, has_clash) in a loop over up to 300 drivers. N+1 queries; batch them.",
+    "admin_review_pro sends the 'driver_approved'/'driver_rejected' notification types, which are shared with carpool verification. Local-driver copy may be confusing.",
+    "admin_vehicle_commercial also reuses driver_approved/driver_rejected notification types for a vehicle decision."
+  ],
+  "updated_files": ["/app/backend/server.py (moved HireLocIn + /hire/bookings/{bid}/location POST/GET above /hire/bookings/{bid}/{action})", "/app/frontend/src/components/localdriver/AdminProCard.tsx (adminFileUrl import)", "/app/backend/tests/test_iter25_local_driver_redesign.py", "/app/backend/tests/iter25_migration_check.py", "/app/backend/tests/ui_setup_iter25.py", "/app/memory/test_credentials.md"],
+  "success_rate": {"backend": "96% (24/25 after location route fix; migration check passed)", "frontend": "~92% (all flows work; dashboard Book-card state and minor layout issues)"},
+  "test_credentials": "The admin password was changed from bootstrap VOuKjR_Jtv72uS2x to TravooAdmin2026x (it was must_change_password, which blocked every admin API with 403). Recorded in /app/memory/test_credentials.md. Admin login is rate-limited to 5 per email per 15 min (I cleared only the admin-login rate_limits entries my runs caused). Old tests (test_iter18_health_regression.py etc.) still hard-code the old admin password.",
+  "seed_data_creation": "Only TEST_ users/drivers/vehicles/hires were created, and all were deleted by uid. The legacy migration docs user_TEST_mig25a/b were deleted. No seeded or demo data was modified (the carpool-approved scenario was simulated on a TEST user via the DB).",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run: cd /app/backend/tests && pytest test_iter25_local_driver_redesign.py -c /dev/null -p no:xdist -v (it uses Hiriyur 5508 / Holalkere 5506 and needs admin password TravooAdmin2026x). Migration: python iter25_migration_check.py insert -> restart backend -> verify -> cleanup. UI setup helper: ui_setup_iter25.py create|approve|hire|cleanup. UI login: language-continue-button -> 'Use email instead' -> auth-email-input/auth-password-input/auth-submit-button. Language chips testIDs are lowercase (pro-lang-kannada). Old iter20/21/24 tests are obsolete by design. Not tested: native location permission; the customer Book flow from the hire/index.tsx UI (round trip return was only tested via the API); the earnings UI with non-zero data (verified via the API only).",
+  "rca of the issue": "Live location 422: FastAPI matches routes in declaration order. POST /hire/bookings/{bid}/{action} (action: Literal[...]) matched the path /hire/bookings/X/location first, and validation of the Literal failed with 422 before hire_location_set was reached. GET worked because the {action} route is POST-only. Mitigation applied: declare the specific /location routes before the generic one. Admin thumbnails 401: AdminProCard built file URLs with the user-app token (null in the admin portal), and not the admin session token."
+}

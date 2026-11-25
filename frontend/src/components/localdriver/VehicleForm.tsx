@@ -75,8 +75,8 @@ export function VehicleForm({ initial, forBook, onSaved, onCancel }: { initial?:
       <T weight="800" size={16}>{initial?.vehicle_id ? "Edit vehicle" : "Add vehicle"}</T>
       <Field testID="vehicle-name" label="Vehicle name" placeholder="e.g. My white Ertiga" value={v.name} onChangeText={(x) => set("name", x)} maxLength={60} />
       <View style={{ flexDirection: "row", gap: space.sm }}>
-        <Field testID="vehicle-make" style={{ flex: 1 }} label="Manufacturer" placeholder="Maruti" value={v.make} onChangeText={(x) => set("make", x)} />
-        <Field testID="vehicle-model" style={{ flex: 1 }} label="Model" placeholder="Ertiga" value={v.model === "-" ? "" : v.model} onChangeText={(x) => set("model", x)} />
+        <View style={{ flex: 1, minWidth: 0 }}><Field testID="vehicle-make" label="Manufacturer" placeholder="Maruti" value={v.make} onChangeText={(x) => set("make", x)} /></View>
+        <View style={{ flex: 1, minWidth: 0 }}><Field testID="vehicle-model" label="Model" placeholder="Ertiga" value={v.model === "-" ? "" : v.model} onChangeText={(x) => set("model", x)} /></View>
       </View>
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.sm }}>
         {TYPES.map((t) => <Chip key={t} testID={`vehicle-type-${t}`} label={t.toUpperCase()} active={v.vtype === t} onPress={() => { set("vtype", t); set("seats", Math.min(v.seats, CAP[t])); }} />)}

@@ -2916,8 +2916,18 @@ async def pro_register(body: ProDriverIn, user: dict = Depends(get_user)):
     for v in vs:
         if v.get("commercial_status") != "approved":
             await commercial_ready(v)
+    flagged = [k for k in existing.get("resubmit_items") or [] if k in LOCAL_DOC_KINDS]
+    if flagged and existing.get("reviewed_at"):
+        since = existing["reviewed_at"].replace(tzinfo=timezone.utc) if existing["reviewed_at"].tzinfo is None else existing["reviewed_at"]
+        fresh = {f["kind"] for f in await active_files(uid) if (f["created_at"].replace(tzinfo=timezone.utc) if f["created_at"].tzinfo is None else f["created_at"]) > since}
+        stale = [k for k in flagged if k not in fresh]
+        if stale:
+            raise HTTPException(400, "Please upload a new photo for: " + ", ".join(DOC_META[k][0] for k in stale))
     status = "approved" if (await get_settings()).get("instant_driver_approval") else "under_review"
     home = await home_snapshot(body.home)
+    old_home = existing.get("home") or {}
+    if not body.home.place and old_home.get("subdistrict_code") == home["subdistrict_code"] and old_home.get("geo"):
+        home.update(geo=old_home["geo"], loc_id=old_home.get("loc_id"), place_name=old_home.get("place_name"), city=old_home.get("city") or home["city"])
     rates = {**DEFAULT_RATES, **((await get_settings()).get("local_rates") or {})}
     rec = {"home": home, "languages": [x.strip() for x in body.languages if x.strip()], "licence_no": lic, "licence_expiry": exp,
            "services": sorted(set(body.services)), "experience_years": existing.get("experience_years", body.experience_years),
@@ -3033,6 +3043,28 @@ async def hire_get(bid: str, user: dict = Depends(get_user)):
     return h
 
 
+class HireLocIn(BaseModel):
+    lat: float = Field(ge=-90, le=90)
+    lng: float = Field(ge=-180, le=180)
+
+
+@api.post("/hire/bookings/{bid}/location")
+async def hire_location_set(bid: str, body: HireLocIn, user: dict = Depends(get_user)):
+    res = await db.hires.update_one({"booking_id": bid, "driver_id": user["user_id"], "status": {"$in": ["confirmed", "started"]}, "arriving_at": {"$ne": None}},
+                                    {"$set": {"driver_location": {"lat": body.lat, "lng": body.lng, "updated_at": now()}}})
+    if not res.matched_count:
+        raise HTTPException(400, "Location sharing starts after 'I am arriving' and stops when the trip ends")
+    return {"ok": True}
+
+
+@api.get("/hire/bookings/{bid}/location")
+async def hire_location_get(bid: str, user: dict = Depends(get_user)):
+    h = await db.hires.find_one({"booking_id": bid, "passenger_id": user["user_id"]}, {"_id": 0, "status": 1, "driver_location": 1, "arriving_at": 1})
+    if not h:
+        raise HTTPException(404, "Booking not found")
+    return h.get("driver_location") if h["status"] in ("confirmed", "started") and h.get("arriving_at") else None
+
+
 @api.post("/hire/bookings/{bid}/{action}")
 async def hire_action(bid: str, action: Literal["accept", "reject", "start", "complete", "cancel", "arriving", "arrived"], body: ReasonIn, user: dict = Depends(get_user)):
     h = await db.hires.find_one({"booking_id": bid}, {"_id": 0})
@@ -3059,6 +3091,8 @@ async def hire_action(bid: str, action: Literal["accept", "reject", "start", "co
     allowed, new, driver_only = rules[action]
     if driver_only and not is_driver:
         raise HTTPException(403, "Only the driver can do this")
+    if action == "start" and h.get("starts_at") and now() < h["starts_at"].replace(tzinfo=timezone.utc) - timedelta(hours=2):
+        raise HTTPException(400, "You can start this trip from 2 hours before the pickup time")
     upd = {"status": new, f"{action}_at": now()}
     if action in ("cancel", "reject"):
         upd.update(cancel_reason=body.reason, cancelled_by="driver" if is_driver else "customer", refund_note=body.refund_note)
@@ -3074,28 +3108,6 @@ async def hire_action(bid: str, action: Literal["accept", "reject", "start", "co
     if action in ("complete", "cancel", "reject"):  # live location sharing ends with the trip
         await db.hires.update_one({"booking_id": bid}, {"$unset": {"driver_location": ""}})
     return {"ok": True}
-
-
-class HireLocIn(BaseModel):
-    lat: float = Field(ge=-90, le=90)
-    lng: float = Field(ge=-180, le=180)
-
-
-@api.post("/hire/bookings/{bid}/location")
-async def hire_location_set(bid: str, body: HireLocIn, user: dict = Depends(get_user)):
-    res = await db.hires.update_one({"booking_id": bid, "driver_id": user["user_id"], "status": {"$in": ["confirmed", "started"]}, "arriving_at": {"$ne": None}},
-                                    {"$set": {"driver_location": {"lat": body.lat, "lng": body.lng, "updated_at": now()}}})
-    if not res.matched_count:
-        raise HTTPException(400, "Location sharing starts after 'I am arriving' and stops when the trip ends")
-    return {"ok": True}
-
-
-@api.get("/hire/bookings/{bid}/location")
-async def hire_location_get(bid: str, user: dict = Depends(get_user)):
-    h = await db.hires.find_one({"booking_id": bid, "passenger_id": user["user_id"]}, {"_id": 0, "status": 1, "driver_location": 1, "arriving_at": 1})
-    if not h:
-        raise HTTPException(404, "Booking not found")
-    return h.get("driver_location") if h["status"] in ("confirmed", "started") and h.get("arriving_at") else None
 
 
 # ---------------------------------------------------------------- India admin locations (LGD) + local-taluk hire matching
@@ -3235,6 +3247,8 @@ async def pro_settings(body: ProSettingsIn, user: dict = Depends(get_user)):
     if body.availability_status:
         if body.availability_status == "available" and p.get("status") != "approved":
             raise HTTPException(400, "You can go online after your local driver verification is approved")
+        if body.availability_status == "available" and p.get("suspended"):
+            raise HTTPException(400, "Your local driver account is suspended. Please contact Travoo support.")
         upd["available"] = body.availability_status == "available"
     if not upd:
         raise HTTPException(400, "Nothing to update")
@@ -3906,7 +3920,7 @@ async def migrate_local_drivers():
             ex = await db.vehicles.find_one({"owner_id": p["user_id"], "reg_no": reg, "deleted": {"$ne": True}}, {"_id": 0, "vehicle_id": 1})
             approved = p.get("status") == "approved"
             if ex:
-                await db.vehicles.update_one({"vehicle_id": ex["vehicle_id"], "commercial_status": {"$ne": "approved"}},
+                await db.vehicles.update_one({"vehicle_id": ex["vehicle_id"], "commercial_status": {"$nin": ["approved", "rejected"]}},
                                              {"$set": {"commercial_status": "approved" if approved else "pending", "day_rate": v.get("day_rate", 0)}})
                 ids.append(ex["vehicle_id"])
             else:

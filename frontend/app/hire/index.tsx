@@ -8,7 +8,7 @@ import { api, Loc, locPayload, publicPhoto } from "@/src/api";
 import { DateField } from "@/src/components/Calendar";
 import { isoDate, TimeChips } from "@/src/components/DateChips";
 import { HireDriverArt } from "@/src/components/HireDriverArt";
-import { BOOK_OPTIONS, feeNote, RENT_OPTIONS, SERVICE_LABEL, VEHICLE_CATS } from "@/src/components/LocalDriverParts";
+import { BOOK_OPTIONS, feeNote, RENT_OPTIONS, SERVICE_LABEL } from "@/src/components/LocalDriverParts";
 import { LocationField } from "@/src/components/LocationField";
 import { HomeLoc, Taluk, TalukPicker } from "@/src/components/TalukPicker";
 import { useToast } from "@/src/components/toast";
@@ -218,7 +218,7 @@ export default function HireScreen() {
         <>
           <T size={13} weight="600" color={colors.muted}>Vehicle category</T>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: space.sm }}>
-            {[...VEHICLE_CATS, "any"].map((v) => <Chip key={v} testID={`hire-vcat-${v}`} label={v === "any" ? "ANY" : v.toUpperCase()} active={vtype === v} onPress={() => setVtype(v)} />)}
+            {["hatchback", "sedan", "suv", "muv", "any"].map((v) => <Chip key={v} testID={`hire-vcat-${v}`} label={v === "any" ? "ANY" : v.toUpperCase()} active={vtype === v} onPress={() => setVtype(v)} />)}
           </ScrollView>
         </>
       ) : (

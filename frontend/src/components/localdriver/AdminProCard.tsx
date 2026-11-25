@@ -2,7 +2,7 @@ import { Image } from "expo-image";
 import React, { useState } from "react";
 import { Pressable, View } from "react-native";
 
-import { fileUrl } from "@/src/api";
+import { adminFileUrl as fileUrl } from "@/src/adminApi";
 import { COMMERCIAL, ITEM_LABEL, PRO_STATUS } from "@/src/components/localdriver/parts";
 import { Badge, Btn, Card, Chip, Field, T, space } from "@/src/components/ui";
 import { useTheme } from "@/src/theme";
@@ -20,8 +20,8 @@ export function AdminProCard({ p, act, onPreview }: { p: any; act: (path: string
   const review = (decision: string) => act(`/admin/pro-drivers/${p.user_id}/review`, { decision, note, items });
   return (
     <Card testID={`admin-pro-${p.user_id}`} style={{ gap: space.sm }}>
-      <View style={{ flexDirection: "row", justifyContent: "space-between", gap: space.sm }}>
-        <T weight="800" style={{ flex: 1 }}>{p.name} · {p.email}</T>
+      <T weight="800">{p.name} · {p.email}</T>
+      <View style={{ flexDirection: "row" }}>
         <Badge testID={`admin-pro-status-${p.user_id}`} label={p.suspended ? "Suspended" : st.label} tone={p.suspended ? "error" : st.tone} />
       </View>
       <T size={12}>Phone {p.phone || "—"} · Carpool verification: {p.carpool_status}</T>

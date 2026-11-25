@@ -84,7 +84,7 @@ export default function LocalDriverDashboard() {
           <T weight="800">My services</T>
           <View style={{ flexDirection: "row", gap: space.md }}>
             <ServiceCard testID="dash-service-rent" icon="key-outline" title="Rent a Driver" desc="Customer's vehicle" active={p.services.includes("rent")} onPress={() => svc("rent")} />
-            <ServiceCard testID="dash-service-book" icon="car-sport-outline" title="Book a Driver" desc="Your vehicle" active={p.services.includes("book")} disabled={!d.book_ready && !p.services.includes("book")}
+            <ServiceCard testID="dash-service-book" icon="car-sport-outline" title="Book a Driver" desc="Your vehicle" active={p.services.includes("book") && d.book_ready} disabled={!d.book_ready}
               note={d.book_ready ? undefined : "Needs an approved vehicle"} onPress={() => svc("book")} />
           </View>
         </View>

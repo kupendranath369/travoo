@@ -62,7 +62,7 @@ export default function LocalDriverRegister() {
   const [stepErr, setStepErr] = useState("");
   const [busy, setBusy] = useState(false);
   const [d, setD] = useState<Draft>({ place: null, taluk: null, languages: [], licence_no: "", licence_expiry: "", services: ["rent"], vehicle_ids: [] });
-  const set = (p: Partial<Draft>) => setD((x) => ({ ...x, ...p }));
+  const set = (p: Partial<Draft>) => { setStepErr(""); setD((x) => ({ ...x, ...p })); };
 
   const load = useCallback(async () => {
     try {
