@@ -19,7 +19,7 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#FFFFFF"
+        "backgroundColor": "#1E73E8"
       },
       "package": "com.emergent.travoojourneys.vae0fl",
       "permissions": [
