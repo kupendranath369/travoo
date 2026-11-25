@@ -1,7 +1,7 @@
 import Ionicons from "@react-native-vector-icons/ionicons";
 import * as Haptics from "expo-haptics";
 import { Image } from "expo-image";
-import { useRouter } from "expo-router";
+import { useRouter, useSegments } from "expo-router";
 import React from "react";
 import {
   ActivityIndicator,
@@ -212,8 +212,10 @@ export function Badge({ label, tone = "info", icon, testID }: { label: string; t
 export function Header({ title, right, back = true, testID }: { title: string; right?: React.ReactNode; back?: boolean; testID?: string }) {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const inTabs = useSegments()[0] === "(tabs)";
   const { colors } = useTheme();
   const { rtl } = useI18n();
+  back = back && !inTabs;
   return (
     <View testID={testID} style={{ paddingTop: insets.top + space.sm, paddingBottom: space.md, paddingHorizontal: space.lg, backgroundColor: colors.surfaceSecondary, borderBottomWidth: 1, borderBottomColor: colors.border, flexDirection: "row", alignItems: "center", gap: space.md }}>
       {back ? (

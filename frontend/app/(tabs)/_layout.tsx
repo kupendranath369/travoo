@@ -26,11 +26,18 @@ function useUnreadMessages() {
   return n;
 }
 
+const DRIVER_TABS = ["index", "requests", "trips", "earnings"];
+const PASSENGER_TABS = ["index", "offer", "bookings", "messages", "notifications"];
+
 export default function TabsLayout() {
   const { t } = useI18n();
+  const { user } = useAuth();
+  const driver = user?.account_type === "driver";
+  const shown = (name: string) => (driver ? DRIVER_TABS : PASSENGER_TABS).includes(name);
   const { colors } = useTheme();
   const unread = useUnreadMessages();
   const [unreadNotifications, setUnreadNotifications] = useState(0);
+  const [openRequests, setOpenRequests] = useState(0);
 
   useEffect(() => {
     const loadNotifications = async () => {
@@ -41,32 +48,46 @@ export default function TabsLayout() {
         setUnreadNotifications(0);
       }
     };
+    const loadRequests = () => { if (driver) api("/hire/requests").then((r) => setOpenRequests((r.inbox ?? []).length)).catch(() => {}); };
     loadNotifications();
-    const interval = setInterval(loadNotifications, 15000);
+    loadRequests();
+    const interval = setInterval(() => { loadNotifications(); loadRequests(); }, 15000);
     return () => clearInterval(interval);
-  }, []);
+  }, [driver]);
 
   if (usesNativeTabs) {
     return (
       <NativeTabs tintColor={colors.brandPrimary}>
         <NativeTabs.Trigger name="index">
-          <NativeTabs.Trigger.Icon sf="house.fill" />
-          <NativeTabs.Trigger.Label>{t("tab.home")}</NativeTabs.Trigger.Label>
+          <NativeTabs.Trigger.Icon sf={driver ? "speedometer" : "house.fill"} />
+          <NativeTabs.Trigger.Label>{driver ? "Dashboard" : t("tab.home")}</NativeTabs.Trigger.Label>
         </NativeTabs.Trigger>
-        <NativeTabs.Trigger name="offer">
+        <NativeTabs.Trigger name="requests" hidden={!driver}>
+          <NativeTabs.Trigger.Icon sf="bell.badge.fill" />
+          <NativeTabs.Trigger.Label>Requests</NativeTabs.Trigger.Label>
+        </NativeTabs.Trigger>
+        <NativeTabs.Trigger name="trips" hidden={!driver}>
+          <NativeTabs.Trigger.Icon sf="car.fill" />
+          <NativeTabs.Trigger.Label>Trips</NativeTabs.Trigger.Label>
+        </NativeTabs.Trigger>
+        <NativeTabs.Trigger name="earnings" hidden={!driver}>
+          <NativeTabs.Trigger.Icon sf="indianrupeesign.circle.fill" />
+          <NativeTabs.Trigger.Label>Earnings</NativeTabs.Trigger.Label>
+        </NativeTabs.Trigger>
+        <NativeTabs.Trigger name="offer" hidden={driver}>
           <NativeTabs.Trigger.Icon sf="plus.circle.fill" />
           <NativeTabs.Trigger.Label>{t("tab.offer")}</NativeTabs.Trigger.Label>
         </NativeTabs.Trigger>
-        <NativeTabs.Trigger name="bookings">
+        <NativeTabs.Trigger name="bookings" hidden={driver}>
           <NativeTabs.Trigger.Icon sf="ticket.fill" />
           <NativeTabs.Trigger.Label>{t("tab.bookings")}</NativeTabs.Trigger.Label>
         </NativeTabs.Trigger>
-        <NativeTabs.Trigger name="messages">
+        <NativeTabs.Trigger name="messages" hidden={driver}>
           <NativeTabs.Trigger.Icon sf="bubble.left.and.bubble.right.fill" />
           <NativeTabs.Trigger.Label>{t("v2.messages")}</NativeTabs.Trigger.Label>
           {unread ? <NativeTabs.Trigger.Badge>{String(unread)}</NativeTabs.Trigger.Badge> : null}
         </NativeTabs.Trigger>
-        <NativeTabs.Trigger name="notifications">
+        <NativeTabs.Trigger name="notifications" hidden={driver}>
           <NativeTabs.Trigger.Icon sf="bell.fill" />
           <NativeTabs.Trigger.Label>{t("profile.notifications")}</NativeTabs.Trigger.Label>
           {unreadNotifications ? <NativeTabs.Trigger.Badge>{String(unreadNotifications)}</NativeTabs.Trigger.Badge> : null}
@@ -90,10 +111,14 @@ export default function TabsLayout() {
         tabBarItemStyle: { alignSelf: "center" },
       }}
     >
-      <Tabs.Screen name="index" options={{ title: t("tab.home"), tabBarButtonTestID: "tab-home", tabBarIcon: icon("home", "home-outline") }} />
+      <Tabs.Screen name="index" options={{ title: driver ? "Dashboard" : t("tab.home"), tabBarButtonTestID: driver ? "tab-dashboard" : "tab-home", tabBarIcon: driver ? icon("speedometer", "speedometer-outline") : icon("home", "home-outline") }} />
+      <Tabs.Screen name="requests" options={{ href: shown("requests") ? undefined : null, title: "Requests", tabBarButtonTestID: "tab-requests", tabBarIcon: icon("notifications", "notifications-outline"), tabBarBadge: openRequests || undefined, tabBarBadgeStyle: { backgroundColor: colors.brandTertiary, color: colors.onBrandTertiary, fontSize: 10 } }} />
+      <Tabs.Screen name="trips" options={{ href: shown("trips") ? undefined : null, title: "Trips", tabBarButtonTestID: "tab-trips", tabBarIcon: icon("car", "car-outline") }} />
+      <Tabs.Screen name="earnings" options={{ href: shown("earnings") ? undefined : null, title: "Earnings", tabBarButtonTestID: "tab-earnings", tabBarIcon: icon("wallet", "wallet-outline") }} />
       <Tabs.Screen
         name="offer"
         options={{
+          href: shown("offer") ? undefined : null,
           title: t("tab.offer"),
           tabBarButtonTestID: "tab-offer",
           tabBarActiveTintColor: colors.brandTertiary,
@@ -104,9 +129,9 @@ export default function TabsLayout() {
           ),
         }}
       />
-      <Tabs.Screen name="bookings" options={{ title: t("tab.bookings"), tabBarButtonTestID: "tab-bookings", tabBarIcon: icon("ticket", "ticket-outline") }} />
-      <Tabs.Screen name="messages" options={{ title: t("v2.messages"), tabBarButtonTestID: "tab-messages", tabBarIcon: icon("chatbubbles", "chatbubbles-outline"), tabBarBadge: unread ? unread : undefined, tabBarBadgeStyle: { backgroundColor: colors.brandTertiary, color: colors.onBrandTertiary, fontSize: 10 } }} />
-      <Tabs.Screen name="notifications" options={{ title: t("profile.notifications"), tabBarButtonTestID: "tab-notifications", tabBarIcon: icon("notifications", "notifications-outline"), tabBarBadge: unreadNotifications ? unreadNotifications : undefined, tabBarBadgeStyle: { backgroundColor: colors.brandTertiary, color: colors.onBrandTertiary, fontSize: 10 } }} />
+      <Tabs.Screen name="bookings" options={{ href: shown("bookings") ? undefined : null, title: t("tab.bookings"), tabBarButtonTestID: "tab-bookings", tabBarIcon: icon("ticket", "ticket-outline") }} />
+      <Tabs.Screen name="messages" options={{ href: shown("messages") ? undefined : null, title: t("v2.messages"), tabBarButtonTestID: "tab-messages", tabBarIcon: icon("chatbubbles", "chatbubbles-outline"), tabBarBadge: unread ? unread : undefined, tabBarBadgeStyle: { backgroundColor: colors.brandTertiary, color: colors.onBrandTertiary, fontSize: 10 } }} />
+      <Tabs.Screen name="notifications" options={{ href: shown("notifications") ? undefined : null, title: t("profile.notifications"), tabBarButtonTestID: "tab-notifications", tabBarIcon: icon("notifications", "notifications-outline"), tabBarBadge: unreadNotifications ? unreadNotifications : undefined, tabBarBadgeStyle: { backgroundColor: colors.brandTertiary, color: colors.onBrandTertiary, fontSize: 10 } }} />
     </Tabs>
   );
 }

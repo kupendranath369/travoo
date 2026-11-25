@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { api, pictureUrl } from "@/src/api";
 import { useAuth } from "@/src/auth";
+import { LocalDriverDashboard } from "@/src/components/localdriver/Dashboard";
 import { float, PRO_STATUS } from "@/src/components/localdriver/parts";
 import { Avatar, Badge, Btn, IconName, T, radius, space } from "@/src/components/ui";
 import { useTheme } from "@/src/theme";
@@ -35,6 +36,7 @@ export function DriverHome() {
   const load = useCallback(() => api("/pro/me").then(setMe).catch(() => setMe({ profile: null })), []);
   useFocusEffect(useCallback(() => { load(); }, [load]));
   const p = me?.profile;
+  if (p?.status === "approved") return <LocalDriverDashboard embedded />;
   const st = p ? PRO_STATUS[p.status] ?? PRO_STATUS.under_review : null;
   return (
     <ScrollView testID="driver-home" refreshControl={<RefreshControl refreshing={false} onRefresh={load} />}
@@ -78,7 +80,10 @@ export function DriverHome() {
         <Btn style={{ flex: 1 }} testID="driver-offer-ride" variant="outline" icon="add-circle-outline" label="Offer a ride" onPress={() => router.push("/offer")} />
         <Btn style={{ flex: 1 }} testID="driver-carpool-verify" variant="outline" icon="shield-checkmark-outline" label="Verify" onPress={() => router.push("/driver")} />
       </View>
-      <Btn testID="driver-earnings" variant="ghost" icon="wallet-outline" label="My earnings" onPress={() => router.push("/earnings")} />
+      <View style={{ flexDirection: "row", gap: space.md }}>
+        <Btn style={{ flex: 1 }} small testID="driver-messages" variant="ghost" icon="chatbubbles-outline" label="Messages" onPress={() => router.push("/messages")} />
+        <Btn style={{ flex: 1 }} small testID="driver-notifications" variant="ghost" icon="notifications-outline" label="Alerts" onPress={() => router.push("/notifications")} />
+      </View>
     </ScrollView>
   );
 }
