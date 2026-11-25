@@ -13,6 +13,7 @@ import { MapDataCard } from "@/src/components/MapDataCard";
 import { useToast } from "@/src/components/toast";
 import { Badge, Btn, Card, Chip, Empty, ErrorBox, Field, Header, Loading, Section, Stepper, T, radius, space, statusTone } from "@/src/components/ui";
 import { inr, useI18n } from "@/src/i18n";
+import { AdminProCard } from "@/src/components/localdriver/AdminProCard";
 import { useTheme } from "@/src/theme";
 
 const TABS = ["overview", "notifications", "drivers", "passengers", "rides", "activity", "licence_verifications", "pro", "hire_bookings", "hire_reports", "places", "users", "trips", "bookings", "tickets", "reviews", "featured", "routes", "settings"] as const;
@@ -393,40 +394,13 @@ export default function AdminScreen() {
         return (
           <>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: space.sm }}>
-              {["under_review", "approved", "rejected", "resubmit"].map((s) => <Chip key={s} testID={`admin-pro-filter-${s}`} label={t(`verify.status.${s}`)} active={dStatus === s} onPress={() => setDStatus(s)} />)}
+              {["under_review", "approved", "resubmit", "rejected", "suspended", "all"].map((s) => <Chip key={s} testID={`admin-pro-filter-${s}`} label={s === "suspended" ? "Suspended" : s === "all" ? "All" : t(`verify.status.${s}`)} active={dStatus === s} onPress={() => setDStatus(s)} />)}
             </ScrollView>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: space.sm }}>
               {[["all", "All services"], ["rent", "Rent a Driver"], ["book", "Book a Driver"]].map(([k, l]) => <Chip key={k} testID={`admin-svc-filter-${k}`} label={l} active={svc === k} onPress={() => setSvc(k)} />)}
             </ScrollView>
             {data.length === 0 ? <Empty title={t("admin.empty")} /> : null}
-            {data.map((p: any) => (
-              <Card key={p.user_id} testID={`admin-pro-${p.user_id}`} style={{ gap: space.sm }}>
-                <T weight="800">{p.name} · {p.email}</T>
-                <View style={{ flexDirection: "row", gap: space.sm }}>
-                  {["profile", "licence"].map((k) => (
-                    <Pressable key={k} testID={`admin-pro-doc-${k}-${p.user_id}`} onPress={() => p.documents?.photos?.[k] && setPreview(fileUrl(p.documents.photos[k]))} style={{ width: 72, height: 72, borderRadius: 8, overflow: "hidden", backgroundColor: colors.surfaceTertiary }}>
-                      {p.documents?.photos?.[k] ? <Image source={{ uri: fileUrl(p.documents.photos[k]) }} style={{ width: "100%", height: "100%" }} contentFit="cover" /> : null}
-                    </Pressable>
-                  ))}
-                </View>
-                <T size={12}>{p.city?.name} · {p.experience_years}y · {p.languages.join(", ")} · {p.vehicle_types.join(", ")}</T>
-                <T size={12}>{t("verify.licence")}: {p.licence_no} ({p.licence_expiry})</T>
-                <T size={12} color={colors.muted}>₹{p.rate_hourly}/h · ₹{p.rate_half_day} · ₹{p.rate_full_day} · {p.bio}</T>
-                <View style={{ flexDirection: "row", gap: space.sm, flexWrap: "wrap" }}>
-                  {(p.services ?? ["rent"]).map((s: string) => <Badge key={s} testID={`admin-pro-service-${s}-${p.user_id}`} label={s === "book" ? "Book a Driver" : "Rent a Driver"} tone="info" />)}
-                  <Badge testID={`admin-pro-avail-${p.user_id}`} label={(p.availability_status ?? "available").toUpperCase()} tone={p.availability_status === "available" ? "success" : "muted"} />
-                  {p.acceptOutstationTrips ? <Badge label="Outstation" tone="muted" /> : null}
-                </View>
-                <T size={12}>Home: {p.home ? `${p.home.subdistrict_name} ${p.home.sub_label}, ${p.home.district_name}, ${p.home.state_name}` : "not set"}</T>
-                {(p.vehicles ?? []).map((v: any) => <T key={v.vehicle_id} size={12} color={colors.muted}>🚗 {v.name} · {v.reg_no} · {v.category} · {v.seats} seats · ₹{v.day_rate}/day {v.available ? "" : "· unavailable"}</T>)}
-                {p.status === "under_review" ? (
-                  <View style={{ flexDirection: "row", gap: space.sm }}>
-                    <Btn small testID={`admin-pro-approve-${p.user_id}`} label={t("admin.approve")} onPress={() => act(`/admin/pro-drivers/${p.user_id}/review`, { decision: "approved", note })} />
-                    <Btn small variant="danger" testID={`admin-pro-reject-${p.user_id}`} label={t("admin.reject")} onPress={() => act(`/admin/pro-drivers/${p.user_id}/review`, { decision: "rejected", note })} />
-                  </View>
-                ) : null}
-              </Card>
-            ))}
+            {data.map((p: any) => <AdminProCard key={p.user_id} p={p} act={act} onPreview={setPreview} />)}
           </>
         );
       case "places":

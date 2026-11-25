@@ -4,6 +4,7 @@ import { ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { api } from "@/src/api";
+import { UnifiedEarnings } from "@/src/components/localdriver/UnifiedEarnings";
 import { Badge, Card, Empty, ErrorBox, Header, Loading, Section, T, space } from "@/src/components/ui";
 import { inr, useI18n } from "@/src/i18n";
 import { useTheme } from "@/src/theme";
@@ -44,6 +45,8 @@ export default function EarningsScreen() {
     <View style={{ flex: 1, backgroundColor: colors.surface }}>
       <Header title={t("earn.title")} />
       <ScrollView contentContainerStyle={{ padding: space.lg, gap: space.lg, paddingBottom: insets.bottom + space.xl }}>
+        <UnifiedEarnings />
+        <T weight="800" size={16}>Carpool details</T>
         <Card style={{ backgroundColor: colors.brand, borderColor: colors.brand, gap: space.xs }}>
           <T color={colors.onBrand} style={{ opacity: 0.8 }}>{t("earn.completed")}</T>
           <T testID="earn-completed" size={32} weight="800" color={colors.onBrand}>{inr(s.completed)}</T>

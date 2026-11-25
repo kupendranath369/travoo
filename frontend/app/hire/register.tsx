@@ -1,181 +1,140 @@
-import { useFocusEffect, useRouter } from "expo-router";
+import Ionicons from "@react-native-vector-icons/ionicons";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useState } from "react";
-import { ScrollView, View } from "react-native";
+import { View } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { api, Loc, locPayload } from "@/src/api";
-import { useAuth } from "@/src/auth";
-import { AvailabilityPicker, AvailabilitySchedule, toAvailabilityPayload } from "@/src/components/AvailabilityPicker";
-import { TimeChips } from "@/src/components/DateChips";
-import { DocFile, DocKind, DocPhotos } from "@/src/components/DocPhotos";
-import { LanguagePicker } from "@/src/components/LanguagePicker";
-import { Toggle, Vehicle, VehiclesEditor } from "@/src/components/LocalDriverParts";
-import { YesNoSwipe } from "@/src/components/YesNoSwipe";
-import { LocationField } from "@/src/components/LocationField";
-import { HomeLoc, TalukPicker } from "@/src/components/TalukPicker";
+import { api } from "@/src/api";
+import { float, ITEM_LABEL, Progress, PRO_STATUS } from "@/src/components/localdriver/parts";
+import { Draft, StepBasic, StepDocs, StepServices } from "@/src/components/localdriver/steps";
 import { useToast } from "@/src/components/toast";
-import { Badge, Btn, Card, Chip, Field, Header, Loading, Stepper, T, space, statusTone } from "@/src/components/ui";
-import { useI18n } from "@/src/i18n";
+import { Badge, Btn, Card, ErrorBox, Header, Loading, T, space } from "@/src/components/ui";
 import { useTheme } from "@/src/theme";
 
-const VTYPES = ["hatchback", "sedan", "suv", "muv", "luxury", "automatic", "ev"];
-const LANGS = ["Kannada", "English", "Hindi", "Telugu", "Tamil", "Malayalam", "Marathi", "Bengali", "Gujarati", "Punjabi", "Odia", "Assamese", "Urdu", "Konkani", "Sanskrit"];
+const LABELS = ["Basic information", "Document verification", "Select services"];
 
-export default function ProRegister() {
+function StatusView({ me, onFix }: { me: any; onFix: () => void }) {
+  const { colors } = useTheme();
+  const router = useRouter();
+  const p = me.profile;
+  const st = PRO_STATUS[p.status] ?? PRO_STATUS.under_review;
+  const fix = p.status === "rejected" || p.status === "resubmit";
+  return (
+    <View style={{ gap: space.lg }}>
+      <Card testID="pro-status-card" style={[float, { alignItems: "center", gap: space.md, paddingVertical: space.xl, borderWidth: 0 }]}>
+        <View style={{ width: 72, height: 72, borderRadius: 36, backgroundColor: colors.accentSoft, alignItems: "center", justifyContent: "center" }}>
+          <Ionicons name={st.icon} size={36} color={st.tone === "success" ? colors.success : st.tone === "error" ? colors.error : colors.brandTertiary} />
+        </View>
+        <Badge testID="pro-status-badge" label={st.label} tone={st.tone} />
+        <T center size={14} color={colors.muted}>{st.text}</T>
+      </Card>
+      {fix && p.admin_note ? (
+        <Card testID="pro-admin-reason" style={{ gap: space.xs }}>
+          <T weight="800">Reason from Travoo</T>
+          <T size={13}>{p.admin_note}</T>
+          {(p.resubmit_items ?? []).map((k: string) => <T key={k} size={13} color={colors.error}>• {ITEM_LABEL[k] ?? k}</T>)}
+        </Card>
+      ) : null}
+      <Card testID="pro-details-card" style={{ gap: 4 }}>
+        <T weight="800">Verification details</T>
+        <T size={13}>Home: {p.home?.subdistrict_name} {p.home?.sub_label}, {p.home?.district_name}</T>
+        <T size={13}>Languages: {(p.languages ?? []).join(", ")}</T>
+        <T size={13}>Licence: {p.licence_no} · valid until {p.licence_expiry}</T>
+        <T size={13}>Services: {(p.services ?? []).map((s: string) => (s === "book" ? "Book a Driver" : "Rent a Driver")).join(" + ")}</T>
+      </Card>
+      {fix ? <Btn testID="pro-fix-button" icon="create-outline" label="Fix and resubmit" onPress={onFix} /> : null}
+      {p.status === "approved" ? <Btn testID="pro-open-dashboard" label="Open Local Driver Dashboard" onPress={() => router.replace("/hire/driver")} /> : null}
+    </View>
+  );
+}
+
+export default function LocalDriverRegister() {
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
-  const { t } = useI18n();
-  const { user } = useAuth();
-  const toast = useToast();
   const router = useRouter();
+  const toast = useToast();
+  const { view } = useLocalSearchParams<{ view?: string }>();
   const [me, setMe] = useState<any>(null);
-  const [city, setCity] = useState<Loc | null>(null);
-  const [f, setF] = useState({ areas: "", licence_no: "", licence_expiry: "", bio: user?.bio ?? "", rate_hourly: "", rate_half_day: "", rate_full_day: "", rate_one_way: "" });
-  const [langs, setLangs] = useState<string[]>([]);
-  const [vt, setVt] = useState<string[]>(["sedan"]);
-  const [days, setDays] = useState<number[]>([0, 1, 2, 3, 4, 5]);
-  const [exp, setExp] = useState(3);
-  const [from, setFrom] = useState("08:00");
-  const [to, setTo] = useState("20:00");
-  const [availability, setAvailability] = useState<AvailabilitySchedule[]>([]);
   const [err, setErr] = useState("");
+  const [editing, setEditing] = useState(false);
+  const [step, setStep] = useState(0);
+  const [stepErr, setStepErr] = useState("");
   const [busy, setBusy] = useState(false);
-  const [home, setHome] = useState<HomeLoc>({ taluk: null, city: "", city_code: null, village_code: null, village_name: null });
-  const [docs, setDocs] = useState<{ files: DocFile[]; kinds: DocKind[] } | null>(null);
-  const [avail, setAvail] = useState<boolean | null>(null);
-  const [hasVehicle, setHasVehicle] = useState(false);
-  const services = hasVehicle ? ["rent", "book"] : ["rent"];
-  const [acceptOutstationTrips, setAcceptOutstationTrips] = useState(false);
-  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
-  const [carpoolVehicles, setCarpoolVehicles] = useState<Vehicle[]>([]);
-  const [aadhaarFront, setAadhaarFront] = useState<DocFile | null>(null);
-  const set = (k: keyof typeof f) => (v: string) => setF({ ...f, [k]: k.startsWith("rate") ? v.replace(/\D/g, "") : v });
-  const toggle = <X,>(arr: X[], x: X, fn: (a: X[]) => void) => fn(arr.includes(x) ? arr.filter((y) => y !== x) : [...arr, x]);
-  const load = useCallback(() => {
-    api("/driver/profile").then((r) => {
-      const files: DocFile[] = r.files ?? [];
-      setDocs({ files, kinds: (r.kinds ?? []).filter((k: DocKind) => k.kind.startsWith("licence") || k.kind === "id_proof") });
-      setAadhaarFront(files.find((x) => x.kind === "id_proof") ?? null);
-      // Reuse vehicles already registered for Carpool
-      setCarpoolVehicles((r.vehicles ?? []).filter((v: any) => v.reg_no && !String(v.reg_no).includes("•")).map((v: any) => ({ name: `${v.make} ${v.model}`.trim(), reg_no: String(v.reg_no).replace(/[\s-]/g, "").toUpperCase(), category: v.vtype ?? "sedan", seats: v.seats ?? 4, day_rate: 0, available: true })));
-    }).catch(() => {});
-    return api("/pro/me").then((r) => { setMe(r); setAvail(r.profile ? r.profile.available !== false : null); }).catch((e) => setErr(e.message));
-  }, []);
+  const [d, setD] = useState<Draft>({ place: null, taluk: null, languages: [], licence_no: "", licence_expiry: "", services: ["rent"], vehicle_ids: [] });
+  const set = (p: Partial<Draft>) => setD((x) => ({ ...x, ...p }));
+
+  const load = useCallback(async () => {
+    try {
+      const r = await api("/pro/me");
+      setMe(r);
+      const p = r.profile;
+      if (p?.status === "approved" && view !== "details") return router.replace("/hire/driver");
+      if (p) {
+        setD((x) => ({ ...x, languages: x.languages.length ? x.languages : p.languages ?? [], services: p.services ?? ["rent"], vehicle_ids: x.vehicle_ids.length ? x.vehicle_ids : p.vehicle_ids ?? [],
+          licence_expiry: x.licence_expiry || p.licence_expiry || "",
+          taluk: x.taluk ?? (p.home ? { code: p.home.subdistrict_code, name: p.home.subdistrict_name, district_code: p.home.district_code, district_name: p.home.district_name,
+            state_code: p.home.state_code, state_name: p.home.state_name, sub_label: p.home.sub_label } : null) }));
+      }
+    } catch (e: any) { setErr(e.message); }
+  }, [router, view]);
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
-  if (!me) return <View style={{ flex: 1 }}><Header title={t("v2.local_register")} /><Loading /></View>;
-  const status = me.profile?.status;
-  const locked = status === "under_review" || status === "approved";
-  const dayNames = t("v2.days").split(",");
+  if (err) return <View style={{ flex: 1 }}><Header title="Local Driver" /><ErrorBox message={err} onRetry={load} /></View>;
+  if (!me) return <View style={{ flex: 1 }}><Header title="Local Driver" /><Loading /></View>;
+  const items: string[] = me.profile?.resubmit_items ?? [];
+  const showStatus = me.profile && !editing && !(me.profile.status === "none");
 
-  const submit = async () => {
-    setErr("");
-    if (!city) return setErr("Choose your main city on the map search");
-    if (!home.taluk) return setErr("Choose your home State, District and Taluk / Sub-district");
-    if (home.city.trim().length < 2) return setErr("Choose or type your City / Town");
-    if (!langs.length) return setErr(`${t("v2.languages")} *`);
-    if (!f.rate_hourly || !f.rate_half_day || !f.rate_full_day) return setErr(`${t("v2.rate_hourly")} *`);
-    if (hasVehicle && !vehicles.length) return setErr("Add at least one vehicle, or choose NO for 'Do you have a vehicle?'");
-    if (!availability.length) return setErr("Add at least one availability schedule");
+  const check = () => {
+    if (step === 0) {
+      if (!d.taluk) return "Choose your home location (taluk)";
+      if (!d.languages.length) return "Select at least one language";
+    }
+    if (step === 1) {
+      if (me.missing.length) return "Upload your licence front, licence back and Aadhaar front";
+      if (!me.licence_on_file || items.includes("licence_no")) {
+        if (d.licence_no.replace(/\s/g, "").length < 8 && !me.profile?.licence_no) return "Enter your driving licence number";
+        if (!/^\d{2}-\d{2}-\d{4}$/.test(d.licence_expiry)) return "Enter licence expiry as DD-MM-YYYY";
+      }
+    }
+    if (step === 2) {
+      if (!d.services.length) return "Choose at least one service";
+      if (d.services.includes("book") && !d.vehicle_ids.length) return "Add or select at least one vehicle for Book a Driver";
+    }
+    return "";
+  };
+  const next = async () => {
+    const e = check();
+    setStepErr(e);
+    if (e) return;
+    if (step < 2) return setStep(step + 1);
     setBusy(true);
     try {
-      const availabilityData = toAvailabilityPayload(availability);
-
-      const r = await api("/pro/register", { body: { services, acceptOutstationTrips, vehicles: services.includes("book") ? vehicles : [], city: locPayload(city), home: { subdistrict_code: home.taluk.code, city: home.city.trim(), city_code: home.city_code, village_code: home.village_code }, areas: f.areas.split(",").map((x) => x.trim()).filter(Boolean), languages: langs, experience_years: exp, licence_no: f.licence_no.replace(/\s/g, ""), licence_expiry: f.licence_expiry, vehicle_types: vt, availability: availabilityData, bio: f.bio.trim(), rate_hourly: Number(f.rate_hourly), rate_half_day: Number(f.rate_half_day), rate_full_day: Number(f.rate_full_day), rate_one_way: f.rate_one_way ? Number(f.rate_one_way) : null, aadhaar_front: aadhaarFront?.file_id } });
-      toast(t(`verify.status.${r.status}`));
+      const r = await api("/pro/register", { body: { home: { subdistrict_code: d.taluk!.code, city: d.place?.name ?? "", place: d.place ? { loc_id: d.place.loc_id, name: d.place.name, lat: d.place.lat, lng: d.place.lng, district: d.place.district ?? "", state: d.place.state ?? "", type: "place" } : null },
+        languages: d.languages, licence_no: d.licence_no.trim() || null, licence_expiry: d.licence_expiry || null, services: d.services, vehicle_ids: d.services.includes("book") ? d.vehicle_ids : [] } });
+      toast(r.status === "approved" ? "Approved — welcome!" : "Submitted for verification");
+      setEditing(false);
+      setStep(0);
       await load();
-      router.replace("/hire/driver");
-    } catch (e: any) {
-      setErr(e.message);
-    }
+    } catch (e: any) { setStepErr(e.message); }
     setBusy(false);
   };
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.surface }}>
-      <Header title={t("v2.local_register")} />
-      <KeyboardAwareScrollView bottomOffset={24} keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: space.lg, gap: space.md, paddingBottom: insets.bottom + space.xl }}>
-        <Card style={{ gap: space.xs }}>
-          <T weight="800">{t("v2.local_status")}</T>
-          <Badge testID="pro-status" label={t(`verify.status.${status ?? "not_submitted"}`)} tone={statusTone(status ?? "")} />
-          <T size={12} color={colors.muted}>{user?.name} · {user?.email ?? (user?.phone_e164 ? `+${user.phone_e164}` : "")} · {user?.phone || "—"}</T>
-          {me.profile?.home ? <T testID="pro-home-taluk" size={13} weight="700">Home: {[me.profile.home.village_name, me.profile.home.city, `${me.profile.home.subdistrict_name} ${me.profile.home.sub_label}`, me.profile.home.district_name, me.profile.home.state_name].filter(Boolean).join(", ")}</T> : null}
-          {status === "approved" && avail !== null ? (
-            <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm, marginTop: space.xs }}>
-              <T weight="600" style={{ flex: 1 }}>{avail ? "Available for local hire requests" : "Not taking requests"}</T>
-              <Btn small testID="pro-availability-toggle" variant={avail ? "outline" : "primary"} label={avail ? "Go unavailable" : "Go available"}
-                onPress={async () => { try { const r = await api("/pro/availability", { method: "PUT", body: { available: !avail } }); setAvail(r.available !== false); } catch (e: any) { setErr(e.message); } }} />
-            </View>
-          ) : null}
-          {status && !me.profile?.home ? (
-            <View style={{ gap: space.xs, marginTop: space.sm }}>
-              <T size={12} color={colors.brandTertiary}>Add your home taluk once to receive local hire requests.</T>
-              <TalukPicker testPrefix="pro-home-legacy" withCity value={home} onChange={setHome} />
-              <Btn small testID="pro-home-save" label="Save home taluk" disabled={!home.taluk || home.city.trim().length < 2}
-                onPress={async () => { try { await api("/pro/home", { method: "PUT", body: { subdistrict_code: home.taluk!.code, city: home.city.trim(), city_code: home.city_code, village_code: home.village_code } }); toast("Home taluk saved"); load(); } catch (e: any) { setErr(e.message); } }} />
-            </View>
-          ) : null}
-        </Card>
-        <T weight="800">{t("verify.photos")}</T>
-        {docs ? <DocPhotos files={docs.files} kinds={docs.kinds} editable={!locked && user?.driver_status !== "under_review" && user?.driver_status !== "approved"} onChanged={load} /> : null}
-        {locked ? (
-          <Card style={{ gap: 4 }}>
-            <T weight="700">{me.profile.city?.name} · {t("v2.years", { n: me.profile.experience_years })}</T>
-            <T size={12} color={colors.muted}>{me.profile.languages.join(", ")} · ₹{me.profile.rate_hourly}/h</T>
-            <Btn small testID="pro-open-dashboard" icon="speedometer-outline" label="Open Local Driver dashboard" onPress={() => router.push("/hire/driver")} />
-          </Card>
-        ) : (
+      <Header title="Local Driver" />
+      <KeyboardAwareScrollView bottomOffset={24} contentContainerStyle={{ padding: space.lg, gap: space.lg, paddingBottom: insets.bottom + space.xxl }}>
+        {showStatus ? <StatusView me={me} onFix={() => { setEditing(true); setStep(0); }} /> : (
           <>
-            <Card style={{ paddingVertical: space.xs, gap: 0 }}>
-              <T weight="800" style={{ paddingTop: space.sm }}>Home location</T>
-              <T size={12} color={colors.muted}>Select your home location to receive local hire requests in your area</T>
-              <TalukPicker testPrefix="pro-home" withCity value={home} onChange={setHome} />
-            </Card>
-            <Card style={{ gap: space.sm }}>
-              <T weight="800">Outstation Trip Preference</T>
-              <Toggle testID="pro-outstation" label="Accept Outstation Trips" value={acceptOutstationTrips} onChange={setAcceptOutstationTrips} />
-              <T size={12} color={colors.muted}>Enable this option to receive eligible booking requests outside your regular local service area.</T>
-            </Card>
-            <Card testID="pro-has-vehicle-card" style={{ gap: space.sm }}>
-              <T weight="800">Rent a Driver & Book a Driver · one registration</T>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: space.md }}>
-                <T weight="700" style={{ flex: 1 }}>Do you have a vehicle?</T>
-                <YesNoSwipe testID="pro-has-vehicle" value={hasVehicle} onChange={setHasVehicle} />
-              </View>
-              <T testID="pro-has-vehicle-note" size={12} color={colors.muted}>
-                {hasVehicle ? "You'll get Rent a Driver (customer's car) and Book a Driver (your vehicle) requests." : "You'll get Rent a Driver requests: you drive the customer's own car."}
-              </T>
-            </Card>
-            {hasVehicle ? (
-              <Card style={{ gap: space.sm }}>
-                <T weight="800">Add vehicle</T>
-                <T size={12} color={colors.muted}>Your own vehicle or one you are authorised to provide.</T>
-                {carpoolVehicles.filter((c) => !vehicles.some((v) => v.reg_no === c.reg_no)).map((c) => (
-                  <Btn key={c.reg_no} small variant="outline" icon="add" testID={`pro-use-carpool-${c.reg_no}`} label={`Use my Carpool vehicle: ${c.name} (${c.reg_no})`} onPress={() => setVehicles([...vehicles, c])} />
-                ))}
-                <VehiclesEditor testPrefix="pro-veh" vehicles={vehicles} onChange={setVehicles} />
-              </Card>
-            ) : null}
-            <Card style={{ paddingVertical: space.xs }}><LocationField testID="pro-city-field" label="Main city (map location)" value={city} onChange={setCity} icon="business-outline" /></Card>
-            <Field testID="pro-areas-input" label={t("v2.areas")} value={f.areas} onChangeText={set("areas")} />
-            <LanguagePicker testPrefix="pro-lang" value={langs} onChange={setLangs} />
-            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-              <T weight="600">{t("v2.experience")}: {t("v2.years", { n: exp })}</T>
-              <Stepper testID="pro-exp" value={exp} max={50} onChange={setExp} />
+            <Progress step={step} labels={LABELS} />
+            <T testID="pro-step-title" size={24} weight="800">{LABELS[step]}</T>
+            {step === 0 ? <StepBasic me={me} d={d} set={set} items={items} /> : step === 1 ? <StepDocs me={me} d={d} set={set} items={items} reload={load} /> : <StepServices me={me} d={d} set={set} items={items} reload={load} />}
+            {stepErr ? <T testID="pro-error" color={colors.error}>{stepErr}</T> : null}
+            <View style={{ flexDirection: "row", gap: space.sm }}>
+              {step > 0 ? <Btn testID="pro-back-button" variant="outline" icon="arrow-back" label="Back" onPress={() => { setStepErr(""); setStep(step - 1); }} /> : null}
+              <Btn style={{ flex: 1 }} testID={step === 2 ? "pro-submit-button" : "pro-next-button"} icon={step === 2 ? "shield-checkmark-outline" : "arrow-forward"}
+                label={step === 2 ? "Submit for Verification" : "Continue"} loading={busy} onPress={next} />
             </View>
-            <Field testID="pro-licence-input" label={t("verify.licence")} value={f.licence_no} onChangeText={(v) => set("licence_no")(v.toUpperCase())} autoCapitalize="characters" />
-            <Field testID="pro-licence-exp-input" label={t("verify.licence_exp")} value={f.licence_expiry} onChangeText={set("licence_expiry")} placeholder="31-12-2035" maxLength={10} />
-            <T size={13} weight="600" color={colors.muted}>{t("v2.vehicle_types")}</T>
-            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.sm }}>{VTYPES.map((v) => <Chip key={v} testID={`pro-vt-${v}`} label={v.toUpperCase()} active={vt.includes(v)} onPress={() => toggle(vt, v, setVt)} />)}</View>
-            <T size={13} weight="600" color={colors.muted}>{t("v2.availability")}</T>
-            <AvailabilityPicker availability={availability} onChange={setAvailability} />
-            <Field testID="pro-rate-hourly" label={t("v2.rate_hourly")} value={f.rate_hourly} onChangeText={set("rate_hourly")} keyboardType="number-pad" />
-            <Field testID="pro-rate-half" label={t("v2.rate_half")} value={f.rate_half_day} onChangeText={set("rate_half_day")} keyboardType="number-pad" />
-            <Field testID="pro-rate-full" label={t("v2.rate_full")} value={f.rate_full_day} onChangeText={set("rate_full_day")} keyboardType="number-pad" />
-            <Field testID="pro-rate-oneway" label={t("v2.rate_one_way")} value={f.rate_one_way} onChangeText={set("rate_one_way")} keyboardType="number-pad" />
-            {err ? <T testID="pro-error" color={colors.error}>{err}</T> : null}
-            <Btn testID="pro-submit-button" label={t("verify.submit")} onPress={submit} loading={busy} />
           </>
         )}
       </KeyboardAwareScrollView>

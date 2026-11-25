@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { api, publicPhoto } from "@/src/api";
 import { confirmAction, feeNote, SERVICE_LABEL, TYPE_LABEL } from "@/src/components/LocalDriverParts";
+import { LiveLocation, TripTimeline } from "@/src/components/localdriver/LiveTrip";
 import { useToast } from "@/src/components/toast";
 import { Avatar, Badge, Btn, Card, ErrorBox, Field, Header, Loading, T, space, statusTone } from "@/src/components/ui";
 import { inr, useI18n } from "@/src/i18n";
@@ -55,7 +56,7 @@ export default function HireBooking() {
 
   const act = async (a: string, path = `/hire/bookings/${id}/${a}`, body: any = {}) => {
     setBusy(a);
-    try { await api(path, { body }); toast(a === "accept" ? t("status.confirmed") : a === "rev" ? t("booking.reviewed") : a === "arriving" ? "Customer notified you're arriving" : a === "fav" ? "Favourites updated" : a === "report" ? "Report sent to Travoo support" : t(`status.${({ reject: "rejected", start: "started", complete: "completed", cancel: "cancelled" } as any)[a] ?? "confirmed"}`)); await load(); } catch (e: any) { toast(e.message, "error"); }
+    try { await api(path, { body }); toast(a === "accept" ? t("status.confirmed") : a === "rev" ? t("booking.reviewed") : a === "arriving" ? "Customer notified you're arriving" : a === "arrived" ? "Customer notified you've arrived" : a === "fav" ? "Favourites updated" : a === "report" ? "Report sent to Travoo support" : t(`status.${({ reject: "rejected", start: "started", complete: "completed", cancel: "cancelled" } as any)[a] ?? "confirmed"}`)); await load(); } catch (e: any) { toast(e.message, "error"); }
     setBusy("");
   };
   const other = h.is_driver ? h.customer : h.driver;
@@ -71,6 +72,7 @@ export default function HireBooking() {
           </View>
           <Badge icon="key" label={`${SERVICE_LABEL[h.service ?? "rent"].toUpperCase()} · ${TYPE_LABEL[h.service_type] ?? h.service_type}${h.days > 1 ? ` · ${h.days} days` : ""}`} tone="info" />
           <T weight="700">{fmtDate(h.date, { weekday: "long", day: "numeric", month: "long" })} · {h.time} · {h.hours}h</T>
+          {h.return_date ? <T testID="hire-booking-return" size={13}>Return: {fmtDate(h.return_date, { weekday: "short", day: "numeric", month: "short" })} · {h.return_time}</T> : null}
           <T size={13}>Pickup: {h.pickup}{h.pickup_taluk ? ` (${h.pickup_taluk.name})` : ""}</T>
           {h.destination ? <T size={13}>Destination: {h.destination}{h.dest_taluk ? ` (${h.dest_taluk.name} ${h.dest_taluk.sub_label ?? ""})` : ""}</T> : null}
           {h.vehicle ? <T testID="hire-booking-vehicle" size={13}>Vehicle provided: {h.vehicle.name} · {h.vehicle.reg_no} · {h.vehicle.category.toUpperCase()} · {h.vehicle.seats} seats</T>
@@ -83,6 +85,7 @@ export default function HireBooking() {
           </View>
           <T size={12} color={colors.muted}>{feeNote(h.service)}</T>
         </Card>
+        {["confirmed", "started", "completed"].includes(h.status) ? <Card style={{ gap: space.md }}><TripTimeline h={h} /><LiveLocation h={h} /></Card> : null}
         <Contact label={h.is_driver ? t("v2.customer") : t("trip.driver")} u={other} photo={!h.is_driver && h.driver.has_photo ? publicPhoto(h.driver_id) : undefined} bid={h.booking_id} status={h.status} />
         {h.is_driver && h.status === "pending" ? (
           <View style={{ flexDirection: "row", gap: space.sm }}>
@@ -90,8 +93,9 @@ export default function HireBooking() {
             <Btn style={{ flex: 1 }} variant="outline" testID="hire-reject-button" label={t("trip.reject")} loading={busy === "reject"} onPress={() => act("reject")} />
           </View>
         ) : null}
-        {h.is_driver && h.status === "confirmed" && !h.arriving_at ? <Btn testID="hire-arriving-button" variant="outline" icon="navigate-outline" label="I am arriving" loading={busy === "arriving"} onPress={() => act("arriving")} /> : null}
-        {h.is_driver && h.status === "confirmed" ? <Btn testID="hire-start-button" icon="play" label={t("trip.start")} loading={busy === "start"} onPress={() => act("start")} /> : null}
+        {h.is_driver && h.status === "confirmed" && !h.arriving_at ? <Btn testID="hire-arriving-button" icon="navigate-outline" label="I am arriving" loading={busy === "arriving"} onPress={() => act("arriving")} /> : null}
+        {h.is_driver && h.status === "confirmed" && h.arriving_at && !h.arrived_at ? <Btn testID="hire-arrived-button" icon="location" label="Arrived at pickup" loading={busy === "arrived"} onPress={() => act("arrived")} /> : null}
+        {h.is_driver && h.status === "confirmed" && h.arriving_at ? <Btn testID="hire-start-button" variant={h.arrived_at ? "primary" : "outline"} icon="play" label={t("trip.start")} loading={busy === "start"} onPress={() => act("start")} /> : null}
         {h.is_driver && h.status === "started" ? <Btn testID="hire-complete-button" variant="navy" icon="flag" label={t("trip.complete")} loading={busy === "complete"} onPress={() => act("complete")} /> : null}
         {["pending", "confirmed"].includes(h.status) ? <Btn testID="hire-cancel-button" variant="ghost" label={t("booking.cancel")} onPress={() => confirmAction("Cancel this booking?", "The other person will be notified.", () => act("cancel", undefined, { reason: "Cancelled" }))} /> : null}
         {h.status === "completed" && !h.my_reviews.length ? (

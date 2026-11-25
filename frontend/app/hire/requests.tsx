@@ -58,8 +58,13 @@ export default function HireRequests() {
               <T size={12} color={colors.muted}>{when(r)}{!r.dest_taluk && r.pickup_taluk ? ` · ${r.pickup_taluk.name} ${r.pickup_taluk.sub_label}, ${r.pickup_taluk.district_name}` : ""}</T>
               {r.service === "book" ? <T size={12} color={colors.muted}>Vehicle needed: {(r.vehicle_type || "any").toUpperCase()} for {r.passengers}</T> : r.vehicle_desc ? <T size={12} color={colors.muted}>Customer car: {r.vehicle_desc}</T> : null}
               {r.notes ? <T size={12} color={colors.muted}>Notes: {r.notes}</T> : null}
+              {r.service_type === "round_trip" && r.return_date ? <T size={12} color={colors.muted}>Round trip · return {fmtDate(r.return_date)} · {r.return_time}</T> : <T size={12} color={colors.muted}>{r.service_type === "one_way" ? "One-way" : TYPE_LABEL[r.service_type] ?? r.service_type} · about {r.hours} h</T>}
               {tab === "inbox" ? (
                 <>
+                  <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                    <T size={12} color={colors.muted}>{r.dispatch?.km_to_pickup != null ? `${r.dispatch.km_to_pickup} km to pickup` : ""}{r.dispatch?.vehicle ? ` · your ${r.dispatch.vehicle.name}` : ""}</T>
+                    {r.dispatch?.estimate ? <T testID={`hire-request-earning-${r.request_id}`} size={18} weight="800" color={colors.success}>₹{r.dispatch.estimate}</T> : null}
+                  </View>
                   {r.dispatch?.group === "local" ? <Badge label="In your service area" tone="success" /> : r.dispatch?.group === "pickup_area" ? <Badge label="Outstation · from your area" tone="accent" /> : <Badge label="Nearby area request" tone="info" />}
                   {r.status === "open" && !r.dispatch?.response ? (
                     <View style={{ flexDirection: "row", gap: space.sm, marginTop: space.xs }}>

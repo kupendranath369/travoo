@@ -1,183 +1,126 @@
+import Ionicons from "@react-native-vector-icons/ionicons";
 import { useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useState } from "react";
-import { RefreshControl, ScrollView, View } from "react-native";
-import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
+import { Pressable, RefreshControl, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { api } from "@/src/api";
-import { DateField } from "@/src/components/Calendar";
-import { TimeChips } from "@/src/components/DateChips";
-import { AvailabilityPicker, fromAvailabilityRecords, toAvailabilityPayload } from "@/src/components/AvailabilityPicker";
-import { SERVICE_LABEL, ServicesPicker, STATUS_LABEL, Toggle, TYPE_LABEL, Vehicle, VehiclesEditor } from "@/src/components/LocalDriverParts";
+import { api, pictureUrl } from "@/src/api";
+import { float, ServiceCard, Switch, Tile } from "@/src/components/localdriver/parts";
 import { useToast } from "@/src/components/toast";
-import { Badge, Btn, Card, Chip, Empty, ErrorBox, Field, Header, Loading, T, space, statusTone } from "@/src/components/ui";
+import { Avatar, Badge, ErrorBox, Header, Loading, T, radius, space } from "@/src/components/ui";
 import { inr, useI18n } from "@/src/i18n";
 import { useTheme } from "@/src/theme";
 
-type Tab = "requests" | "settings" | "vehicles" | "availability";
+function OnlineToggle({ online, busy, onChange, upcoming }: { online: boolean; busy: boolean; onChange: (v: boolean) => void; upcoming: number }) {
+  const { colors } = useTheme();
+  return (
+    <Pressable testID="dash-online-toggle" role="switch" aria-checked={online} disabled={busy} onPress={() => onChange(!online)}
+      style={({ pressed }) => [float, { flexDirection: "row", alignItems: "center", gap: space.md, padding: space.lg, borderRadius: radius.lg,
+        backgroundColor: online ? colors.success : colors.brandTertiary, opacity: busy ? 0.7 : 1, transform: [{ scale: pressed ? 0.98 : 1 }] }]}>
+      <View style={{ width: 52, height: 52, borderRadius: 26, backgroundColor: "rgba(255,255,255,0.22)", alignItems: "center", justifyContent: "center" }}>
+        <Ionicons name="power" size={28} color="#fff" />
+      </View>
+      <View style={{ flex: 1, gap: 2 }}>
+        <T testID="dash-online-label" size={20} weight="800" color="#fff">{online ? "You're Online" : "Go Online"}</T>
+        <T size={12} color="#fff" style={{ opacity: 0.9 }}>
+          {online ? "Receiving immediate booking requests · tap to go offline" : `Offline · not receiving immediate requests${upcoming ? ` · ${upcoming} scheduled period${upcoming > 1 ? "s" : ""} still active` : ""}`}
+        </T>
+      </View>
+    </Pressable>
+  );
+}
 
-/** Single Local Driver dashboard: status, services, service areas, availability, vehicles, bookings, earnings. */
 export default function LocalDriverDashboard() {
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
-  const { t, fmtDate } = useI18n();
+  const { fmtDate } = useI18n();
   const router = useRouter();
   const toast = useToast();
   const [d, setD] = useState<any>(null);
   const [err, setErr] = useState("");
-  const [tab, setTab] = useState<Tab>("requests");
-  const [saving, setSaving] = useState("");
-  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
-  const [days, setDays] = useState<number[]>([]);
-  const [from, setFrom] = useState("08:00");
-  const [to, setTo] = useState("20:00");
-  const [blocked, setBlocked] = useState<string[]>([]);
-  const [blockPick, setBlockPick] = useState<string | null>(null);
-  const [availability, setAvailability] = useState<any[]>([]);
-
+  const [busy, setBusy] = useState("");
   const load = useCallback(() => api("/pro/dashboard").then((r) => {
+    if (!r.profile || r.profile.status !== "approved") return router.replace("/hire/register");
     setD(r);
-    const p = r.profile;
-    if (p) {
-      setVehicles(p.vehicles ?? []);
-      setDays(p.days ?? []); setFrom(p.start_time ?? "08:00"); setTo(p.end_time ?? "20:00"); setBlocked(p.blocked_dates ?? []);
-      setAvailability(fromAvailabilityRecords(p.availability));
-    }
-  }).catch((e) => setErr(e.message)), []);
+  }).catch((e) => setErr(e.message)), [router]);
   useFocusEffect(useCallback(() => { load(); }, [load]));
-
   if (err) return <View style={{ flex: 1 }}><Header title="Local Driver" /><ErrorBox message={err} onRetry={load} /></View>;
   if (!d) return <View style={{ flex: 1 }}><Header title="Local Driver" /><Loading /></View>;
+
   const p = d.profile;
-  if (!p) {
-    return (
-      <View style={{ flex: 1, backgroundColor: colors.surface }}>
-        <Header title="Local Driver" />
-        <Empty icon="briefcase-outline" title="Become a Travoo Local Driver" body="Register once and offer Rent a Driver, Book a Driver, or both." action={<Btn testID="dash-register" label="Register as Local Driver" onPress={() => router.push("/hire/register")} />} />
-      </View>
-    );
-  }
-
-  const save = async (key: string, body: any, path = "/pro/settings") => {
-    setSaving(key);
-    try { await api(path, { method: "PUT", body }); toast("Saved"); await load(); } catch (e: any) { toast(e.message, "error"); await load(); }
-    setSaving("");
+  const save = async (key: string, body: any, msg: string) => {
+    setBusy(key);
+    try { const r = await api("/pro/settings", { method: "PUT", body }); setD((x: any) => ({ ...x, ...r })); toast(msg); } catch (e: any) { toast(e.message, "error"); }
+    setBusy("");
   };
-  const status = p.availability_status ?? "available";
-  const services: string[] = p.services ?? ["rent"];
-  const dayNames = t("v2.days").split(",");
-
-  const bookingRow = (h: any) => (
-    <Card key={h.booking_id} testID={`dash-booking-${h.booking_id}`} onPress={() => router.push(`/hire/${h.booking_id}`)} style={{ gap: 4 }}>
-      <View style={{ flexDirection: "row", gap: space.sm, alignItems: "center" }}>
-        <T weight="800" style={{ flex: 1 }} numberOfLines={1}>{h.route}</T>
-        <Badge label={t(`status.${h.status}`)} tone={statusTone(h.status)} />
-      </View>
-      <T size={12} color={colors.muted}>{SERVICE_LABEL[h.service ?? "rent"]} · {TYPE_LABEL[h.service_type] ?? h.service_type} · {fmtDate(h.date)} {h.time}</T>
-      <T size={13} weight="700" color={colors.brandPrimary}>{inr(h.service_fee)}</T>
-    </Card>
-  );
+  const svc = (s: string) => {
+    const on = p.services.includes(s);
+    if (on && p.services.length === 1) return toast("Keep at least one service on. Go offline to pause all requests.", "error");
+    save(`svc-${s}`, { services: on ? p.services.filter((x: string) => x !== s) : [...p.services, s] }, on ? "Service paused" : "Service enabled");
+  };
+  const nowIso = new Date().toISOString();
+  const upcomingPeriods = (p.availability ?? []).filter((a: any) => new Date(a.to).toISOString() > nowIso).length;
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.surface }}>
-      <Header title="Local Driver dashboard" right={<Btn small variant="ghost" icon="person-outline" label="" testID="dash-profile-link" onPress={() => router.push("/hire/register")} />} />
-      <KeyboardAwareScrollView bottomOffset={24} keyboardShouldPersistTaps="handled" refreshControl={<RefreshControl refreshing={false} onRefresh={load} />}
-        contentContainerStyle={{ padding: space.lg, gap: space.md, paddingBottom: insets.bottom + space.xl }}>
-        <Card style={{ gap: space.sm }}>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
-            <T weight="800" size={16} style={{ flex: 1 }}>{p.name}</T>
-            <Badge testID="dash-verify-status" label={t(`verify.status.${p.status}`)} tone={statusTone(p.status)} />
+      <Header title="Local Driver" />
+      <ScrollView refreshControl={<RefreshControl refreshing={false} onRefresh={load} />} contentContainerStyle={{ padding: space.lg, gap: space.lg, paddingBottom: insets.bottom + space.xxl }}>
+        <View testID="dash-header" style={{ flexDirection: "row", alignItems: "center", gap: space.md }}>
+          <Avatar name={p.name} uri={pictureUrl(d.photos?.profile)} size={56} />
+          <View style={{ flex: 1, gap: 2 }}>
+            <T testID="dash-name" size={18} weight="800">{p.name}</T>
+            <T testID="dash-taluk" size={12} color={colors.muted}>{p.home?.subdistrict_name} {p.home?.sub_label}, {p.home?.district_name}</T>
+            <View style={{ flexDirection: "row", gap: space.xs, flexWrap: "wrap" }}>
+              <Badge testID="dash-verified-badge" icon="shield-checkmark" label="Verified driver" tone="success" />
+              <Badge testID="dash-status-badge" label={p.online ? "Online" : "Offline"} tone={p.online ? "success" : "muted"} />
+            </View>
           </View>
-          <T size={12} color={colors.muted}>Home: {[p.home?.city, `${p.home?.subdistrict_name ?? ""} ${p.home?.sub_label ?? ""}`, p.home?.district_name, p.home?.state_name].filter(Boolean).join(", ")}</T>
-          <View style={{ flexDirection: "row", gap: space.sm, flexWrap: "wrap" }}>
-            {services.map((s) => <Badge key={s} testID={`dash-service-${s}`} label={SERVICE_LABEL[s]} tone="info" />)}
+        </View>
+
+        <OnlineToggle online={p.online} busy={busy === "online"} upcoming={upcomingPeriods}
+          onChange={(v) => save("online", { availability_status: v ? "available" : "offline" }, v ? "You're online" : "You're offline — confirmed bookings are not affected")} />
+
+        <View style={{ gap: space.sm }}>
+          <T weight="800">My services</T>
+          <View style={{ flexDirection: "row", gap: space.md }}>
+            <ServiceCard testID="dash-service-rent" icon="key-outline" title="Rent a Driver" desc="Customer's vehicle" active={p.services.includes("rent")} onPress={() => svc("rent")} />
+            <ServiceCard testID="dash-service-book" icon="car-sport-outline" title="Book a Driver" desc="Your vehicle" active={p.services.includes("book")} disabled={!d.book_ready && !p.services.includes("book")}
+              note={d.book_ready ? undefined : "Needs an approved vehicle"} onPress={() => svc("book")} />
           </View>
-          <T size={13} weight="600">Availability</T>
-          <View style={{ flexDirection: "row", gap: space.sm }}>
-            {(["available", "busy", "offline"] as const).map((s) => (
-              <Chip key={s} testID={`dash-status-${s}`} label={STATUS_LABEL[s]} active={status === s} onPress={() => status !== s && save(`st-${s}`, { availability_status: s })} />
+        </View>
+
+        <View style={[float, { flexDirection: "row", alignItems: "center", gap: space.md, padding: space.md, borderRadius: radius.lg, backgroundColor: colors.surfaceSecondary }]}>
+          <Ionicons name="map-outline" size={22} color={colors.brandTertiary} />
+          <View style={{ flex: 1 }}>
+            <T weight="700">Accept outstation trips</T>
+            <T size={12} color={colors.muted}>{p.acceptOutstationTrips ? "On · trips outside your home taluk" : "Off · local trips only"}</T>
+          </View>
+          <Switch testID="dash-outstation-toggle" value={!!p.acceptOutstationTrips} disabled={busy === "out"} onChange={(v) => save("out", { acceptOutstationTrips: v }, v ? "Outstation trips on" : "Local trips only")} />
+        </View>
+
+        <View style={{ flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", rowGap: space.md }}>
+          <Tile testID="dash-tile-availability" icon="calendar-outline" label="Schedule Availability" onPress={() => router.push("/hire/availability")} badge={upcomingPeriods || undefined} />
+          <Tile testID="dash-tile-requests" icon="notifications-outline" label="Booking Requests" onPress={() => router.push("/hire/requests")} badge={d.open_requests || undefined} />
+          <Tile testID="dash-tile-vehicles" icon="car-outline" label="My Vehicles" onPress={() => router.push("/hire/vehicles")} />
+          <Tile testID="dash-tile-earnings" icon="wallet-outline" label="My Earnings" onPress={() => router.push("/earnings")} />
+        </View>
+        <Pressable testID="dash-verification-details" onPress={() => router.push("/hire/register?view=details")} style={{ alignSelf: "center", padding: space.sm }}>
+          <T size={13} weight="700" color={colors.brandPrimary}>Verification details</T>
+        </Pressable>
+
+        {d.upcoming.length ? (
+          <View style={{ gap: space.sm }}>
+            <T weight="800">Upcoming trips</T>
+            {d.upcoming.map((h: any) => (
+              <Pressable key={h.booking_id} testID={`dash-upcoming-${h.booking_id}`} onPress={() => router.push(`/hire/${h.booking_id}`)}
+                style={[float, { padding: space.md, borderRadius: radius.lg, backgroundColor: colors.surfaceSecondary, gap: 2 }]}>
+                <T weight="700">{h.route}</T>
+                <T size={12} color={colors.muted}>{fmtDate(h.date)} · {h.time} · {h.service === "book" ? "Book a Driver" : "Rent a Driver"} · {inr(h.service_fee)}</T>
+              </Pressable>
             ))}
           </View>
-          {status !== "available" ? <T size={12} color={colors.brandTertiary}>You will not receive new requests while {STATUS_LABEL[status].toLowerCase()}.</T> : null}
-          {p.status !== "approved" ? <T size={12} color={colors.muted}>Requests start once your profile is approved.</T> : null}
-        </Card>
-
-        {d.earnings ? (
-          <View style={{ flexDirection: "row", gap: space.sm }}>
-            {[["Completed", String(d.earnings.completed)], ["Total earned", inr(d.earnings.total)], ["This month", inr(d.earnings.this_month)]].map(([k, v]) => (
-              <Card key={k} style={{ flex: 1, gap: 2, padding: space.md }}>
-                <T size={11} color={colors.muted}>{k}</T>
-                <T testID={`dash-earn-${k.replace(/\s/g, "-").toLowerCase()}`} weight="800" size={16}>{v}</T>
-              </Card>
-            ))}
-          </View>
         ) : null}
-
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: space.sm }}>
-          {([["requests", "Bookings"], ["settings", "Services & time"], ["vehicles", "Vehicles"], ["availability", "Availability"]] as const).map(([k, l]) => (
-            <Chip key={k} testID={`dash-tab-${k}`} label={l} active={tab === k} onPress={() => setTab(k)} />
-          ))}
-        </ScrollView>
-
-        {tab === "requests" ? (
-          <>
-            <Btn testID="dash-open-requests" icon="mail-unread-outline" variant={d.open_requests ? "primary" : "outline"} label={`Booking requests (${d.open_requests} open)`} onPress={() => router.push("/hire/requests")} />
-            <T weight="800">Upcoming bookings</T>
-            {d.upcoming.length ? d.upcoming.map(bookingRow) : <T color={colors.muted}>No upcoming bookings</T>}
-            <T weight="800">Booking history</T>
-            {d.history.length ? d.history.map(bookingRow) : <T color={colors.muted}>No past bookings yet</T>}
-          </>
-        ) : null}
-
-        {tab === "settings" ? (
-          <>
-            <T weight="800">Services</T>
-            <ServicesPicker testPrefix="dash-svc" value={services} onChange={(v) => save("svc", { services: v })} />
-            {!p.vehicles?.length ? <T size={12} color={colors.muted}>Add a vehicle (Vehicles tab) to turn on Book a Driver.</T> : null}
-            <Card style={{ gap: space.sm }}>
-              <T weight="800">Outstation Trip Preference</T>
-              <Toggle testID="dash-outstation" label="Accept Outstation Trips" value={!!p.acceptOutstationTrips} onChange={(v) => save("os", { acceptOutstationTrips: v })} />
-              <T size={12} color={colors.muted}>Enable this option to receive eligible booking requests outside your regular local service area.</T>
-            </Card>
-            <Card style={{ gap: space.sm }}>
-              <T weight="800">Working days and hours</T>
-              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.sm }}>
-                {dayNames.map((n, i) => <Chip key={n} testID={`dash-day-${i}`} label={n} active={days.includes(i)} onPress={() => setDays(days.includes(i) ? days.filter((x) => x !== i) : [...days, i])} />)}
-              </View>
-              <T size={13} weight="600" color={colors.muted}>{t("v2.from_time")}: {from}</T>
-              <TimeChips value={from} onChange={setFrom} />
-              <T size={13} weight="600" color={colors.muted}>{t("v2.to_time")}: {to}</T>
-              <TimeChips value={to} onChange={setTo} />
-              <T weight="700">Dates I am not available</T>
-              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.sm }}>
-                {blocked.map((b) => <Chip key={b} testID={`dash-blocked-${b}`} icon="close" label={fmtDate(b)} onPress={() => setBlocked(blocked.filter((x) => x !== b))} />)}
-              </View>
-              <DateField testID="dash-block-date" label="Add an unavailable date" value={blockPick} onChange={(v) => { if (v && !blocked.includes(v)) setBlocked([...blocked, v].sort()); setBlockPick(null); }} />
-              <Btn testID="dash-save-time" label="Save availability" disabled={!days.length} loading={saving === "time"} onPress={() => save("time", { days, start_time: from, end_time: to, blocked_dates: blocked })} />
-            </Card>
-          </>
-        ) : null}
-
-        {tab === "vehicles" ? (
-          <>
-            <T size={12} color={colors.muted}>Vehicles are only needed for Book a Driver. Mark a vehicle unavailable to stop matching it.</T>
-            <VehiclesEditor testPrefix="dash-veh" vehicles={vehicles} onChange={setVehicles} />
-            <Btn testID="dash-save-vehicles" label="Save vehicles" loading={saving === "veh"} onPress={() => save("veh", { vehicles }, "/pro/vehicles")} />
-          </>
-        ) : null}
-
-        {tab === "availability" ? (
-          <>
-            <T size={12} color={colors.muted}>Add specific dates and time slots when you're available for bookings.</T>
-            <AvailabilityPicker
-              availability={availability}
-              onChange={setAvailability}
-              onSave={(newAvailability) => save("availability", { availability: toAvailabilityPayload(newAvailability) })}
-              saving={saving === "availability"}
-            />
-          </>
-        ) : null}
-      </KeyboardAwareScrollView>
+      </ScrollView>
     </View>
   );
 }

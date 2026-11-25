@@ -747,6 +747,8 @@ class ProfileIn(BaseModel):
     language: Optional[str] = Field(default=None, max_length=8)
     bio: Optional[str] = Field(default=None, max_length=500)
     picture: Optional[str] = Field(default=None, max_length=100)
+    dob: Optional[str] = Field(default=None, pattern=r"^(\d{2}-\d{2}-\d{4})?$")
+    gender: Optional[Literal["male", "female", "other", ""]] = None
 
 
 @api.put("/me")
@@ -951,10 +953,19 @@ DOC_META = {
     "id_proof": ("Aadhaar card", True, 1, True),
     "rc": ("Vehicle registration certificate (RC)", True, 1, True),
     "licence": ("Driving licence", False, 1, True),  # legacy single-sided licence (older accounts)
+    "vehicle_rc": ("Vehicle RC", False, 8, True),  # per-vehicle RC for the shared vehicle list
 }
 # The personal photo is managed only from the Profile screen (users.picture), never in driver verification.
 UPLOAD_KINDS = [k for k in DOC_META if k != "licence"]
 REQUIRED_KINDS = [k for k, m in DOC_META.items() if m[1]]
+LOCAL_DOC_KINDS = ("licence_front", "licence_back", "id_proof")  # local driver: licence both sides + Aadhaar front only
+
+
+async def pro_unlocked(uid: str, kind: str) -> bool:
+    """Admin asked this local driver to resubmit exactly this document."""
+    if kind in LOCAL_DOC_KINDS and kind in missing_kinds(await active_files(uid)):
+        return True  # older approved accounts without this photo can add it once
+    return bool(await db.pro_drivers.find_one({"user_id": uid, "status": {"$in": ["resubmit", "rejected"]}, "resubmit_items": kind}, {"_id": 1}))
 LOCKED_STATUSES = ("under_review", "approved")
 FILE_OUT = {"_id": 0, "file_id": 1, "kind": 1, "content_type": 1, "size": 1, "original_name": 1, "created_at": 1}
 
@@ -987,7 +998,7 @@ async def add_history(uid: str, action: str, by: str, note: str = ""):
 async def upload_document(kind: str, request: Request, file: UploadFile = File(...), user: dict = Depends(get_user)):
     if kind not in UPLOAD_KINDS:
         raise HTTPException(400, "Unknown document type")
-    if user.get("driver_status") in LOCKED_STATUSES:
+    if kind != "vehicle_rc" and user.get("driver_status") in LOCKED_STATUSES and not await pro_unlocked(user["user_id"], kind):
         raise HTTPException(400, "Documents are locked while your verification is pending or approved")
     await rate_limit(f"upload:{user['user_id']}", 60, 3600, "Too many uploads. Please try again later.")
     label, _, max_files, pdf_ok = DOC_META[kind]
@@ -1093,7 +1104,7 @@ async def driver_profile(user: dict = Depends(get_user)):
         doc["rc_no"] = mask(doc.get("rc_no", ""))
     files = await active_files(user["user_id"])
     vehicles = await db.vehicles.find({"owner_id": user["user_id"], "deleted": {"$ne": True}}, {"_id": 0}).to_list(20)
-    kinds = [{"kind": k, "label": DOC_META[k][0], "required": DOC_META[k][1], "max": DOC_META[k][2], "pdf": DOC_META[k][3]} for k in UPLOAD_KINDS]
+    kinds = [{"kind": k, "label": DOC_META[k][0], "required": DOC_META[k][1], "max": DOC_META[k][2], "pdf": DOC_META[k][3]} for k in UPLOAD_KINDS if k != "vehicle_rc"]
     return {"status": user.get("driver_status", "not_submitted"), "documents": doc, "vehicles": vehicles, "files": files,
             "kinds": kinds, "missing": missing_kinds(files), "locked": user.get("driver_status") in LOCKED_STATUSES}
 
@@ -1150,13 +1161,66 @@ class VehicleIn(BaseModel):
     luggage: Literal["small", "medium", "large"] = "medium"
     fuel_type: Literal["petrol", "diesel", "cng", "electric"] = "petrol"
     mileage: Optional[float] = Field(default=None, gt=0, le=60)  # km/l, km/kg (CNG) or km/kWh (EV)
+    name: str = Field(default="", max_length=60)
+    rc_file_id: Optional[str] = Field(default=None, max_length=40)
+    permit_no: str = Field(default="", max_length=30)  # commercial / tourist permit (Book a Driver)
+    insurance_expiry: Optional[str] = Field(default=None, pattern=r"^\d{2}-\d{2}-\d{4}$")
+    day_rate: int = Field(default=0, ge=0, le=20000)
+
+
+async def check_rc(uid: str, fid: Optional[str]):
+    if fid and not await db.files.find_one({"file_id": fid, "owner_id": uid, "deleted": {"$ne": True}, "kind": {"$in": ["vehicle_rc", "rc"]}}, {"_id": 1}):
+        raise HTTPException(400, "RC document not found. Please upload it again.")
+
+
+@api.put("/vehicles/{vid}")
+async def edit_vehicle(vid: str, body: VehicleIn, user: dict = Depends(get_user)):
+    v = await db.vehicles.find_one({"vehicle_id": vid, "owner_id": user["user_id"], "deleted": {"$ne": True}}, {"_id": 0})
+    if not v:
+        raise HTTPException(404, "Vehicle not found")
+    if body.seats > seat_cap(body.vtype):
+        raise HTTPException(400, f"A {body.vtype} can offer at most {seat_cap(body.vtype)} passenger seats (driver not counted)")
+    await check_rc(user["user_id"], body.rc_file_id)
+    upd = {**body.model_dump(), "reg_no": body.reg_no.upper().replace(" ", ""), "updated_at": now()}
+    critical = any(upd.get(k) != v.get(k) for k in ("reg_no", "rc_file_id", "permit_no", "insurance_expiry", "vtype", "seats"))
+    if critical and v.get("commercial_status") in ("approved", "rejected"):
+        upd["commercial_status"] = "pending"  # changed documents must be re-checked by admin before Book a Driver
+        upd["commercial_requested_at"] = now()
+    await db.vehicles.update_one({"vehicle_id": vid}, {"$set": upd})
+    return await db.vehicles.find_one({"vehicle_id": vid}, {"_id": 0})
+
+
+@api.post("/vehicles/{vid}/commercial")
+async def request_commercial(vid: str, user: dict = Depends(get_user)):
+    """Ask admin to approve this shared vehicle for Book a Driver (RC + permit + valid insurance required)."""
+    v = await db.vehicles.find_one({"vehicle_id": vid, "owner_id": user["user_id"], "deleted": {"$ne": True}}, {"_id": 0})
+    if not v:
+        raise HTTPException(404, "Vehicle not found")
+    await commercial_ready(v)
+    await db.vehicles.update_one({"vehicle_id": vid}, {"$set": {"commercial_status": "pending", "commercial_requested_at": now(), "commercial_note": ""}})
+    await admin_alert("vehicle_review", f"Vehicle {v['reg_no']} sent for Book a Driver approval", user["user_id"])
+    return {"ok": True}
+
+
+async def commercial_ready(v: dict):
+    if not v.get("rc_file_id"):
+        raise HTTPException(400, f"Upload the RC document for {v['reg_no']}")
+    if not (v.get("permit_no") or "").strip():
+        raise HTTPException(400, f"Add the commercial / tourist permit number for {v['reg_no']}")
+    exp = v.get("insurance_expiry")
+    if not exp or not valid_dmy(exp) or datetime.strptime(exp, "%d-%m-%Y").date() < datetime.now(IST).date():
+        raise HTTPException(400, f"Add a valid (future) insurance expiry date for {v['reg_no']}")
 
 
 @api.post("/vehicles")
 async def add_vehicle(body: VehicleIn, user: dict = Depends(get_user)):
     if body.seats > seat_cap(body.vtype):
         raise HTTPException(400, f"A {body.vtype} can offer at most {seat_cap(body.vtype)} passenger seats (driver not counted)")
-    v = {**body.model_dump(), "reg_no": body.reg_no.upper().replace(" ", ""), "vehicle_id": nid("veh"),
+    await check_rc(user["user_id"], body.rc_file_id)
+    reg = body.reg_no.upper().replace(" ", "")
+    if await db.vehicles.find_one({"owner_id": user["user_id"], "reg_no": reg, "deleted": {"$ne": True}}, {"_id": 1}):
+        raise HTTPException(409, "This vehicle is already in your vehicle list")
+    v = {**body.model_dump(), "reg_no": reg, "vehicle_id": nid("veh"), "commercial_status": "none",
          "owner_id": user["user_id"], "verified": user.get("driver_status") == "approved", "created_at": now()}
     await db.vehicles.insert_one(v)
     v.pop("_id", None)
@@ -2735,30 +2799,25 @@ async def admin_set_fuel(body: FuelPriceIn, admin: dict = Depends(get_admin)):
 SERVICE_HOURS = {"hourly": None, "half_day": 4, "full_day": 8, "one_way": None, "airport": None, "outstation": None, "custom": None}
 
 
+ALL_VTYPES = ("hatchback", "sedan", "suv", "muv", "luxury", "automatic", "ev")
+DEFAULT_RATES = {"rate_hourly": 150, "rate_half_day": 600, "rate_full_day": 1100, "rate_one_way": None}
+
+
 class ProDriverIn(BaseModel):
-    city: LocIn
+    """3-step local-driver registration: home taluk + languages, licence/Aadhaar, services (+ shared vehicles for Book a Driver)."""
     home: "HomeLocIn"
-    areas: List[str] = Field(default_factory=list, max_length=15)
     languages: List[str] = Field(min_length=1, max_length=15)
-    experience_years: int = Field(ge=1, le=50)
-    licence_no: str = Field(min_length=8, max_length=20)
-    licence_expiry: str = Field(pattern=r"^\d{2}-\d{2}-\d{4}$")
-    vehicle_types: List[Literal["hatchback", "sedan", "suv", "muv", "luxury", "automatic", "ev"]] = Field(min_length=1)
-    days: List[int] = Field(default_factory=lambda: list(range(7)), min_length=1, max_length=7)  # 0=Mon..6=Sun; date-specific availability governs
-    start_time: str = Field(default="00:00", pattern=r"^\d{2}:\d{2}$")
-    end_time: str = Field(default="23:59", pattern=r"^\d{2}:\d{2}$")
-    bio: Optional[str] = Field(default=None, max_length=500)
-    rate_hourly: int = Field(ge=50, le=5000)
-    rate_half_day: int = Field(ge=100, le=20000)
-    rate_full_day: int = Field(ge=200, le=40000)
-    rate_one_way: Optional[int] = Field(default=None, ge=100, le=40000)
-    # Unified local-driver profile: one registration, either or both services
+    licence_no: Optional[str] = Field(default=None, max_length=20)  # reused from carpool verification when omitted
+    licence_expiry: Optional[str] = Field(default=None, pattern=r"^\d{2}-\d{2}-\d{4}$")
     services: List[Literal["rent", "book"]] = Field(default_factory=lambda: ["rent"], min_length=1, max_length=2)
-    acceptOutstationTrips: bool = False
-    vehicles: List["ProVehicleIn"] = Field(default_factory=list, max_length=5)  # only needed for Book a Driver
-    # New fields for enhanced verification
-    availability: List[dict] = Field(default_factory=list, max_length=30)  # Multiple date-specific schedules
-    aadhaar_front: Optional[str] = Field(default=None, max_length=50)  # Aadhaar front document file_id
+    vehicle_ids: List[str] = Field(default_factory=list, max_length=5)
+    # optional (older clients)
+    experience_years: int = Field(default=1, ge=0, le=50)
+    vehicle_types: List[Literal["hatchback", "sedan", "suv", "muv", "luxury", "automatic", "ev"]] = Field(default_factory=lambda: list(ALL_VTYPES), min_length=1)
+    rate_hourly: Optional[int] = Field(default=None, ge=50, le=5000)
+    rate_half_day: Optional[int] = Field(default=None, ge=100, le=20000)
+    rate_full_day: Optional[int] = Field(default=None, ge=200, le=40000)
+    rate_one_way: Optional[int] = Field(default=None, ge=100, le=40000)
 
 
 VEHICLE_CATS = ("hatchback", "sedan", "suv", "muv", "van", "luxury", "other")
@@ -2797,50 +2856,84 @@ def pro_status(p: dict) -> str:
     return p.get("availability_status") or ("available" if p.get("available", True) else "offline")
 
 
+def hire_vehicle(v: dict) -> dict:
+    return {"vehicle_id": v["vehicle_id"], "name": v.get("name") or f"{v.get('make', '')} {v.get('model', '')}".strip(), "reg_no": v["reg_no"],
+            "category": v.get("vtype", "sedan"), "seats": v.get("seats", 1), "day_rate": v.get("day_rate", 0), "available": v.get("hire_available", True)}
+
+
+async def approved_vehicles(uid: str) -> list:
+    rows = await db.vehicles.find({"owner_id": uid, "deleted": {"$ne": True}, "commercial_status": "approved", "hire_available": {"$ne": False}}, {"_id": 0}).to_list(20)
+    return [hire_vehicle(v) for v in rows]
+
+
 @api.get("/pro/me")
 async def pro_me(user: dict = Depends(get_user)):
-    p = await db.pro_drivers.find_one({"user_id": user["user_id"]}, {"_id": 0})
-    doc = await db.driver_documents.find_one({"user_id": user["user_id"]}, {"_id": 0, "photos": 1}) or {}
+    uid = user["user_id"]
+    p = await db.pro_drivers.find_one({"user_id": uid}, {"_id": 0})
+    dd = await db.driver_documents.find_one({"user_id": uid}, {"_id": 0, "photos": 1, "licence_no": 1, "licence_expiry": 1}) or {}
     if p:
-        p["licence_no"] = mask(p["licence_no"])
-    photos = {**(doc.get("photos") or {})}
+        p["licence_no"] = mask(p.get("licence_no", ""))
+        p["availability_status"] = pro_status(p)
+        p["online"] = p["availability_status"] == "available"
+        p["services"] = p.get("services") or ["rent"]
+    photos = {**(dd.get("photos") or {})}
     if str(user.get("picture") or "").startswith("file_"):
         photos["profile"] = user["picture"]
-    return {"profile": p, "photos": photos}
+    files = [f for f in await active_files(uid) if f["kind"] in LOCAL_DOC_KINDS + ("licence",)]
+    kinds = [{"kind": k, "label": DOC_META[k][0], "required": True, "max": 1, "pdf": True} for k in LOCAL_DOC_KINDS]
+    vehicles = await db.vehicles.find({"owner_id": uid, "deleted": {"$ne": True}}, {"_id": 0}).to_list(20)
+    return {"profile": p, "photos": photos, "files": files, "kinds": kinds, "missing": [k for k in missing_kinds(files) if k in LOCAL_DOC_KINDS],
+            "docs_locked": user.get("driver_status") in LOCKED_STATUSES, "carpool_status": user.get("driver_status", "not_submitted"),
+            "licence_on_file": bool(dd.get("licence_no")), "licence_masked": mask(dd.get("licence_no", "")) if dd.get("licence_no") else None,
+            "licence_expiry_on_file": dd.get("licence_expiry"), "vehicles": vehicles,
+            "book_ready": any(v.get("commercial_status") == "approved" for v in vehicles),
+            "personal": {"name": user.get("name"), "phone": mask_phone(user.get("phone")), "phone_ok": bool(re.fullmatch(r"[6-9]\d{9}", user.get("phone") or "")),
+                         "dob": user.get("dob"), "gender": user.get("gender"), "picture": user.get("picture")}}
 
 
 @api.post("/pro/register")
 async def pro_register(body: ProDriverIn, user: dict = Depends(get_user)):
+    uid = user["user_id"]
     if not (user.get("phone") and re.fullmatch(r"[6-9]\d{9}", user["phone"])):
         raise HTTPException(400, "Add a valid registered mobile number in your profile first")
-    existing = await db.pro_drivers.find_one({"user_id": user["user_id"]}, {"_id": 0, "status": 1})
-    if existing and existing["status"] in ("under_review", "approved"):
+    existing = await db.pro_drivers.find_one({"user_id": uid}, {"_id": 0}) or {}
+    if existing.get("status") in ("under_review", "approved"):
         raise HTTPException(400, "Local driver profile already submitted")
-    doc = await db.driver_documents.find_one({"user_id": user["user_id"]}, {"_id": 0, "photos": 1}) or {}
-    photos = {**(doc.get("photos") or {})}
-    if str(user.get("picture") or "").startswith("file_"):
-        photos["profile"] = user["picture"]
-    missing = [k for k in ("profile", "licence") if not photos.get(k) and not (k == "licence" and photos.get("licence_front"))]
+    missing = [k for k in missing_kinds(await active_files(uid)) if k in LOCAL_DOC_KINDS]
     if missing:
-        raise HTTPException(400, "Please add your " + " and ".join("profile photo (Profile screen)" if k == "profile" else "licence photo" for k in missing))
-    if "book" in body.services and not body.vehicles:
+        raise HTTPException(400, "Please upload: " + ", ".join(DOC_META[k][0] for k in missing))
+    dd = await db.driver_documents.find_one({"user_id": uid}, {"_id": 0, "licence_no": 1, "licence_expiry": 1}) or {}
+    lic = re.sub(r"[\s-]", "", body.licence_no or existing.get("licence_no") or dd.get("licence_no") or "").upper()
+    exp = body.licence_expiry or existing.get("licence_expiry") or dd.get("licence_expiry")
+    if not re.fullmatch(r"[A-Z0-9]{8,20}", lic):
+        raise HTTPException(400, "Enter your driving licence number")
+    if not exp or not valid_dmy(exp) or datetime.strptime(exp, "%d-%m-%Y").date() < datetime.now(IST).date():
+        raise HTTPException(400, "Licence expiry: enter a valid future date (DD-MM-YYYY)")
+    vids = list(dict.fromkeys(body.vehicle_ids)) if "book" in body.services else []
+    vs = await db.vehicles.find({"vehicle_id": {"$in": vids}, "owner_id": uid, "deleted": {"$ne": True}}, {"_id": 0}).to_list(10)
+    if "book" in body.services and not vs:
         raise HTTPException(400, "Add at least one vehicle to offer Book a Driver")
+    for v in vs:
+        if v.get("commercial_status") != "approved":
+            await commercial_ready(v)
     status = "approved" if (await get_settings()).get("instant_driver_approval") else "under_review"
     home = await home_snapshot(body.home)
-    availability_records = availability_snapshot(body.availability)
-
-    rec = {**body.model_dump(), "city": loc_snapshot(body.city), "home": home, "available": True, "availability_status": "available",
-           "service_areas": [], "service_taluk_codes": [home["subdistrict_code"]], "vehicles": vehicles_snapshot(body.vehicles),
-           "cities_covered": [], "services": sorted(set(body.services)),
-           "licence_no": body.licence_no.upper(), "user_id": user["user_id"],
-           "name": user["name"], "status": status, "submitted_at": now(), "admin_note": "",
-           "availability": availability_records, "aadhaar_front": body.aadhaar_front}
-    await db.pro_drivers.update_one({"user_id": user["user_id"]}, {"$set": rec}, upsert=True)
-    if body.bio:
-        await db.users.update_one({"user_id": user["user_id"]}, {"$set": {"bio": body.bio}})
+    rates = {**DEFAULT_RATES, **((await get_settings()).get("local_rates") or {})}
+    rec = {"home": home, "languages": [x.strip() for x in body.languages if x.strip()], "licence_no": lic, "licence_expiry": exp,
+           "services": sorted(set(body.services)), "experience_years": existing.get("experience_years", body.experience_years),
+           "vehicle_types": existing.get("vehicle_types") or body.vehicle_types,
+           "acceptOutstationTrips": existing.get("acceptOutstationTrips", False), "availability": existing.get("availability") or [],
+           **{k: getattr(body, k) if getattr(body, k) is not None else existing.get(k, v) for k, v in rates.items()},
+           "available": existing.get("available", False), "availability_status": existing.get("availability_status", "offline"),
+           "service_taluk_codes": [home["subdistrict_code"]], "vehicle_ids": [v["vehicle_id"] for v in vs], "vehicles_migrated": True,
+           "user_id": uid, "name": user["name"], "status": status, "submitted_at": now(), "admin_note": "", "resubmit_items": []}
+    await db.pro_drivers.update_one({"user_id": uid}, {"$set": rec}, upsert=True)
+    pending = [v["vehicle_id"] for v in vs if v.get("commercial_status") != "approved"]
+    if pending:
+        await db.vehicles.update_many({"vehicle_id": {"$in": pending}}, {"$set": {"commercial_status": "pending", "commercial_requested_at": now()}})
     if status == "approved":
-        await notify(user["user_id"], "driver_approved", {})
-    await audit(user["user_id"], "pro.submit", user["user_id"], {"status": status})
+        await notify(uid, "driver_approved", {})
+    await audit(uid, "pro.submit", uid, {"status": status, "resubmission": bool(existing)})
     return {"status": status}
 
 
@@ -2916,7 +3009,7 @@ async def hire_book(body: HireIn, user: dict = Depends(get_user)):
 @api.get("/hire/bookings")
 async def hire_list(user: dict = Depends(get_user)):
     uid = user["user_id"]
-    return await db.hires.find({"$or": [{"passenger_id": uid}, {"driver_id": uid}]}, {"_id": 0, "city.geo": 0}).sort("starts_at", -1).to_list(200)
+    return await db.hires.find({"$or": [{"passenger_id": uid}, {"driver_id": uid}]}, {"_id": 0, "city.geo": 0, "driver_location": 0}).sort("starts_at", -1).to_list(200)
 
 
 @api.get("/hire/bookings/{bid}")
@@ -2934,13 +3027,14 @@ async def hire_get(bid: str, user: dict = Depends(get_user)):
         h[role] = u
     h["driver"]["has_photo"] = await has_badge_photo(h["driver_id"])
     h["is_driver"] = user["user_id"] == h["driver_id"]
+    h.pop("driver_location", None)  # served only via the passenger-only live location endpoint
     h["favourite"] = bool(await db.favourite_drivers.find_one({"user_id": user["user_id"], "driver_id": h["driver_id"]}, {"_id": 1}))
     h["my_reviews"] = await db.reviews.find({"booking_id": bid, "reviewer_id": user["user_id"]}, {"_id": 0}).to_list(5)
     return h
 
 
 @api.post("/hire/bookings/{bid}/{action}")
-async def hire_action(bid: str, action: Literal["accept", "reject", "start", "complete", "cancel", "arriving"], body: ReasonIn, user: dict = Depends(get_user)):
+async def hire_action(bid: str, action: Literal["accept", "reject", "start", "complete", "cancel", "arriving", "arrived"], body: ReasonIn, user: dict = Depends(get_user)):
     h = await db.hires.find_one({"booking_id": bid}, {"_id": 0})
     if not h or user["user_id"] not in (h["passenger_id"], h["driver_id"]):
         raise HTTPException(404, "Booking not found")
@@ -2951,6 +3045,14 @@ async def hire_action(bid: str, action: Literal["accept", "reject", "start", "co
         if not (await db.hires.update_one({"booking_id": bid, "status": "confirmed"}, {"$set": {"arriving_at": now()}})).modified_count:
             raise HTTPException(400, "Cannot mark arriving for this booking now")
         await notify(h["passenger_id"], "hire_arriving", {"pickup": h["pickup"], "route": h["route"]}, bid)
+        return {"ok": True}
+    if action == "arrived":
+        if not is_driver:
+            raise HTTPException(403, "Only the driver can do this")
+        if not (await db.hires.update_one({"booking_id": bid, "status": "confirmed", "arriving_at": {"$ne": None}}, {"$set": {"arrived_at": now()}})).modified_count:
+            raise HTTPException(400, "Tap 'I am arriving' first")
+        await notify(h["passenger_id"], "hire_arriving", {"pickup": h["pickup"], "route": h["route"]}, bid)
+        await sys_message(bid, "hire_arrived", {"pickup": h["pickup"]})
         return {"ok": True}
     rules = {"accept": (["pending"], "confirmed", True), "reject": (["pending"], "rejected", True), "start": (["confirmed"], "started", True),
              "complete": (["started"], "completed", True), "cancel": (["pending", "confirmed"], "cancelled", None)}
@@ -2969,7 +3071,31 @@ async def hire_action(bid: str, action: Literal["accept", "reject", "start", "co
     await sys_message(bid, ntype, {"route": h["route"]})
     if action == "complete":
         await db.hires.update_one({"booking_id": bid}, {"$set": {"completed_at": now()}})
+    if action in ("complete", "cancel", "reject"):  # live location sharing ends with the trip
+        await db.hires.update_one({"booking_id": bid}, {"$unset": {"driver_location": ""}})
     return {"ok": True}
+
+
+class HireLocIn(BaseModel):
+    lat: float = Field(ge=-90, le=90)
+    lng: float = Field(ge=-180, le=180)
+
+
+@api.post("/hire/bookings/{bid}/location")
+async def hire_location_set(bid: str, body: HireLocIn, user: dict = Depends(get_user)):
+    res = await db.hires.update_one({"booking_id": bid, "driver_id": user["user_id"], "status": {"$in": ["confirmed", "started"]}, "arriving_at": {"$ne": None}},
+                                    {"$set": {"driver_location": {"lat": body.lat, "lng": body.lng, "updated_at": now()}}})
+    if not res.matched_count:
+        raise HTTPException(400, "Location sharing starts after 'I am arriving' and stops when the trip ends")
+    return {"ok": True}
+
+
+@api.get("/hire/bookings/{bid}/location")
+async def hire_location_get(bid: str, user: dict = Depends(get_user)):
+    h = await db.hires.find_one({"booking_id": bid, "passenger_id": user["user_id"]}, {"_id": 0, "status": 1, "driver_location": 1, "arriving_at": 1})
+    if not h:
+        raise HTTPException(404, "Booking not found")
+    return h.get("driver_location") if h["status"] in ("confirmed", "started") and h.get("arriving_at") else None
 
 
 # ---------------------------------------------------------------- India admin locations (LGD) + local-taluk hire matching
@@ -3047,7 +3173,8 @@ async def hire_identify_taluk(loc_id: str = Query(max_length=120), pickup: str =
 
 class HomeLocIn(BaseModel):
     subdistrict_code: str = Field(max_length=10)
-    city: str = Field(min_length=2, max_length=80)
+    city: str = Field(default="", max_length=80)
+    place: Optional[LocIn] = None  # village / town picked on the map search (id + coordinates)
     city_code: Optional[str] = Field(default=None, max_length=10)
     village_code: Optional[str] = Field(default=None, max_length=10)
 
@@ -3069,18 +3196,22 @@ class ProSettingsIn(BaseModel):
 def availability_snapshot(items: List[dict]) -> list:
     out = []
     for a in items:
-        if not a.get("date") or not a.get("from") or not a.get("to"):
+        if not a.get("from") or not a.get("to"):
             continue
         try:
-            start = datetime.fromisoformat(str(a["from"]).replace("Z", "+00:00"))
-            end = datetime.fromisoformat(str(a["to"]).replace("Z", "+00:00"))
+            start, end = iso_dt(a["from"]), iso_dt(a["to"])
         except ValueError:
-            raise HTTPException(400, "Invalid availability time")
-        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", str(a["date"])):
-            raise HTTPException(400, "Invalid date")
+            raise HTTPException(400, "Invalid availability date or time")
         if end <= start:
-            raise HTTPException(400, "End time must be later than start time")
-        out.append({"id": str(a.get("id") or nid("av"))[:40], "date": a["date"], "from": a["from"], "to": a["to"], "created_at": now(), "status": "active"})
+            raise HTTPException(400, "'Available Until' must be later than 'Available From'")
+        if end - start > timedelta(days=14):
+            raise HTTPException(400, "One availability period can be at most 14 days")
+        out.append({"id": str(a.get("id") or nid("av"))[:40], "date": start.astimezone(IST).strftime("%Y-%m-%d"), "from": start.isoformat(),
+                    "to": end.isoformat(), "created_at": now(), "status": "active"})
+    out.sort(key=lambda x: x["from"])
+    for x, y in zip(out, out[1:]):
+        if iso_dt(y["from"]) < iso_dt(x["to"]):
+            raise HTTPException(400, "Two availability periods overlap. Please adjust them.")
     return out
 
 
@@ -3092,8 +3223,8 @@ async def pro_settings(body: ProSettingsIn, user: dict = Depends(get_user)):
         raise HTTPException(404, "Register as a local driver first")
     upd = {k: v for k, v in body.model_dump().items() if v is not None}
     if body.services is not None:
-        if "book" in body.services and not [v for v in p.get("vehicles") or []]:
-            raise HTTPException(400, "Add at least one vehicle before offering Book a Driver")
+        if "book" in body.services and not await approved_vehicles(user["user_id"]):
+            raise HTTPException(400, "Book a Driver unlocks after one of your vehicles is approved by Travoo")
         upd["services"] = sorted(set(body.services))
     if body.blocked_dates is not None:
         if any(not re.fullmatch(r"\d{4}-\d{2}-\d{2}", d) for d in body.blocked_dates):
@@ -3102,6 +3233,8 @@ async def pro_settings(body: ProSettingsIn, user: dict = Depends(get_user)):
     if body.availability is not None:
         upd["availability"] = availability_snapshot(body.availability)
     if body.availability_status:
+        if body.availability_status == "available" and p.get("status") != "approved":
+            raise HTTPException(400, "You can go online after your local driver verification is approved")
         upd["available"] = body.availability_status == "available"
     if not upd:
         raise HTTPException(400, "Nothing to update")
@@ -3172,8 +3305,10 @@ async def hire_favourite_toggle(driver_id: str, user: dict = Depends(get_user)):
 async def home_snapshot(h: HomeLocIn) -> dict:
     sd = await subdistrict_doc(h.subdistrict_code)
     out = {"state_code": sd["state_code"], "state_name": sd["state_name"], "district_code": sd["district_code"], "district_name": sd["district_name"],
-           "subdistrict_code": sd["code"], "subdistrict_name": sd["name"], "sub_label": sd["sub_label"], "city": h.city.strip(), "city_code": None,
-           "village_code": None, "village_name": None}
+           "subdistrict_code": sd["code"], "subdistrict_name": sd["name"], "sub_label": sd["sub_label"],
+           "city": (h.city or (h.place.name if h.place else "") or sd["name"]).strip(), "city_code": None, "village_code": None, "village_name": None}
+    if h.place:
+        out.update(loc_id=h.place.loc_id, place_name=h.place.name, geo={"lat": h.place.lat, "lng": h.place.lng})
     for key in ("city_code", "village_code"):
         code = getattr(h, key)
         if code:
@@ -3274,7 +3409,7 @@ def svc_q(service: str) -> dict:
 AVAILABLE_Q = {"$or": [{"availability_status": "available"}, {"availability_status": {"$exists": False}, "available": {"$ne": False}}]}
 
 
-def local_area(code: str) -> dict:
+def local_area(code: str) -> dict:  # legacy helper
     """Drivers serving a taluk: it is their home taluk or one of their declared service-area taluks."""
     return {"$or": [{"home.subdistrict_code": code}, {"service_taluk_codes": code}]}
 
@@ -3290,58 +3425,72 @@ def iso_dt(v: str) -> datetime:
     return d if d.tzinfo else d.replace(tzinfo=IST)
 
 
+ROAD_KMPH = 35  # conservative average road speed for reaching the pickup
+MAX_REACH_KM = 300
+
+
+def reach_km(home: dict, pickup: Optional[dict]) -> Optional[float]:
+    g = (home or {}).get("geo")
+    return haversine(g, pickup) * 1.3 if g and pickup and pickup.get("lat") is not None else None  # x1.3 straight-line -> road
+
+
 async def eligible_local_drivers(area_q: dict, r: dict, exclude: str) -> list:
-    """Approved, Available local drivers offering the requested service, inside the area query, free for the whole trip.
-    Now checks availability schedules for specific dates."""
+    """Approved, non-suspended local drivers for the service who are Online or have a scheduled period covering the trip,
+    respect their outstation preference, can reach the pickup before departure, have an approved vehicle (Book) and no clash."""
     service = r.get("service") or "rent"
-    weekday = datetime.strptime(r["date"], "%Y-%m-%d").weekday()
     start = datetime.strptime(f"{r['date']} {r['time']}", "%Y-%m-%d %H:%M").replace(tzinfo=IST)
     end = start + timedelta(hours=r["hours"])
     dates = [(start + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(max(1, math.ceil(r["hours"] / 24)))]
-
-    # Check if driver has availability for this specific date and time
-    avail_q = {
-        "$or": [
-            {"availability": {"$in": [None, []]}, "days": weekday},  # No availability schedules - use weekly days
-            {"availability": {"$elemMatch": {"date": r["date"], "status": "active"}}}
-        ]
-    }
-
-    q = {"$and": [area_q, AVAILABLE_Q, svc_q(service), avail_q], "status": "approved", "user_id": {"$ne": exclude}, "blocked_dates": {"$nin": dates}}
+    q = {"$and": [area_q, svc_q(service)], "status": "approved", "suspended": {"$ne": True}, "user_id": {"$ne": exclude}, "blocked_dates": {"$nin": dates}}
     if r.get("service_type") == "outstation":
         q["acceptOutstationTrips"] = True
     vt = r.get("vehicle_type") or ""
-    if service == "rent" and vt in ("hatchback", "sedan", "suv", "muv", "luxury", "automatic", "ev"):
+    if service == "rent" and vt in ALL_VTYPES:
         q["vehicle_types"] = vt
+    lead_h = max(0.0, (start - now()).total_seconds() / 3600)
     out = []
     for p in await db.pro_drivers.find(q, {"_id": 0, "licence_no": 0, "licence_expiry": 0, "city.geo": 0}).to_list(300):
-        # Check availability schedule for specific date/time
-        if p.get("availability"):
-            windows = [a for a in p["availability"] if a.get("date") == r["date"] and a.get("status") == "active"]
-            if not any(a.get("from") and a.get("to") and iso_dt(a["from"]) <= start and end <= iso_dt(a["to"]) for a in windows):
-                continue
-        elif not fits_window(p, r["time"], r["hours"]):
+        online = pro_status(p) == "available"
+        scheduled = any(a.get("status", "active") == "active" and a.get("from") and a.get("to") and iso_dt(a["from"]) <= start and end <= iso_dt(a["to"])
+                        for a in p.get("availability") or [])
+        if not (online or scheduled):
             continue
+        hc = (p.get("home") or {}).get("subdistrict_code")
+        local_trip = r.get("dest_code") in (None, hc) and r.get("pickup_code") in (None, hc)
+        if not local_trip and not p.get("acceptOutstationTrips"):
+            continue
+        km = reach_km(p.get("home"), r.get("pickup_geo"))
+        if km is not None:
+            if km > MAX_REACH_KM or km / ROAD_KMPH > lead_h:
+                continue
+            p["km_to_pickup"] = round(km)
         if service == "book":
-            v = pick_vehicle(p, vt, r.get("passengers", 1))
+            v = pick_vehicle({"vehicles": await approved_vehicles(p["user_id"])}, vt, r.get("passengers", 1))
             if not v:
                 continue
             p["match_vehicle"] = v
         u = await db.users.find_one({"user_id": p["user_id"], "suspended": {"$ne": True}}, {"_id": 0, "user_id": 1})
         if not u or await has_clash(p["user_id"], start, end):
             continue
+        p["matched_by"] = "online" if online else "scheduled"
         out.append(p)
     return out
 
 
+def trip_area(codes: list) -> dict:
+    """Destination-taluk drivers (primary rule) plus drivers based at the pickup taluk."""
+    codes = [c for c in dict.fromkeys(codes) if c]
+    return {"$or": [{"home.subdistrict_code": {"$in": codes}}, {"service_taluk_codes": {"$in": codes}}]}
+
+
 async def nearby_area(sd: dict, pickup_code: Optional[str], outstation: bool) -> dict:
-    """Fallback: for outstation trips, drivers based at the pickup taluk (outstation preference is enforced separately)."""
-    ors: list = []
-    if outstation and pickup_code and pickup_code != sd["code"]:
-        ors.append({"home.subdistrict_code": pickup_code})
-    if not ors:  # MongoDB rejects an empty $or -> match nobody instead of crashing
-        return {"user_id": {"$in": []}}
-    return {"$and": [{"$or": ors}, {"$nor": [local_area(sd["code"])]}]}
+    """Wider search: other taluks of the destination / pickup districts (outstation preference + reachability enforced later)."""
+    dists = [sd["district_code"]]
+    if pickup_code:
+        ps = await db.lgd_subdistricts.find_one({"code": pickup_code}, {"_id": 0, "district_code": 1})
+        if ps:
+            dists.append(ps["district_code"])
+    return {"$and": [{"home.district_code": {"$in": list(dict.fromkeys(dists))}}, {"$nor": [trip_area([sd["code"], pickup_code])]}]}
 
 
 def match_group(p: dict, dest_code: str, pickup_code: Optional[str]) -> str:
@@ -3380,7 +3529,8 @@ async def hire_local_drivers(subdistrict_code: str = Query(max_length=10), date:
                              time: str = Query(pattern=r"^\d{2}:\d{2}$"), hours: int = Query(4, ge=1, le=24), days: int = Query(1, ge=1, le=30),
                              service: Literal["rent", "book"] = "rent", service_type: str = "hourly", vehicle_type: str = "", passengers: int = Query(1, ge=1, le=20),
                              pickup_subdistrict_code: Optional[str] = Query(None, max_length=10), nearby: bool = False,
-                             language: Optional[str] = None, min_exp: int = 0, user: dict = Depends(get_user)):
+                             language: Optional[str] = None, min_exp: int = 0, lat: Optional[float] = None, lng: Optional[float] = None,
+                             user: dict = Depends(get_user)):
     """subdistrict_code = the DESTINATION taluk (primary matching criterion). Pickup taluk is only used for display/outstation fallback.
     Now uses pickup location for Rent a Driver matching instead of destination."""
     sd = await subdistrict_doc(subdistrict_code)
@@ -3399,17 +3549,12 @@ async def hire_local_drivers(subdistrict_code: str = Query(max_length=10), date:
         res.sort(key=lambda x: (not x["favourite"], -(x["user"].get("rating_avg") or 0), x["estimate"]))
         return res
 
-    # For Rent a Driver, use pickup location as primary matching criterion
-    # For Book a Driver, use destination as primary matching criterion
-    match_code = pickup_subdistrict_code if (service == "rent" and pickup_subdistrict_code) else sd["code"]
-    match_sd = await subdistrict_doc(match_code) if match_code != sd["code"] else sd
-
-    local = await present(await eligible_local_drivers(local_area(match_sd["code"]), r, user["user_id"]))
+    r.update(dest_code=sd["code"], pickup_code=pickup_subdistrict_code, pickup_geo={"lat": lat, "lng": lng} if lat is not None and lng is not None else None)
+    local = await present(await eligible_local_drivers(trip_area([sd["code"], pickup_subdistrict_code]), r, user["user_id"]))
     out = {"taluk": sd, "local": local, "nearby": None}
     if nearby:
-        out["nearby"] = await present(await eligible_local_drivers(await nearby_area(match_sd, pickup_subdistrict_code, service_type == "outstation"), r, user["user_id"]))
-        out["nearby_scope"] = (f"Drivers from other {match_sd['sub_label'].lower()}s of {match_sd['district_name']} district who accept trips outside their area"
-                               + (" · outstation drivers from your pickup area" if service_type == "outstation" and pickup_subdistrict_code else ""))
+        out["nearby"] = await present(await eligible_local_drivers(await nearby_area(sd, pickup_subdistrict_code, service_type == "outstation"), r, user["user_id"]))
+        out["nearby_scope"] = f"Drivers from nearby {sd['sub_label'].lower()}s who accept outstation trips and can reach your pickup in time"
     return out
 
 
@@ -3432,6 +3577,8 @@ class LocalHireIn(BaseModel):
     taluk_method: str = Field(default="manual", max_length=30)
     include_nearby: bool = False
     driver_id: Optional[str] = Field(default=None, max_length=40)  # request one listed driver only
+    return_date: Optional[str] = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")  # round trip
+    return_time: Optional[str] = Field(default=None, pattern=r"^\d{2}:\d{2}$")
 
 
 def taluk_snap(sd: dict) -> dict:
@@ -3450,13 +3597,18 @@ async def hire_request_create(body: LocalHireIn, user: dict = Depends(get_user))
     if await db.hire_requests.find_one({"passenger_id": user["user_id"], "date": body.date, "time": body.time, "status": "open"}):
         raise HTTPException(409, "You already have an open request for this date and time")
 
-    # Use pickup location for Rent a Driver, destination for Book a Driver
-    match_code = psd["code"] if (body.service == "rent" and psd) else sd["code"]
-    match_sd = psd if (body.service == "rent" and psd) else sd
-
-    drivers = await eligible_local_drivers(local_area(match_sd["code"]), r, user["user_id"])
+    if body.service_type == "round_trip":
+        if not (body.return_date and body.return_time):
+            raise HTTPException(400, "Choose the return date and time for a round trip")
+        back = datetime.strptime(f"{body.return_date} {body.return_time}", "%Y-%m-%d %H:%M").replace(tzinfo=IST)
+        if back <= dt:
+            raise HTTPException(400, "Return must be after the departure time")
+        r["hours"] = max(r["hours"], math.ceil((back - dt).total_seconds() / 3600) + 1)
+    r.update(dest_code=sd["code"], pickup_code=psd["code"] if psd else None, pickup_geo={"lat": body.city.lat, "lng": body.city.lng})
+    match_sd = sd
+    drivers = await eligible_local_drivers(trip_area([sd["code"], psd["code"] if psd else None]), r, user["user_id"])
     if body.include_nearby or body.driver_id:
-        drivers += await eligible_local_drivers(await nearby_area(match_sd, psd["code"] if psd else None, body.service_type == "outstation"), r, user["user_id"])
+        drivers += await eligible_local_drivers(await nearby_area(sd, psd["code"] if psd else None, body.service_type == "outstation"), r, user["user_id"])
     if body.driver_id:
         drivers = [p for p in drivers if p["user_id"] == body.driver_id]
         if not drivers:
@@ -3475,7 +3627,8 @@ async def hire_request_create(body: LocalHireIn, user: dict = Depends(get_user))
         group = match_group(p, match_sd["code"], psd["code"] if psd else None)
         try:  # unique (request_id, driver_id) -> never notify the same driver twice for one request
             await db.hire_dispatches.insert_one({"request_id": rid, "driver_id": p["user_id"], "group": group, "service": body.service,
-                                                 "notified_at": now(), "seen_at": None, "response": None})
+                                                 "estimate": quote(p, r, p.get("match_vehicle")), "km_to_pickup": p.get("km_to_pickup"),
+                                                 "vehicle": p.get("match_vehicle"), "notified_at": now(), "seen_at": None, "response": None})
         except DuplicateKeyError:
             continue
         sent += 1
@@ -3576,7 +3729,7 @@ async def accept_locked(r: dict, rid: str, uid: str, p: Optional[dict]) -> dict:
          "service_fee": quote(p, r, vehicle),
          "route": f"{r['pickup']}" + (f" → {r['destination']}" if r["destination"] else ""), "status": "confirmed",
          "starts_at": r["starts_at"], "settlement": {"status": "unpaid"}, "created_at": now(), "accept_at": now(), "request_id": rid,
-         "pickup_taluk": r.get("pickup_taluk"), "dest_taluk": r.get("dest_taluk")}
+         "pickup_taluk": r.get("pickup_taluk"), "dest_taluk": r.get("dest_taluk"), "return_date": r.get("return_date"), "return_time": r.get("return_time")}
     await db.hires.insert_one(h)
     start = r["starts_at"].replace(tzinfo=timezone.utc)
     if await has_clash(uid, start, start + timedelta(hours=r["hours"]), exclude_booking=bid):  # lost a race with another accept
@@ -3624,27 +3777,154 @@ async def admin_hire_reports(_: dict = Depends(get_admin)):
 
 @api.get("/admin/pro-drivers")
 async def admin_pro_drivers(status: str = "under_review", service: Literal["all", "rent", "book"] = "all", _: dict = Depends(get_admin)):
-    q: dict = {"status": status}
+    q: dict = {} if status == "all" else {"suspended": True} if status == "suspended" else {"status": status}
     if service != "all":
         q.update(svc_q(service))
-    rows = await db.pro_drivers.find(q, {"_id": 0, "city.geo": 0}).to_list(200)
+    rows = await db.pro_drivers.find(q, {"_id": 0, "city.geo": 0}).sort("submitted_at", -1).to_list(200)
     for r in rows:
         r["documents"] = await db.driver_documents.find_one({"user_id": r["user_id"]}, {"_id": 0, "photos": 1})
-        r["email"] = (await db.users.find_one({"user_id": r["user_id"]}, {"_id": 0, "email": 1}) or {}).get("email")
+        u = await db.users.find_one({"user_id": r["user_id"]}, {"_id": 0, "email": 1, "phone": 1, "picture": 1, "driver_status": 1}) or {}
+        r.update(email=u.get("email"), phone=u.get("phone"), picture=u.get("picture"), carpool_status=u.get("driver_status", "not_submitted"))
         r["services"] = r.get("services") or ["rent"]
         r["availability_status"] = pro_status(r)
+        r["shared_vehicles"] = await db.vehicles.find({"owner_id": r["user_id"], "deleted": {"$ne": True}}, {"_id": 0}).to_list(20)
+        done = await db.hires.find({"driver_id": r["user_id"], "status": "completed"}, {"_id": 0, "service_fee": 1}).to_list(2000)
+        r["completed_trips"], r["earnings_total"] = len(done), sum(h.get("service_fee", 0) for h in done)
     return rows
 
 
+class ProReviewIn(BaseModel):
+    decision: Literal["approved", "rejected", "resubmit"]
+    note: str = Field(default="", max_length=500)
+    items: List[Literal["home", "languages", "licence_no", "licence_expiry", "licence_front", "licence_back", "id_proof", "vehicles"]] = Field(default_factory=list)
+
+
 @api.post("/admin/pro-drivers/{uid}/review")
-async def admin_review_pro(uid: str, body: DriverReviewIn, admin: dict = Depends(get_admin)):
-    r = await db.pro_drivers.update_one({"user_id": uid, "status": {"$in": ["under_review", "approved"]}},
-                                        {"$set": {"status": body.decision, "admin_note": body.note, "reviewed_at": now()}})
+async def admin_review_pro(uid: str, body: ProReviewIn, admin: dict = Depends(get_admin)):
+    if body.decision != "approved" and not body.note.strip():
+        raise HTTPException(400, "Add a reason so the driver knows what to fix")
+    upd = {"status": body.decision, "admin_note": body.note.strip(), "reviewed_at": now(), "reviewed_by": admin["user_id"],
+           "resubmit_items": [] if body.decision == "approved" else body.items}
+    r = await db.pro_drivers.update_one({"user_id": uid, "status": {"$in": ["under_review", "approved"]}}, {"$set": upd})
     if not r.modified_count:
         raise HTTPException(400, "Only submitted local-driver profiles can be reviewed")
     await notify(uid, "driver_approved" if body.decision == "approved" else "driver_rejected", {})
-    await audit(admin["user_id"], f"pro.{body.decision}", uid, {"note": body.note})
+    await audit(admin["user_id"], f"pro.{body.decision}", uid, {"note": body.note, "items": body.items})
     return {"ok": True}
+
+
+class SuspendIn(BaseModel):
+    suspended: bool
+    note: str = Field(default="", max_length=300)
+
+
+@api.post("/admin/pro-drivers/{uid}/suspend")
+async def admin_suspend_pro(uid: str, body: SuspendIn, admin: dict = Depends(get_admin)):
+    upd = {"suspended": body.suspended, "suspend_note": body.note}
+    if body.suspended:
+        upd.update(available=False, availability_status="offline")
+    if not (await db.pro_drivers.update_one({"user_id": uid}, {"$set": upd})).matched_count:
+        raise HTTPException(404, "Local driver not found")
+    await audit(admin["user_id"], "pro.suspend" if body.suspended else "pro.reactivate", uid, {"note": body.note})
+    return {"ok": True}
+
+
+class VehicleReviewIn(BaseModel):
+    decision: Literal["approved", "rejected"]
+    note: str = Field(default="", max_length=300)
+
+
+@api.post("/admin/vehicles/{vid}/commercial")
+async def admin_vehicle_commercial(vid: str, body: VehicleReviewIn, admin: dict = Depends(get_admin)):
+    v = await db.vehicles.find_one({"vehicle_id": vid, "deleted": {"$ne": True}}, {"_id": 0})
+    if not v:
+        raise HTTPException(404, "Vehicle not found")
+    if body.decision == "approved":
+        await commercial_ready(v)
+    await db.vehicles.update_one({"vehicle_id": vid}, {"$set": {"commercial_status": body.decision, "commercial_note": body.note, "commercial_reviewed_at": now(),
+                                                                "commercial_reviewed_by": admin["user_id"]}})
+    await notify(v["owner_id"], "driver_approved" if body.decision == "approved" else "driver_rejected", {})
+    await audit(admin["user_id"], f"vehicle.commercial_{body.decision}", vid, {"reg_no": v["reg_no"], "note": body.note})
+    return {"ok": True}
+
+
+@api.get("/admin/audit-log")
+async def admin_audit_log(prefix: str = Query("pro.", max_length=20), _: dict = Depends(get_admin)):
+    return await db.audit_logs.find({"action": {"$regex": "^" + re.escape(prefix)}}, {"_id": 0}).sort("created_at", -1).to_list(200)
+
+
+# ---------------------------------------------------------------- unified driver earnings (actual completed records only)
+@api.get("/driver/earnings-summary")
+async def earnings_summary(user: dict = Depends(get_user)):
+    uid = user["user_id"]
+    pct = float((await get_settings()).get("commission_pct") or 0)
+    items: list = []
+    trips: dict = {}
+    for b in await db.bookings.find({"driver_id": uid, "status": "completed"}, {"_id": 0}).to_list(3000):
+        t = trips.get(b.get("trip_id"))
+        if t is None and b.get("trip_id"):
+            t = trips[b["trip_id"]] = await db.trips.find_one({"trip_id": b["trip_id"]}, {"_id": 0, "origin.name": 1, "destination.name": 1}) or {}
+        route = f"{(t or {}).get('origin', {}).get('name', '')} → {(t or {}).get('destination', {}).get('name', '')}"
+        items.append({"id": b["booking_id"], "service": "carpool", "route": route, "at": b.get("completed_at") or b.get("created_at"), "gross": b.get("fare_total", 0)})
+    for h in await db.hires.find({"driver_id": uid, "status": "completed"}, {"_id": 0}).to_list(3000):
+        items.append({"id": h["booking_id"], "service": h.get("service") or "rent", "route": h.get("route", ""), "at": h.get("completed_at") or h.get("starts_at"),
+                      "gross": h.get("service_fee", 0)})
+    today = now().astimezone(IST)
+    starts = {"today": today.replace(hour=0, minute=0, second=0, microsecond=0)}
+    starts["week"] = starts["today"] - timedelta(days=today.weekday())
+    starts["month"] = starts["today"].replace(day=1)
+    totals = {svc: {per: {"gross": 0, "commission": 0, "net": 0, "trips": 0} for per in ("today", "week", "month", "all")} for svc in ("all", "carpool", "rent", "book")}
+    for it in items:
+        at = it["at"] if isinstance(it["at"], datetime) else now()
+        at = (at if at.tzinfo else at.replace(tzinfo=timezone.utc)).astimezone(IST)
+        it["at"] = at.isoformat()
+        it["commission"] = round(it["gross"] * pct / 100)
+        it["net"] = it["gross"] - it["commission"]
+        for per in ("today", "week", "month", "all"):
+            if per == "all" or at >= starts[per]:
+                for svc in ("all", it["service"]):
+                    tt = totals[svc][per]
+                    tt["gross"] += it["gross"]
+                    tt["commission"] += it["commission"]
+                    tt["net"] += it["net"]
+                    tt["trips"] += 1
+    items.sort(key=lambda x: x["at"], reverse=True)
+    return {"commission_pct": pct, "totals": totals, "items": items[:200]}
+
+
+async def migrate_local_drivers():
+    """Idempotent: embedded local-driver vehicles -> shared vehicle list; keep approvals, availability and outstation preference."""
+    cat = {"van": "muv", "luxury": "sedan", "other": "sedan"}
+    moved = 0
+    async for p in db.pro_drivers.find({"vehicles_migrated": {"$ne": True}}, {"_id": 0}):
+        ids = []
+        for v in p.get("vehicles") or []:
+            reg = re.sub(r"[\s-]", "", str(v.get("reg_no", "")).upper())
+            if not reg:
+                continue
+            vtype = cat.get(v.get("category"), v.get("category") or "sedan")
+            ex = await db.vehicles.find_one({"owner_id": p["user_id"], "reg_no": reg, "deleted": {"$ne": True}}, {"_id": 0, "vehicle_id": 1})
+            approved = p.get("status") == "approved"
+            if ex:
+                await db.vehicles.update_one({"vehicle_id": ex["vehicle_id"], "commercial_status": {"$ne": "approved"}},
+                                             {"$set": {"commercial_status": "approved" if approved else "pending", "day_rate": v.get("day_rate", 0)}})
+                ids.append(ex["vehicle_id"])
+            else:
+                vid = nid("veh")
+                await db.vehicles.insert_one({"vehicle_id": vid, "owner_id": p["user_id"], "make": v.get("name", "Vehicle"), "model": "", "name": v.get("name", ""),
+                                              "vtype": vtype, "reg_no": reg, "seats": min(int(v.get("seats", 4)), seat_cap(vtype)), "day_rate": v.get("day_rate", 0),
+                                              "hire_available": v.get("available", True), "commercial_status": "approved" if approved else "pending",
+                                              "verified": False, "migrated_from": "local_driver", "created_at": now()})
+                ids.append(vid)
+                moved += 1
+        avail = []
+        for a in p.get("availability") or []:
+            if a.get("from") and a.get("to"):
+                avail.append({**a, "status": a.get("status", "active"), "id": a.get("id") or nid("av")})
+        await db.pro_drivers.update_one({"user_id": p["user_id"]}, {"$set": {"vehicle_ids": ids, "vehicles_migrated": True, "availability": avail,
+                                                                               "acceptOutstationTrips": bool(p.get("acceptOutstationTrips")), "resubmit_items": p.get("resubmit_items", [])}})
+    if moved:
+        logger.info("local-driver migration: %s vehicles moved to the shared vehicle list", moved)
 
 
 geo_router = get_router(db, get_admin)
@@ -3670,6 +3950,7 @@ app.add_middleware(CORSMiddleware, allow_credentials=True, allow_origins=["*"], 
 async def startup():
     await ensure_indexes()
     await seed()
+    await migrate_local_drivers()
     if not await db.lgd_meta.find_one({"key": "lgd"}):  # first boot: load India admin locations in the background
         app.state.lgd_task = asyncio.create_task(lgd_import(db))
     # one-time move: profile photos uploaded in the old driver-verification screen become the Profile photo

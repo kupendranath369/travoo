@@ -1,0 +1,105 @@
+import Ionicons from "@react-native-vector-icons/ionicons";
+import React from "react";
+import { Pressable, View, ViewStyle } from "react-native";
+
+import { IconName, T, radius, space } from "@/src/components/ui";
+import { useTheme } from "@/src/theme";
+
+export const float: ViewStyle = { shadowColor: "#0B2447", shadowOpacity: 0.08, shadowRadius: 14, shadowOffset: { width: 0, height: 6 }, elevation: 3 };
+
+export const LANG_OPTIONS = ["Kannada", "Hindi", "English", "Tamil", "Telugu", "Malayalam", "Marathi", "Gujarati", "Bengali", "Punjabi", "Odia", "Urdu",
+  "Assamese", "Konkani", "Tulu", "Bhojpuri", "Rajasthani", "Kashmiri", "Maithili", "Nepali", "Sindhi", "Manipuri"];
+
+export const PRO_STATUS: Record<string, { label: string; tone: "info" | "success" | "warning" | "error" | "muted"; icon: IconName; text: string }> = {
+  none: { label: "Not registered", tone: "muted", icon: "person-add-outline", text: "Register once to offer Rent a Driver and Book a Driver." },
+  under_review: { label: "Verification pending", tone: "warning", icon: "time-outline", text: "Travoo is checking your documents. We will notify you after the review." },
+  approved: { label: "Approved", tone: "success", icon: "shield-checkmark", text: "You are a verified Travoo local driver." },
+  rejected: { label: "Rejected", tone: "error", icon: "close-circle-outline", text: "Your registration was not approved. Fix the items below and submit again." },
+  resubmit: { label: "Resubmission required", tone: "warning", icon: "refresh-circle-outline", text: "Please correct the items below and submit again." },
+};
+
+export const ITEM_LABEL: Record<string, string> = { home: "Home location", languages: "Languages", licence_no: "Licence number", licence_expiry: "Licence expiry",
+  licence_front: "Licence front photo", licence_back: "Licence back photo", id_proof: "Aadhaar front photo", vehicles: "Vehicle details" };
+
+export const COMMERCIAL: Record<string, { label: string; tone: "info" | "success" | "warning" | "error" | "muted" }> = {
+  approved: { label: "Approved for Book a Driver", tone: "success" }, pending: { label: "Approval pending", tone: "warning" },
+  rejected: { label: "Not approved", tone: "error" }, none: { label: "Carpool only", tone: "muted" },
+};
+
+export function Progress({ step, total = 3, labels }: { step: number; total?: number; labels: string[] }) {
+  const { colors } = useTheme();
+  return (
+    <View testID="pro-progress" style={{ gap: space.sm }}>
+      <View style={{ flexDirection: "row", gap: 6 }}>
+        {Array.from({ length: total }).map((_, i) => (
+          <View key={i} style={{ flex: 1, height: 6, borderRadius: 3, backgroundColor: i <= step ? colors.brandTertiary : colors.surfaceTertiary }} />
+        ))}
+      </View>
+      <T testID="pro-progress-label" size={12} weight="700" color={colors.muted}>STEP {step + 1} OF {total} · {labels[step].toUpperCase()}</T>
+    </View>
+  );
+}
+
+export function ServiceCard({ title, desc, icon, active, onPress, testID, note, disabled }: { title: string; desc: string; icon: IconName; active: boolean; onPress: () => void; testID: string; note?: string; disabled?: boolean }) {
+  const { colors } = useTheme();
+  return (
+    <Pressable testID={testID} onPress={onPress} disabled={disabled} accessibilityRole="checkbox" accessibilityState={{ checked: active, disabled }}
+      style={({ pressed }) => [float, { flex: 1, minHeight: 148, padding: space.md, gap: space.sm, borderRadius: radius.lg, backgroundColor: active ? colors.accentSoft : colors.surfaceSecondary,
+        borderWidth: 2, borderColor: active ? colors.brandTertiary : "transparent", opacity: disabled ? 0.55 : 1, transform: [{ scale: pressed ? 0.98 : 1 }] }]}>
+      <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+        <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: active ? colors.brandTertiary : colors.surfaceTertiary, alignItems: "center", justifyContent: "center" }}>
+          <Ionicons name={icon} size={22} color={active ? "#fff" : colors.onSurface} />
+        </View>
+        <Ionicons name={active ? "checkmark-circle" : "ellipse-outline"} size={24} color={active ? colors.brandTertiary : colors.borderStrong} />
+      </View>
+      <T weight="800" size={15}>{title}</T>
+      <T size={12} color={colors.muted}>{desc}</T>
+      {note ? <T size={11} weight="700" color={colors.brandTertiary}>{note}</T> : null}
+    </Pressable>
+  );
+}
+
+export function Tile({ icon, label, onPress, testID, badge }: { icon: IconName; label: string; onPress: () => void; testID: string; badge?: number }) {
+  const { colors } = useTheme();
+  return (
+    <Pressable testID={testID} onPress={onPress} style={({ pressed }) => [float, { width: "48%", padding: space.md, gap: space.sm, borderRadius: radius.lg,
+      backgroundColor: colors.surfaceSecondary, transform: [{ scale: pressed ? 0.97 : 1 }] }]}>
+      <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: colors.accentSoft, alignItems: "center", justifyContent: "center" }}>
+        <Ionicons name={icon} size={20} color={colors.brandTertiary} />
+      </View>
+      <T weight="700" size={14}>{label}</T>
+      {badge ? <View testID={`${testID}-badge`} style={{ position: "absolute", top: space.sm, right: space.sm, minWidth: 22, height: 22, borderRadius: 11, paddingHorizontal: 6, backgroundColor: colors.error, alignItems: "center", justifyContent: "center" }}>
+        <T size={11} weight="800" color="#fff">{badge}</T>
+      </View> : null}
+    </Pressable>
+  );
+}
+
+export function ChipSelect({ options, value, onChange, testPrefix }: { options: string[]; value: string[]; onChange: (v: string[]) => void; testPrefix: string }) {
+  const { colors } = useTheme();
+  return (
+    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.sm }}>
+      {options.map((o) => {
+        const on = value.includes(o);
+        return (
+          <Pressable key={o} testID={`${testPrefix}-${o.toLowerCase()}`} onPress={() => onChange(on ? value.filter((x) => x !== o) : [...value, o])}
+            style={[on ? float : null, { flexDirection: "row", alignItems: "center", gap: 4, minHeight: 40, paddingHorizontal: space.md, borderRadius: radius.pill,
+              backgroundColor: on ? colors.brandTertiary : colors.surfaceSecondary, borderWidth: 1, borderColor: on ? colors.brandTertiary : colors.border }]}>
+            {on ? <Ionicons name="checkmark" size={14} color="#fff" /> : null}
+            <T size={13} weight="700" color={on ? "#fff" : colors.onSurface}>{o}</T>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+export function Switch({ value, onChange, testID, disabled }: { value: boolean; onChange: (v: boolean) => void; testID: string; disabled?: boolean }) {
+  const { colors } = useTheme();
+  return (
+    <Pressable testID={testID} role="switch" aria-checked={value} disabled={disabled} onPress={() => onChange(!value)} hitSlop={8}
+      style={{ width: 52, height: 30, borderRadius: 15, padding: 3, backgroundColor: value ? colors.success : colors.borderStrong, opacity: disabled ? 0.5 : 1, alignItems: value ? "flex-end" : "flex-start" }}>
+      <View style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: "#fff" }} />
+    </Pressable>
+  );
+}

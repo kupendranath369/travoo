@@ -14,6 +14,8 @@ export type User = {
   user_id: string;
   email: string;
   name: string;
+  dob?: string | null;
+  gender?: string | null;
   phone?: string;
   role: "user" | "admin";
   language: string;

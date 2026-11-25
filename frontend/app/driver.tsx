@@ -146,6 +146,7 @@ export default function DriverScreen() {
         ) : null}
 
         <Section title={t("vehicle.title")} right={!vOpen ? <Btn small variant="ghost" icon="add" label={t("vehicle.add")} onPress={() => setVOpen(true)} testID="vehicle-add-button" /> : null}>
+          <Btn small variant="outline" icon="car-sport-outline" label="Manage / edit all vehicles" onPress={() => router.push("/hire/vehicles")} testID="carpool-manage-vehicles" />
           {p.vehicles.map((x: any) => (
             <Card key={x.vehicle_id} testID={`vehicle-${x.vehicle_id}`} style={{ flexDirection: "row", alignItems: "center", gap: space.md }}>
               <Ionicons name="car-sport" size={26} color={colors.brandPrimary} />

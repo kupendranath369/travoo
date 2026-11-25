@@ -5,7 +5,7 @@ import { manipulateAsync, SaveFormat } from "expo-image-manipulator";
 import * as ImagePicker from "expo-image-picker";
 import * as WebBrowser from "expo-web-browser";
 import React, { useState } from "react";
-import { ActivityIndicator, Linking, Modal, Pressable, View } from "react-native";
+import { ActivityIndicator, Linking, Modal, Platform, Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { API_BASE, api, fileUrl, getApiToken } from "@/src/api";
@@ -27,8 +27,13 @@ const MAX_BYTES = 10 * 1024 * 1024;
 /** Compress camera/gallery photos to JPEG (max 1600px wide) so uploads stay small and HEIC never reaches the server. */
 async function compress(asset: ImagePicker.ImagePickerAsset): Promise<Picked> {
   const actions = asset.width && asset.width > 1600 ? [{ resize: { width: 1600 } }] : [];
-  const out = await manipulateAsync(asset.uri, actions, { compress: 0.72, format: SaveFormat.JPEG });
-  return { uri: out.uri, name: `photo_${Date.now()}.jpg`, mimeType: "image/jpeg", isPdf: false };
+  try {
+    const out = await manipulateAsync(asset.uri, actions, { compress: 0.72, format: SaveFormat.JPEG });
+    return { uri: out.uri, name: `photo_${Date.now()}.jpg`, mimeType: "image/jpeg", isPdf: false };
+  } catch {
+    // some mobile browsers (Android Chrome with large camera photos) fail to re-encode: upload the original instead
+    return { uri: asset.uri, name: asset.fileName || `photo_${Date.now()}.jpg`, mimeType: asset.mimeType || "image/jpeg", isPdf: false };
+  }
 }
 
 const isNetworkError = (e: any) => /network|timed out|connection|failed to fetch/i.test(String(e?.message ?? e));
@@ -91,6 +96,8 @@ export function DocPhotos({ files, kinds, editable, onChanged }: { files: DocFil
   };
 
   const choose = async (s: Source) => {
+    // Web: open the picker straight from the tap. Android Chrome ignores file pickers opened after an awaited permission check.
+    if (Platform.OS === "web") return launch(s);
     const p = s === "camera" ? await ImagePicker.getCameraPermissionsAsync() : await ImagePicker.getMediaLibraryPermissionsAsync();
     if (p.granted) return launch(s);
     setPerm({ source: s, blocked: !p.canAskAgain });

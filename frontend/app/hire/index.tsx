@@ -92,6 +92,8 @@ export default function HireScreen() {
   const [stype, setStype] = useState("hourly");
   const [hours, setHours] = useState(4);
   const [days, setDays] = useState(2);
+  const [retDate, setRetDate] = useState<string | null>(null);
+  const [retTime, setRetTime] = useState("18:00");
   const [vtype, setVtype] = useState("");
   const [vdesc, setVdesc] = useState("");
   const [passengers, setPassengers] = useState(1);
@@ -122,6 +124,7 @@ export default function HireScreen() {
   const queryParams = () => {
     const q = new URLSearchParams({ subdistrict_code: dt.taluk!.code, date: date!, time, service: service!, service_type: stype, hours: String(hours), days: String(days), vehicle_type: vtype, passengers: String(passengers) });
     if (pt.taluk) q.set("pickup_subdistrict_code", pt.taluk.code);
+    if (pickup) { q.set("lat", String(pickup.lat)); q.set("lng", String(pickup.lng)); }
     return q;
   };
   const find = async () => {
@@ -148,7 +151,7 @@ export default function HireScreen() {
   const send = async (key: string, extra: { include_nearby?: boolean; driver_id?: string }) => {
     setSending(key);
     try {
-      const r = await api("/hire/requests", { body: { service, service_type: stype, date, time, hours, days, city: locPayload(pickup!), pickup: pickup!.name, destination: dest!.name, passengers, vehicle_type: vtype, vehicle_desc: vdesc.trim(), notes: notes.trim(), subdistrict_code: dt.taluk!.code, pickup_subdistrict_code: pt.taluk?.code ?? null, taluk_method: dt.method || "manual", ...extra } });
+      const r = await api("/hire/requests", { body: { service, service_type: stype, date, time, hours, days, city: locPayload(pickup!), pickup: pickup!.name, destination: dest!.name, passengers, vehicle_type: vtype, vehicle_desc: vdesc.trim(), notes: notes.trim(), subdistrict_code: dt.taluk!.code, pickup_subdistrict_code: pt.taluk?.code ?? null, taluk_method: dt.method || "manual", ...(stype === "round_trip" ? { return_date: retDate, return_time: retTime } : {}), ...extra } });
       toast(`Request sent to ${r.notified} driver${r.notified > 1 ? "s" : ""}`);
       router.push("/hire/requests");
     } catch (e: any) { setErr(e.message); toast(e.message, "error"); }
@@ -198,6 +201,12 @@ export default function HireScreen() {
         <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
           <T weight="600">Number of days</T>
           <Stepper testID="hire-days" value={days} max={30} onChange={setDays} />
+        </View>
+      ) : stype === "round_trip" ? (
+        <View testID="hire-return-section" style={{ gap: space.sm }}>
+          <DateField testID="hire-return-date" label="Return date" value={retDate} onChange={setRetDate} />
+          <T size={13} weight="600" color={colors.muted}>Return time: {retTime}</T>
+          <TimeChips value={retTime} onChange={setRetTime} />
         </View>
       ) : ["hourly", "one_way"].includes(stype) ? (
         <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
