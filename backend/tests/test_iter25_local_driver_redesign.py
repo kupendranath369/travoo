@@ -117,6 +117,8 @@ class TestSetup:
 
 class TestRegister:
     def test_requires_phone(self):
+        if not requests.get(f"{API}/auth/otp/status").json().get("enabled"):
+            pytest.skip("MSG91 OTP off: mobile not required (iter27)")
         tok, _ = new_user("NoPhone25", phone=False)
         r = requests.post(f"{API}/pro/register", headers=h(tok), json=reg_body())
         assert r.status_code == 400 and "mobile" in r.json()["detail"].lower()

@@ -125,6 +125,7 @@ export default function AuthScreen() {
           ) : null}
           {mode === "email" ? (
             <>
+              {emailMode === "register" ? <Field testID="auth-name-input" label={t("auth.name")} value={f.name} onChangeText={set("name")} autoCapitalize="words" /> : null}
               <Field testID="auth-email-input" label={t("auth.email")} value={f.email} onChangeText={set("email")} autoCapitalize="none" keyboardType="email-address" />
               <View>
                 <Field testID="auth-password-input" label={t("auth.password")} value={f.password} onChangeText={set("password")} secureTextEntry={!showPw} autoCapitalize="none" />
@@ -135,7 +136,6 @@ export default function AuthScreen() {
               </View>
               {emailMode === "register" ? (
                 <>
-                  <Field testID="auth-name-input" label={t("auth.name")} value={f.name} onChangeText={set("name")} autoCapitalize="words" />
                   <Pressable testID="auth-consent-checkbox" onPress={() => setConsent(!consent)} style={{ flexDirection: "row", gap: space.sm, alignItems: "flex-start" }}>
                     <Ionicons name={consent ? "checkbox" : "square-outline"} size={22} color={colors.brandPrimary} />
                     <T size={13} style={{ flex: 1 }}>
@@ -152,12 +152,12 @@ export default function AuthScreen() {
                   <Pressable testID="auth-forgot-password-link" onPress={() => router.push("/forgot-password")} style={{ padding: space.sm }}>
                     <T center weight="700" color={colors.brandPrimary}>Forgot Password?</T>
                   </Pressable>
-                  <Pressable onPress={() => { setErr(""); setEmailMode("register"); }} style={{ padding: space.sm }}>
+                  <Pressable testID="auth-register-link" onPress={() => { setErr(""); setEmailMode("register"); }} style={{ padding: space.sm }}>
                     <T center weight="700" color={colors.brandPrimary}>{"Don't have an account? Register with email"}</T>
                   </Pressable>
                 </>
               ) : (
-                <Pressable onPress={() => { setErr(""); setEmailMode("login"); }} style={{ padding: space.sm }}>
+                <Pressable testID="auth-login-link" onPress={() => { setErr(""); setEmailMode("login"); }} style={{ padding: space.sm }}>
                   <T center weight="700" color={colors.brandPrimary}>Already have an account? Sign in with email</T>
                 </Pressable>
               )}

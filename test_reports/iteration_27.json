@@ -1,0 +1,24 @@
+{
+  "summary": "Iteration 27: tested 'MSG91 OTP off' mode with backend pytest and Playwright at 390x844. Everything requested passes. GET /api/auth/otp/status returns enabled=false. /auth opens in email mode and shows no 'Use mobile number' toggle. The password eye works in both login and register (type changes password -> text -> password). A fresh TEST user registered through the UI (name, email, password, consent; missing consent shows an error) and was logged in on Home. The Profile 'Verify your mobile number' card is hidden. The local driver wizard shows no pro-phone-warning and its personal card reads 'No mobile number'. Languages is a dropdown: pro-lang-options opens with 24 languages, picking one closes the list and adds an orange chip, picked languages leave the list, tapping a chip removes it and returns it to the list, and Continue without a language shows 'Select at least one language'. The full wizard (Hiriyur via location search, Kannada, licence, rent only) submitted to 'Verification pending' for the no-phone user. The carpool manual verification form shows 'Mobile number is optional for now', has no Add button, and submitted to Under review. On the backend, /pro/register and /driver/verification work without a phone; other checks (docs, consent, empty languages 422, expired licence) still apply.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/auth register mode", "issues": ["Field order is Email, Password, Full name. Name usually comes first; consider moving it to the top (minor UX)."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_iter27_otp_off.py", "/app/backend/tests/ui_setup_iter27.py", "/app/test_reports/pytest/iter27.xml"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "useOtp.ts caches the enabled flag at module level for the whole app session, so turning MSG91 on needs an app reload. Acceptable, but note it.",
+    "The auth register/login switch links had no testIDs. Testing agent added auth-register-link and auth-login-link.",
+    "When OTP is enabled later, mode still defaults to 'email'. Confirm this is intended."
+  ],
+  "updated_files": ["/app/frontend/app/auth.tsx (added testIDs auth-register-link / auth-login-link only)", "/app/backend/tests/test_iter25_local_driver_redesign.py (test_requires_phone now skips when OTP is off)", "/app/backend/tests/test_iter27_otp_off.py", "/app/backend/tests/ui_setup_iter27.py"],
+  "success_rate": {"backend": "100% (7/7 new; iter25 regression 24/24 passed, test_requires_phone obsolete and now skipped while OTP is off)", "frontend": "100%"},
+  "seed_data_creation": "None kept. TEST users were deleted by user_id (pytest fixtures + ui_setup_iter27.py cleanup).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "OTP is off (no MSG91 key). Run: cd /app/backend/tests && pytest test_iter27_otp_off.py -c /dev/null -p no:xdist -v. UI helper: python ui_setup_iter27.py docs <email> (uploads local docs for a Passw0rd!x user) | cleanup <email>. On /auth tap auth-register-link to switch to register. Wizard home: tap pro-home-place, type 'Hiriyur' in location-search-input, pick location-option-* and the taluk resolves automatically. Carpool form: /driver/manual-verification."
+}
