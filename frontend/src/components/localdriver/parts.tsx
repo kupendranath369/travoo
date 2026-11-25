@@ -26,16 +26,22 @@ export const COMMERCIAL: Record<string, { label: string; tone: "info" | "success
   rejected: { label: "Not approved", tone: "error" }, none: { label: "Carpool only", tone: "muted" },
 };
 
-export function Progress({ step, total = 3, labels }: { step: number; total?: number; labels: string[] }) {
+export function Progress({ step, labels }: { step: number; total?: number; labels: string[] }) {
   const { colors } = useTheme();
   return (
-    <View testID="pro-progress" style={{ gap: space.sm }}>
-      <View style={{ flexDirection: "row", gap: 6 }}>
-        {Array.from({ length: total }).map((_, i) => (
-          <View key={i} style={{ flex: 1, height: 6, borderRadius: 3, backgroundColor: i <= step ? colors.brandTertiary : colors.surfaceTertiary }} />
-        ))}
-      </View>
-      <T testID="pro-progress-label" size={12} weight="700" color={colors.muted}>STEP {step + 1} OF {total} · {labels[step].toUpperCase()}</T>
+    <View testID="pro-progress" style={{ flexDirection: "row", alignItems: "flex-start" }}>
+      {labels.map((l, i) => (
+        <React.Fragment key={l}>
+          <View style={{ alignItems: "center", gap: 4, width: 92 }}>
+            <View testID={`pro-progress-step-${i + 1}`} style={{ width: 38, height: 38, borderRadius: 19, alignItems: "center", justifyContent: "center",
+              backgroundColor: i <= step ? colors.brandSecondary : colors.surfaceSecondary, borderWidth: 2, borderColor: i <= step ? colors.brandSecondary : colors.border }}>
+              {i < step ? <Ionicons name="checkmark" size={18} color="#fff" /> : <T weight="800" color={i <= step ? "#fff" : colors.muted}>{i + 1}</T>}
+            </View>
+            <T testID={i === step ? "pro-progress-label" : undefined} size={11} weight={i === step ? "800" : "500"} center color={i === step ? colors.onSurface : colors.muted}>{l}</T>
+          </View>
+          {i < labels.length - 1 ? <View style={{ flex: 1, height: 2, marginTop: 18, backgroundColor: i < step ? colors.brandSecondary : colors.border }} /> : null}
+        </React.Fragment>
+      ))}
     </View>
   );
 }

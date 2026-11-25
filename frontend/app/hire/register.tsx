@@ -12,7 +12,7 @@ import { useToast } from "@/src/components/toast";
 import { Badge, Btn, Card, ErrorBox, Header, Loading, T, space } from "@/src/components/ui";
 import { useTheme } from "@/src/theme";
 
-const LABELS = ["Basic information", "Document verification", "Select services"];
+const LABELS = ["Basic Info", "Documents", "Service & Vehicle"];
 
 function StatusView({ me, onFix }: { me: any; onFix: () => void }) {
   const { colors } = useTheme();
@@ -61,7 +61,7 @@ export default function LocalDriverRegister() {
   const [step, setStep] = useState(0);
   const [stepErr, setStepErr] = useState("");
   const [busy, setBusy] = useState(false);
-  const [d, setD] = useState<Draft>({ place: null, taluk: null, languages: [], licence_no: "", licence_expiry: "", services: service === "book" ? ["book"] : ["rent"], vehicle_ids: [] });
+  const [d, setD] = useState<Draft>({ place: null, taluk: null, languages: [], licence_no: "", licence_expiry: "", services: service === "both" ? ["rent", "book"] : service === "book" ? ["book"] : ["rent"], vehicle_ids: [] });
   const set = (p: Partial<Draft>) => { setStepErr(""); setD((x) => ({ ...x, ...p })); };
 
   const load = useCallback(async () => {
@@ -125,18 +125,18 @@ export default function LocalDriverRegister() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.surface }}>
-      <Header title="Local Driver" />
+      <Header title="Driver Registration" />
       <KeyboardAwareScrollView bottomOffset={24} contentContainerStyle={{ padding: space.lg, gap: space.lg, paddingBottom: insets.bottom + space.xxl }}>
         {showStatus ? <StatusView me={me} onFix={() => { setEditing(true); setStep(0); }} /> : (
           <>
             <Progress step={step} labels={LABELS} />
-            <T testID="pro-step-title" size={24} weight="800">{LABELS[step]}</T>
+            <T testID="pro-step-title" size={22} weight="800">{["Basic Information", "Document Verification", "Select Services"][step]}</T>
             {step === 0 ? <StepBasic me={me} d={d} set={set} items={items} /> : step === 1 ? <StepDocs me={me} d={d} set={set} items={items} reload={load} /> : <StepServices me={me} d={d} set={set} items={items} reload={load} />}
             {stepErr ? <T testID="pro-error" color={colors.error}>{stepErr}</T> : null}
             <View style={{ flexDirection: "row", gap: space.sm }}>
               {step > 0 ? <Btn testID="pro-back-button" variant="outline" icon="arrow-back" label="Back" onPress={() => { setStepErr(""); setStep(step - 1); }} /> : null}
-              <Btn style={{ flex: 1 }} testID={step === 2 ? "pro-submit-button" : "pro-next-button"} icon={step === 2 ? "shield-checkmark-outline" : "arrow-forward"}
-                label={step === 2 ? "Submit for Verification" : "Continue"} loading={busy} onPress={next} />
+              <Btn style={{ flex: 1 }} variant={step === 2 ? "primary" : "navy"} testID={step === 2 ? "pro-submit-button" : "pro-next-button"} icon={step === 2 ? "shield-checkmark-outline" : "arrow-forward"}
+                label={step === 2 ? "Submit for Verification" : "Next"} loading={busy} onPress={next} />
             </View>
           </>
         )}

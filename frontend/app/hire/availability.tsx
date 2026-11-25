@@ -8,9 +8,9 @@ import { api } from "@/src/api";
 import { DateField } from "@/src/components/Calendar";
 import { ClockTimePicker, formatClock } from "@/src/components/ClockTimePicker";
 import { confirmAction } from "@/src/components/LocalDriverParts";
-import { float } from "@/src/components/localdriver/parts";
+import { float, Switch } from "@/src/components/localdriver/parts";
 import { useToast } from "@/src/components/toast";
-import { Btn, Card, Empty, Header, Loading, T, radius, space } from "@/src/components/ui";
+import { Badge, Btn, Card, Empty, Header, Loading, T, radius, space } from "@/src/components/ui";
 import { useI18n } from "@/src/i18n";
 import { useTheme } from "@/src/theme";
 
@@ -40,7 +40,12 @@ export default function ScheduleAvailability() {
   const [clock, setClock] = useState<"from" | "to" | null>(null);
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
-  const load = useCallback(() => api("/pro/me").then((r) => setList(r.profile?.availability ?? [])).catch(() => setList([])), []);
+  const [out, setOut] = useState(false);
+  const load = useCallback(() => api("/pro/me").then((r) => { setList(r.profile?.availability ?? []); setOut(!!r.profile?.acceptOutstationTrips); }).catch(() => setList([])), []);
+  const toggleOut = async (v: boolean) => {
+    setOut(v);
+    try { await api("/pro/settings", { method: "PUT", body: { acceptOutstationTrips: v } }); toast(v ? "Outstation trips on" : "Local trips only"); } catch (e: any) { setOut(!v); toast(e.message, "error"); }
+  };
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
   const persist = async (next: Period[], msg: string) => {
@@ -62,10 +67,15 @@ export default function ScheduleAvailability() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.surface }}>
-      <Header title="Schedule Availability" />
+      <Header title="Set Availability" />
       {!list ? <Loading /> : (
         <ScrollView contentContainerStyle={{ padding: space.lg, gap: space.lg, paddingBottom: insets.bottom + space.xxl }}>
-          <T size={13} color={colors.muted}>Optional. Going Online is enough for immediate trips. Add periods to get booking requests for future trips even while offline.</T>
+          <View style={[float, { flexDirection: "row", alignItems: "center", padding: space.md, borderRadius: radius.lg, backgroundColor: colors.surfaceSecondary }]}>
+            <T weight="700" style={{ flex: 1 }}>Accept Outstation Trips</T>
+            <Switch testID="avail-outstation-toggle" value={out} onChange={toggleOut} />
+          </View>
+          <T size={16} weight="800">Add Availability</T>
+          <T size={12} color={colors.muted}>Optional. Going Online is enough for immediate trips. Add periods to get future requests even while offline.</T>
           {edit ? (
             <Card testID="avail-form" style={[float, { gap: space.md, borderWidth: 0 }]}>
               <DateTimeField testID="avail-from" label="Available From" value={edit.from} onChange={(from) => setEdit({ ...edit, from })} open={clock === "from"} onToggle={() => setClock(clock === "from" ? null : "from")} />
@@ -76,8 +86,8 @@ export default function ScheduleAvailability() {
                 <Btn variant="ghost" testID="avail-cancel" label="Cancel" onPress={() => { setEdit(null); setErr(""); }} />
               </View>
             </Card>
-          ) : <Btn testID="avail-add-button" icon="add" label="Add availability" onPress={() => { setErr(""); setClock(null); setEdit({ from: { date: tomorrow, time: "08:00" }, to: { date: tomorrow, time: "20:00" } }); }} />}
-          <T weight="800">Upcoming availability</T>
+          ) : <Btn testID="avail-add-button" icon="add" label="Add Availability" onPress={() => { setErr(""); setClock(null); setEdit({ from: { date: tomorrow, time: "08:00" }, to: { date: tomorrow, time: "20:00" } }); }} />}
+          <T size={16} weight="800">Your Schedules</T>
           {upcoming.length === 0 ? <Empty icon="calendar-outline" title="No scheduled periods" body="You can still receive requests whenever you are Online." /> : null}
           {upcoming.map((a) => (
             <View key={a.id} testID={`avail-item-${a.id}`} style={[float, { flexDirection: "row", alignItems: "center", gap: space.md, padding: space.md, borderRadius: radius.lg, backgroundColor: colors.surfaceSecondary }]}>
@@ -86,6 +96,7 @@ export default function ScheduleAvailability() {
                 <T size={13} weight="700">From {fmt(a.from)}</T>
                 <T size={13} weight="700">Until {fmt(a.to)}</T>
               </View>
+              <Badge label="Active" tone="success" />
               <Pressable testID={`avail-edit-${a.id}`} hitSlop={10} onPress={() => { setErr(""); setClock(null); setEdit({ id: a.id, from: split(a.from), to: split(a.to) }); }}><Ionicons name="create-outline" size={20} color={colors.muted} /></Pressable>
               <Pressable testID={`avail-delete-${a.id}`} hitSlop={10} onPress={() => confirmAction("Delete this period?", "You will stop getting scheduled requests for it.", () => persist((list ?? []).filter((x) => x.id !== a.id), "Deleted"))}>
                 <Ionicons name="trash-outline" size={20} color={colors.error} />

@@ -16,6 +16,7 @@ import { LANGUAGES, useI18n } from "@/src/i18n";
 import { useTheme } from "@/src/theme";
 import { useOtpEnabled } from "@/src/useOtp";
 import { useSetMode } from "@/src/useMode";
+import { ModeSheet } from "@/src/components/ModeSheet";
 import { uploadWithProgress } from "@/src/utils/upload";
 
 function Row({ icon, label, onPress, right, testID }: { icon: IconName; label: string; onPress: () => void; right?: React.ReactNode; testID: string }) {
@@ -36,6 +37,7 @@ function Row({ icon, label, onPress, right, testID }: { icon: IconName; label: s
 export default function ProfileScreen() {
   const otpOn = useOtpEnabled();
   const setMode = useSetMode();
+  const [modeSheet, setModeSheet] = useState(false);
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
   const { t, lang } = useI18n();
@@ -117,33 +119,22 @@ export default function ProfileScreen() {
     <View style={{ flex: 1, backgroundColor: colors.surface }}>
       <Header title={t("tab.profile")} />
       <KeyboardAwareScrollView bottomOffset={24} contentContainerStyle={{ padding: space.lg, gap: space.lg, paddingBottom: insets.bottom + space.xl }}>
-        <Card style={{ backgroundColor: colors.brand, borderColor: colors.brand, gap: space.md }}>
-          <View style={{ flexDirection: "row", gap: space.md, alignItems: "center" }}>
-            <Pressable testID="profile-photo-button" accessibilityLabel="Change profile photo" onPress={uploadProfilePhoto} disabled={uploadingPhoto} style={{ position: "relative" }} hitSlop={20}>
-              <Avatar name={user.name} uri={pictureUrl(user.picture)} size={60} />
-              {uploadingPhoto ? (
-                <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(0,0,0,0.5)", borderRadius: 30, alignItems: "center", justifyContent: "center" }}>
-                  <ActivityIndicator size="small" color="white" />
-                </View>
-              ) : (
-                <View style={{ position: "absolute", bottom: -4, right: -4, backgroundColor: colors.onBrand, borderRadius: 16, width: 32, height: 32, alignItems: "center", justifyContent: "center", borderWidth: 3, borderColor: colors.brand }}>
-                  <Ionicons name="camera" size={16} color={colors.brand} />
-                </View>
-              )}
-            </Pressable>
-            <View style={{ flex: 1, gap: 2 }}>
-              <T testID="profile-name" size={18} weight="800" color={colors.onBrand}>{user.name}</T>
-              <T size={13} color={colors.onBrand} style={{ opacity: 0.8 }}>{user.email ?? (user.phone_e164 ? `+${user.phone_e164}` : "")}</T>
-              <View style={{ flexDirection: "row", gap: space.sm, marginTop: 4 }}>
-                <Badge testID="profile-driver-status" icon="shield-checkmark" label={t(`verify.status.${user.driver_status}`)} tone={user.driver_status === "approved" ? "success" : statusTone(user.driver_status)} />
-                {user.role === "admin" ? <Badge label="Admin" tone="accent" /> : null}
-              </View>
+        <View testID="profile-header" style={{ alignItems: "center", gap: 6 }}>
+          <Pressable testID="profile-photo-button" accessibilityLabel="Change profile photo" onPress={uploadProfilePhoto} disabled={uploadingPhoto} hitSlop={20}>
+            <Avatar name={user.name} uri={pictureUrl(user.picture)} size={96} />
+            <View style={{ position: "absolute", bottom: 0, right: 0, backgroundColor: colors.onSurface, borderRadius: 16, width: 32, height: 32, alignItems: "center", justifyContent: "center", borderWidth: 3, borderColor: colors.surface }}>
+              {uploadingPhoto ? <ActivityIndicator size="small" color="white" /> : <Ionicons name="camera" size={15} color="#fff" />}
             </View>
+          </Pressable>
+          <T testID="profile-name" size={22} weight="800">{user.name}</T>
+          <T size={13} color={colors.muted}>{user.phone ? `+91 ${user.phone}` : user.email ?? (user.phone_e164 ? `+${user.phone_e164}` : "")}</T>
+          <View style={{ flexDirection: "row", gap: space.sm }}>
+            {user.driver_status === "approved" ? <Badge testID="profile-driver-status" icon="shield-checkmark" label="Verified Driver" tone="warning" />
+              : <Badge testID="profile-driver-status" label={t(`verify.status.${user.driver_status}`)} tone={statusTone(user.driver_status)} />}
+            {user.role === "admin" ? <Badge label="Admin" tone="accent" /> : null}
           </View>
-          <View style={{ backgroundColor: colors.surfaceSecondary, borderRadius: 12, padding: space.sm, alignSelf: "flex-start" }}>
-            <Rating value={user.rating_avg} count={user.rating_count} />
-          </View>
-        </Card>
+          <Rating value={user.rating_avg} count={user.rating_count} />
+        </View>
 
         {otpOn && !user.phone_verified ? (
           <Card testID="profile-verify-phone-card" style={{ gap: space.md }}>
@@ -153,23 +144,16 @@ export default function ProfileScreen() {
           </Card>
         ) : null}
 
-        <Card testID="profile-mode-card" style={{ gap: space.sm, padding: space.md, backgroundColor: colors.surfaceSecondary, borderRadius: radius.lg, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 3 }}>
-          <T weight="800" size={16}>My mode</T>
-          <View style={{ flexDirection: "row", gap: space.sm }}>
-            {(["passenger", "driver"] as const).map((m) => {
-              const on = (user.account_type ?? "passenger") === m;
-              return (
-                <Pressable key={m} testID={`profile-mode-${m}`} disabled={on} onPress={async () => {
-                  try { await setMode(m); toast(m === "driver" ? "Switched to Driver mode" : "Switched to Passenger mode"); router.replace("/"); } catch (e: any) { toast(e.message, "error"); }
-                }} style={{ flex: 1, minHeight: 52, flexDirection: "row", gap: 6, alignItems: "center", justifyContent: "center", borderRadius: radius.md,
-                  backgroundColor: on ? colors.brandTertiary : colors.surfaceTertiary }}>
-                  <Ionicons name={m === "driver" ? "car-sport-outline" : "person-outline"} size={18} color={on ? "#fff" : colors.onSurface} />
-                  <T weight="800" color={on ? "#fff" : colors.onSurface}>{m === "driver" ? "Driver" : "Passenger"}</T>
-                </Pressable>
-              );
-            })}
+        <Pressable testID="profile-switch-mode-row" onPress={() => setModeSheet(true)} style={{ flexDirection: "row", alignItems: "center", gap: space.md, padding: space.md, borderRadius: radius.lg, backgroundColor: colors.brandSoft }}>
+          <Ionicons name="swap-horizontal" size={26} color={colors.brandPrimary} />
+          <View style={{ flex: 1 }}>
+            <T weight="800">Switch Mode</T>
+            <T size={12} color={colors.muted}>Now: {(user.account_type ?? "passenger") === "driver" ? "Driver" : "Passenger"} · change to {(user.account_type ?? "passenger") === "driver" ? "Passenger" : "Driver"}</T>
           </View>
-        </Card>
+          <Ionicons name="chevron-forward" size={20} color={colors.muted} />
+        </Pressable>
+        <ModeSheet open={modeSheet} current={user.account_type ?? "passenger"} onClose={() => setModeSheet(false)}
+          onSwitch={async (m) => { try { await setMode(m); setModeSheet(false); toast(m === "driver" ? "Switched to Driver mode" : "Switched to Passenger mode"); router.replace("/"); } catch (e: any) { toast(e.message, "error"); } }} />
 
         <Card testID="personal-profile-card" style={{ gap: space.sm, padding: space.md, backgroundColor: colors.surfaceSecondary, borderRadius: radius.lg, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 3 }}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
@@ -206,6 +190,8 @@ export default function ProfileScreen() {
           <View style={{ gap: 0 }}>
             <Row testID="profile-local-driver-row" icon="briefcase-outline" label="Local Driver" onPress={() => router.push("/hire/register")} />
             <Row testID="profile-verification-row" icon="shield-checkmark-outline" label="Carpool Driver Verification" onPress={() => router.push("/driver")} />
+            <Row testID="profile-documents-row" icon="document-text-outline" label="My Documents" onPress={() => router.push("/hire/register?view=details")} />
+            <Row testID="profile-vehicles-row" icon="car-outline" label="My Vehicles" onPress={() => router.push("/hire/vehicles")} />
             <Row testID="profile-earnings-row" icon="wallet-outline" label={t("profile.earnings")} onPress={() => router.push("/earnings")} />
           </View>
         </Card>

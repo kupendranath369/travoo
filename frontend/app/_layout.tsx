@@ -3,14 +3,15 @@ import { useFonts } from "expo-font";
 import { Stack, useRouter, useSegments } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import React, { useEffect, useState } from "react";
-import { LogBox, StyleSheet, View } from "react-native";
+import { LogBox, StyleSheet, Text, View } from "react-native";
 import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 
 import { AuthProvider, useAuth } from "@/src/auth";
 import { ErrorBoundary } from "@/src/components/error-boundary";
-import { LogoFull } from "@/src/components/Logo";
+import { BrandPin, IMG, Wordmark } from "@/src/components/Brand";
+import { Image } from "expo-image";
 import { ToastProvider } from "@/src/components/toast";
 import { api } from "@/src/api";
 import { I18nProvider, useI18n } from "@/src/i18n";
@@ -53,8 +54,13 @@ function Gate() {
 
   if (showSplash) {
     return (
-      <Animated.View entering={FadeIn.duration(600)} exiting={FadeOut.duration(600)} testID="splash-screen" style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#F8FAFC" }}>
-        <LogoFull width={200} />
+      <Animated.View entering={FadeIn.duration(600)} exiting={FadeOut.duration(600)} testID="splash-screen" style={{ flex: 1, backgroundColor: "#EAF5FB" }}>
+        <Image source={{ uri: IMG.splash }} style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: "62%" }} contentFit="cover" />
+        <View style={{ alignItems: "center", paddingTop: "22%", gap: 10 }}>
+          <BrandPin size={64} />
+          <Wordmark size={56} />
+          <Text style={{ fontFamily: "PJS-SemiBold", fontSize: 15, color: "#14233A" }}>Your Travel. Your Driver. Your Way.</Text>
+        </View>
       </Animated.View>
     );
   }

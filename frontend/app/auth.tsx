@@ -1,6 +1,4 @@
 import Ionicons from "@react-native-vector-icons/ionicons";
-import { Image } from "expo-image";
-import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import { Pressable, View } from "react-native";
@@ -9,14 +7,13 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { api } from "@/src/api";
 import { useAuth } from "@/src/auth";
-import { Logo } from "@/src/components/Logo";
+import { Wordmark } from "@/src/components/Brand";
 import { PhoneOtp } from "@/src/components/PhoneOtp";
 import { Btn, Field, T, radius, space } from "@/src/components/ui";
 import { useOtpEnabled } from "@/src/useOtp";
 import { useI18n } from "@/src/i18n";
 import { useTheme } from "@/src/theme";
 
-const HERO = "https://images.unsplash.com/photo-1614846623957-165ceffbf8d0?w=1200&q=70";
 
 export default function AuthScreen() {
   const insets = useSafeAreaInsets();
@@ -27,7 +24,7 @@ export default function AuthScreen() {
   const otpOn = useOtpEnabled();
   const [mode, setMode] = useState<"phone" | "email">("email");
   const [showPw, setShowPw] = useState(false);
-  const [f, setF] = useState({ email: "", password: "", name: "" });
+  const [f, setF] = useState({ email: "", password: "", name: "", phone: "" });
   const [ticket, setTicket] = useState<{ ticket: string; phone: string } | null>(null);
   const [accountType, setAccountType] = useState<"passenger" | "driver">("passenger");
   const [consent, setConsent] = useState(false);
@@ -51,7 +48,7 @@ export default function AuthScreen() {
         } else {
           if (f.name.trim().length < 2) throw new Error("Enter your full name");
           if (!consent) throw new Error(t("auth.consent_required"));
-          await register({ email: f.email.trim(), password: f.password, name: f.name.trim(), phone: "", language: lang, consent });
+          await register({ email: f.email.trim(), password: f.password, name: f.name.trim(), phone: f.phone.replace(/\D/g, "").slice(-10), language: lang, consent });
         }
       } else if (ticket) {
         if (f.name.trim().length < 2) throw new Error("Enter your full name");
@@ -78,24 +75,16 @@ export default function AuthScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: colors.surface }}>
       <KeyboardAwareScrollView bottomOffset={24} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: insets.bottom + space.xl }}>
-        <View style={{ height: 260 }}>
-          <Image source={{ uri: HERO }} style={{ position: "absolute", width: "100%", height: "100%" }} contentFit="cover" />
-          <LinearGradient colors={["rgba(7,59,130,0.2)", "rgba(7,59,130,0.85)"]} style={{ position: "absolute", width: "100%", height: "100%" }} />
-          <View style={{ position: "absolute", top: insets.top + space.md, right: space.lg }}>
-            <Pressable testID="auth-language-button" onPress={() => router.push("/language?from=profile")} style={{ flexDirection: "row", gap: 6, alignItems: "center", backgroundColor: "rgba(255,255,255,0.2)", paddingHorizontal: space.md, height: 36, borderRadius: radius.pill }}>
-              <Ionicons name="language" size={16} color={colors.onBrand} />
-              <T size={13} weight="600" color={colors.onBrand}>{t("profile.language")}</T>
-            </Pressable>
-          </View>
-          <View style={{ position: "absolute", bottom: space.xl, left: space.lg, right: space.lg, gap: space.sm }}>
-            <View style={{ backgroundColor: colors.surfaceSecondary, alignSelf: "flex-start", padding: space.sm, borderRadius: radius.md }}>
-              <Logo size={36} />
-            </View>
-            <T size={24} weight="800" color={colors.onBrand}>{t("home.hero")}</T>
-          </View>
+        <View style={{ paddingTop: insets.top + space.md, paddingHorizontal: space.lg, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+          <View style={{ width: 40 }} />
+          <Wordmark size={34} />
+          <Pressable testID="auth-language-button" accessibilityLabel={t("profile.language")} onPress={() => router.push("/language?from=profile")} hitSlop={8}
+            style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: colors.surfaceTertiary, alignItems: "center", justifyContent: "center" }}>
+            <Ionicons name="language" size={18} color={colors.brand} />
+          </Pressable>
         </View>
-        <View style={{ padding: space.lg, gap: space.md, marginTop: -space.md, backgroundColor: colors.surface, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg }}>
-          <T size={22} weight="800">{ticket ? "Create your account" : mode === "phone" ? "Sign in or register with mobile" : emailMode === "register" ? "Create account with email" : "Sign in with email"}</T>
+        <View style={{ padding: space.lg, gap: space.md, backgroundColor: colors.surface }}>
+          <T size={24} weight="800" center>{ticket ? "Create your account" : mode === "phone" ? "Sign in or register with mobile" : emailMode === "register" ? "Create Your Account" : "Welcome back"}</T>
           {mode === "phone" && !ticket ? (
             <PhoneOtp testPrefix="auth-otp" onVerified={onOtp} />
           ) : null}
@@ -125,7 +114,8 @@ export default function AuthScreen() {
           ) : null}
           {mode === "email" ? (
             <>
-              {emailMode === "register" ? <Field testID="auth-name-input" label={t("auth.name")} value={f.name} onChangeText={set("name")} autoCapitalize="words" /> : null}
+              {emailMode === "register" ? <Field testID="auth-name-input" label={t("auth.name")} placeholder="Full Name" value={f.name} onChangeText={set("name")} autoCapitalize="words" /> : null}
+              {emailMode === "register" ? <Field testID="auth-phone-input" label="Mobile Number (optional)" placeholder="10-digit mobile" value={f.phone} onChangeText={set("phone")} keyboardType="phone-pad" maxLength={14} /> : null}
               <Field testID="auth-email-input" label={t("auth.email")} value={f.email} onChangeText={set("email")} autoCapitalize="none" keyboardType="email-address" />
               <View>
                 <Field testID="auth-password-input" label={t("auth.password")} value={f.password} onChangeText={set("password")} secureTextEntry={!showPw} autoCapitalize="none" />
@@ -146,7 +136,7 @@ export default function AuthScreen() {
                 </>
               ) : null}
               {err ? <T testID="auth-error" color={colors.error} weight="600">{err}</T> : null}
-              <Btn testID="auth-submit-button" label={emailMode === "register" ? t("auth.register") : t("auth.login")} onPress={submit} loading={busy} />
+              <Btn testID="auth-submit-button" icon="arrow-forward" label={emailMode === "register" ? t("auth.register") : t("auth.login")} onPress={submit} loading={busy} />
               {emailMode === "login" ? (
                 <>
                   <Pressable testID="auth-forgot-password-link" onPress={() => router.push("/forgot-password")} style={{ padding: space.sm }}>

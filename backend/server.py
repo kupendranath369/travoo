@@ -521,6 +521,8 @@ class SessionIn(BaseModel):
 async def register(body: RegisterIn):
     if not body.consent:
         raise HTTPException(400, "Consent is required")
+    if body.phone and not re.fullmatch(r"[6-9]\d{9}", body.phone):
+        raise HTTPException(400, "Enter a valid 10-digit mobile number, or leave it empty")
     doc = new_user_doc(body.email, body.name.strip(), phone=body.phone, language=body.language)
     doc["password_hash"] = hash_pw(body.password)
     try:

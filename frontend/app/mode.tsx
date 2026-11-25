@@ -1,27 +1,32 @@
 import Ionicons from "@react-native-vector-icons/ionicons";
+import { Image } from "expo-image";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
-import { Pressable, View } from "react-native";
+import { Pressable, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { useSetMode } from "@/src/useMode";
+import { IMG, Wordmark } from "@/src/components/Brand";
 import { float } from "@/src/components/localdriver/parts";
-import { IconName, T, radius, space } from "@/src/components/ui";
+import { T, radius, space } from "@/src/components/ui";
+import { useSetMode } from "@/src/useMode";
 import { useTheme } from "@/src/theme";
 
-function ModeCard({ icon, title, desc, onPress, testID, busy }: { icon: IconName; title: string; desc: string; onPress: () => void; testID: string; busy: boolean }) {
-  const { colors } = useTheme();
+function ModeCard({ img, kicker, title, points, bg, accent, onPress, testID, busy }: { img: string; kicker: string; title: string; points: string[]; bg: string; accent: string; onPress: () => void; testID: string; busy: boolean }) {
   return (
-    <Pressable testID={testID} disabled={busy} onPress={onPress} style={({ pressed }) => [float, { flexDirection: "row", alignItems: "center", gap: space.md, padding: space.lg,
-      borderRadius: radius.lg, backgroundColor: colors.surfaceSecondary, opacity: busy ? 0.6 : 1, transform: [{ scale: pressed ? 0.98 : 1 }] }]}>
-      <View style={{ width: 60, height: 60, borderRadius: 30, backgroundColor: colors.accentSoft, alignItems: "center", justifyContent: "center" }}>
-        <Ionicons name={icon} size={30} color={colors.brandTertiary} />
+    <Pressable testID={testID} disabled={busy} onPress={onPress} style={({ pressed }) => [float, { flexDirection: "row", overflow: "hidden", borderRadius: radius.lg, backgroundColor: bg,
+      minHeight: 168, opacity: busy ? 0.6 : 1, transform: [{ scale: pressed ? 0.98 : 1 }] }]}>
+      <Image source={{ uri: img }} style={{ width: "42%" }} contentFit="cover" />
+      <View style={{ flex: 1, padding: space.md, gap: 4 }}>
+        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" }}>
+          <View><T size={13} weight="700">{kicker}</T><T size={24} weight="800" color={accent}>{title}</T></View>
+          <View style={{ width: 30, height: 30, borderRadius: 15, backgroundColor: accent, alignItems: "center", justifyContent: "center" }}><Ionicons name="arrow-forward" size={18} color="#fff" /></View>
+        </View>
+        {points.map((p) => (
+          <View key={p} style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+            <Ionicons name="checkmark" size={16} color={accent} /><T size={13}>{p}</T>
+          </View>
+        ))}
       </View>
-      <View style={{ flex: 1, gap: 4 }}>
-        <T size={18} weight="800">{title}</T>
-        <T size={13} color={colors.muted}>{desc}</T>
-      </View>
-      <Ionicons name="chevron-forward" size={22} color={colors.muted} />
     </Pressable>
   );
 }
@@ -39,12 +44,16 @@ export default function ChooseMode() {
     setBusy(false);
   };
   return (
-    <View style={{ flex: 1, backgroundColor: colors.surface, padding: space.lg, paddingTop: insets.top + space.xxl, gap: space.lg }}>
-      <T testID="mode-title" size={28} weight="800">How will you use Travoo?</T>
-      <T color={colors.muted}>You can change this any time in Profile.</T>
-      <ModeCard testID="mode-passenger" icon="person-outline" title="I'm a Passenger" desc="Find rides, rent a driver for your car, or book a car with driver" busy={busy} onPress={() => pick("passenger")} />
-      <ModeCard testID="mode-driver" icon="car-sport-outline" title="I'm a Driver" desc="Earn as a local driver (Rent a Driver or Book a Driver) and offer carpool rides" busy={busy} onPress={() => pick("driver")} />
+    <ScrollView style={{ flex: 1, backgroundColor: colors.surface }} contentContainerStyle={{ padding: space.lg, paddingTop: insets.top + space.xl, gap: space.lg, paddingBottom: insets.bottom + space.xl }}>
+      <View style={{ alignItems: "center" }}><Wordmark size={34} /></View>
+      <T testID="mode-title" size={26} weight="800" center>How would you like to use Travoo?</T>
+      <ModeCard testID="mode-passenger" img={IMG.passenger} kicker="I'm a" title="Passenger" points={["Find a Ride", "Rent a Driver", "Book a Driver"]} bg={colors.brandSoft} accent={colors.brandPrimary} busy={busy} onPress={() => pick("passenger")} />
+      <ModeCard testID="mode-driver" img={IMG.driver} kicker="I'm a" title="Driver" points={["Offer a Ride", "Driver Only", "Car with Driver", "Earn with Driving"]} bg={colors.accentSoft} accent={colors.brandTertiary} busy={busy} onPress={() => pick("driver")} />
       {err ? <T testID="mode-error" color={colors.error}>{err}</T> : null}
-    </View>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: space.md, padding: space.md, borderRadius: radius.lg, backgroundColor: colors.surfaceSecondary }}>
+        <Ionicons name="swap-horizontal" size={24} color={colors.brandPrimary} />
+        <T size={13} color={colors.muted} style={{ flex: 1 }}>You can switch between Passenger and Driver modes anytime from your profile.</T>
+      </View>
+    </ScrollView>
   );
 }

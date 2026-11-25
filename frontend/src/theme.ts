@@ -40,13 +40,13 @@ const light = {
   // Surfaces: backgrounds, from the screen down to small fills.
   // Each `on` key is the text and icon color for that background.
   // ---------------------------------------------------------------------------
-  surface: "#F5F8FC", // primary canvas, most of every screen
-  onSurface: "#172B4D", // text and icons on the canvas
+  surface: "#F4F8F5", // primary canvas, most of every screen
+  onSurface: "#14233A", // text and icons on the canvas
   surfaceSecondary: "#FFFFFF", // cards, sheets, list rows
   onSurfaceSecondary: "#172B4D", // text and icons on cards, sheets, rows
-  surfaceTertiary: "#EAEFF5", // input backgrounds, chips, deepest nesting
+  surfaceTertiary: "#EEF3F0", // input backgrounds, chips, deepest nesting
   onSurfaceTertiary: "#172B4D", // text on inputs and chips; also muted text
-  surfaceInverse: "#073B82", // tooltips, snackbars, anything popping against the theme
+  surfaceInverse: "#14233A", // tooltips, snackbars, anything popping against the theme
   onSurfaceInverse: "#FFFFFF", // text and icons on the inverse surface
   muted: "#6B778C", // subdued text on surface: captions, timestamps, placeholders
 
@@ -54,13 +54,13 @@ const light = {
   // Brand: the identity color and the fills built from it.
   // Neutral by default; replace with the design guidelines values.
   // ---------------------------------------------------------------------------
-  brand: "#073B82", // base hue, anchor only; Primary, Secondary, Tertiary are weights of it
+  brand: "#1565D8", // base hue, anchor only; Primary, Secondary, Tertiary are weights of it
   onBrand: "#FFFFFF", // text and icons placed directly on brand
-  brandPrimary: "#0875D1", // primary CTA, active tab indicator, selected states
+  brandPrimary: "#1FAA4B", // primary CTA, active tab indicator, selected states
   onBrandPrimary: "#FFFFFF", // text and icons on brandPrimary
-  brandSecondary: "#073B82", // secondary CTA, less prominent accents
+  brandSecondary: "#1E73E8", // secondary CTA, less prominent accents
   onBrandSecondary: "#FFFFFF", // text and icons on brandSecondary
-  brandTertiary: "#FF7900", // chips, tags, badges, subtle brand moments
+  brandTertiary: "#FF9500", // chips, tags, badges, subtle brand moments
   onBrandTertiary: "#FFFFFF", // text and icons on brandTertiary
 
   // ---------------------------------------------------------------------------
@@ -68,13 +68,13 @@ const light = {
   // toasts; the `on` key is text on that fill. The plain key is also safe as
   // text on `surface`.
   // ---------------------------------------------------------------------------
-  success: "#22A06B",
+  success: "#1FAA4B",
   onSuccess: "#FFFFFF",
   warning: "#F5CD47",
   onWarning: "#172B4D",
   error: "#CA3521",
   onError: "#FFFFFF",
-  info: "#0875D1",
+  info: "#1E73E8",
   onInfo: "#FFFFFF",
 
   // ---------------------------------------------------------------------------
@@ -83,10 +83,10 @@ const light = {
   border: "#DFE1E6", // hairline outline, 0.5pt or 1pt max: inputs, cards
   borderStrong: "#B3BAC5", // focus rings, selected outlines, 1.5pt max
   divider: "#DFE1E6", // subtle list separators
-  brandSoft: "#E7F1FC", // pale blue fills
-  accentSoft: "#FFF1E5", // pale orange fills
+  brandSoft: "#E6F6EB", // pale blue fills
+  accentSoft: "#FFF4E0", // pale orange fills
   successSoft: "#E3F5EC",
-  scrim: "rgba(7,59,130,0.55)",
+  scrim: "rgba(20,35,58,0.55)",
 };
 
 export type ThemeColors = typeof light;

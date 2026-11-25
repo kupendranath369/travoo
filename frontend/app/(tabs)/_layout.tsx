@@ -26,8 +26,8 @@ function useUnreadMessages() {
   return n;
 }
 
-const DRIVER_TABS = ["index", "driver-requests", "driver-trips", "driver-earnings"];
-const PASSENGER_TABS = ["index", "offer", "bookings", "messages", "notifications"];
+const DRIVER_TABS = ["index", "driver-trips", "driver-earnings", "messages", "account"];
+const PASSENGER_TABS = ["index", "bookings", "messages", "notifications", "account"];
 
 export default function TabsLayout() {
   const { t } = useI18n();
@@ -62,22 +62,22 @@ export default function TabsLayout() {
     return (
       <NativeTabs tintColor={colors.brandPrimary}>
         <NativeTabs.Trigger name="index">
-          <NativeTabs.Trigger.Icon sf={driver ? "speedometer" : "house.fill"} />
-          <NativeTabs.Trigger.Label>{driver ? "Dashboard" : t("tab.home")}</NativeTabs.Trigger.Label>
+          <NativeTabs.Trigger.Icon sf="house.fill" />
+          <NativeTabs.Trigger.Label>{t("tab.home")}</NativeTabs.Trigger.Label>
         </NativeTabs.Trigger>
-        <NativeTabs.Trigger name="driver-requests" hidden={!driver}>
+        <NativeTabs.Trigger name="driver-requests" hidden>
           <NativeTabs.Trigger.Icon sf="bell.badge.fill" />
           <NativeTabs.Trigger.Label>Requests</NativeTabs.Trigger.Label>
         </NativeTabs.Trigger>
         <NativeTabs.Trigger name="driver-trips" hidden={!driver}>
           <NativeTabs.Trigger.Icon sf="car.fill" />
-          <NativeTabs.Trigger.Label>Trips</NativeTabs.Trigger.Label>
+          <NativeTabs.Trigger.Label>My Trips</NativeTabs.Trigger.Label>
         </NativeTabs.Trigger>
         <NativeTabs.Trigger name="driver-earnings" hidden={!driver}>
           <NativeTabs.Trigger.Icon sf="indianrupeesign.circle.fill" />
           <NativeTabs.Trigger.Label>Earnings</NativeTabs.Trigger.Label>
         </NativeTabs.Trigger>
-        <NativeTabs.Trigger name="offer" hidden={driver}>
+        <NativeTabs.Trigger name="offer" hidden>
           <NativeTabs.Trigger.Icon sf="plus.circle.fill" />
           <NativeTabs.Trigger.Label>{t("tab.offer")}</NativeTabs.Trigger.Label>
         </NativeTabs.Trigger>
@@ -85,7 +85,7 @@ export default function TabsLayout() {
           <NativeTabs.Trigger.Icon sf="ticket.fill" />
           <NativeTabs.Trigger.Label>{t("tab.bookings")}</NativeTabs.Trigger.Label>
         </NativeTabs.Trigger>
-        <NativeTabs.Trigger name="messages" hidden={driver}>
+        <NativeTabs.Trigger name="messages">
           <NativeTabs.Trigger.Icon sf="bubble.left.and.bubble.right.fill" />
           <NativeTabs.Trigger.Label>{t("v2.messages")}</NativeTabs.Trigger.Label>
           {unread ? <NativeTabs.Trigger.Badge>{String(unread)}</NativeTabs.Trigger.Badge> : null}
@@ -94,6 +94,10 @@ export default function TabsLayout() {
           <NativeTabs.Trigger.Icon sf="bell.fill" />
           <NativeTabs.Trigger.Label>{t("profile.notifications")}</NativeTabs.Trigger.Label>
           {unreadNotifications ? <NativeTabs.Trigger.Badge>{String(unreadNotifications)}</NativeTabs.Trigger.Badge> : null}
+        </NativeTabs.Trigger>
+        <NativeTabs.Trigger name="account">
+          <NativeTabs.Trigger.Icon sf="person.crop.circle" />
+          <NativeTabs.Trigger.Label>Account</NativeTabs.Trigger.Label>
         </NativeTabs.Trigger>
       </NativeTabs>
     );
@@ -107,16 +111,16 @@ export default function TabsLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: colors.brand,
+        tabBarActiveTintColor: colors.brandPrimary,
         tabBarInactiveTintColor: colors.muted,
         tabBarLabelStyle: { fontFamily: "PJS-SemiBold", fontSize: 11 },
         tabBarStyle: { backgroundColor: colors.surfaceSecondary, borderTopColor: colors.border, ...(Platform.OS === "web" ? { height: 64 } : {}) },
         tabBarItemStyle: { alignSelf: "center" },
       }}
     >
-      <Tabs.Screen name="index" options={{ title: driver ? "Dashboard" : t("tab.home"), tabBarButtonTestID: driver ? "tab-dashboard" : "tab-home", tabBarIcon: driver ? icon("speedometer", "speedometer-outline") : icon("home", "home-outline") }} />
+      <Tabs.Screen name="index" options={{ title: t("tab.home"), tabBarButtonTestID: "tab-home", tabBarIcon: icon("home", "home-outline") }} />
       <Tabs.Screen name="driver-requests" options={{ ...hide("driver-requests"), title: "Requests", tabBarButtonTestID: "tab-requests", tabBarIcon: icon("notifications", "notifications-outline"), tabBarBadge: openRequests || undefined, tabBarBadgeStyle: { backgroundColor: colors.brandTertiary, color: colors.onBrandTertiary, fontSize: 10 } }} />
-      <Tabs.Screen name="driver-trips" options={{ ...hide("driver-trips"), title: "Trips", tabBarButtonTestID: "tab-trips", tabBarIcon: icon("car", "car-outline") }} />
+      <Tabs.Screen name="driver-trips" options={{ ...hide("driver-trips"), title: "My Trips", tabBarButtonTestID: "tab-trips", tabBarIcon: icon("car", "car-outline") }} />
       <Tabs.Screen name="driver-earnings" options={{ ...hide("driver-earnings"), title: "Earnings", tabBarButtonTestID: "tab-earnings", tabBarIcon: icon("wallet", "wallet-outline") }} />
       <Tabs.Screen
         name="offer"
@@ -135,6 +139,7 @@ export default function TabsLayout() {
       <Tabs.Screen name="bookings" options={{ ...hide("bookings"), title: t("tab.bookings"), tabBarButtonTestID: "tab-bookings", tabBarIcon: icon("ticket", "ticket-outline") }} />
       <Tabs.Screen name="messages" options={{ ...hide("messages"), title: t("v2.messages"), tabBarButtonTestID: "tab-messages", tabBarIcon: icon("chatbubbles", "chatbubbles-outline"), tabBarBadge: unread ? unread : undefined, tabBarBadgeStyle: { backgroundColor: colors.brandTertiary, color: colors.onBrandTertiary, fontSize: 10 } }} />
       <Tabs.Screen name="notifications" options={{ ...hide("notifications"), title: t("profile.notifications"), tabBarButtonTestID: "tab-notifications", tabBarIcon: icon("notifications", "notifications-outline"), tabBarBadge: unreadNotifications ? unreadNotifications : undefined, tabBarBadgeStyle: { backgroundColor: colors.brandTertiary, color: colors.onBrandTertiary, fontSize: 10 } }} />
+      <Tabs.Screen name="account" options={{ ...hide("account"), title: "Account", tabBarButtonTestID: "tab-account", tabBarIcon: icon("person-circle", "person-circle-outline") }} />
     </Tabs>
   );
 }
