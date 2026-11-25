@@ -110,8 +110,8 @@ export function LocalDriverDashboard({ embedded = false }: { embedded?: boolean 
 
         {embedded ? (
           <View style={{ flexDirection: "row", gap: space.sm }}>
-            <Btn small style={{ flex: 1 }} variant="outline" testID="dash-offer-ride" icon="add-circle-outline" label="Offer a ride" onPress={() => router.push("/offer")} />
-            <Btn small style={{ flex: 1 }} variant="outline" testID="dash-messages" icon="chatbubbles-outline" label="Messages" onPress={() => router.push("/messages")} />
+            <Btn small style={{ flex: 1 }} variant="outline" testID="dash-offer-ride" icon="add-circle-outline" label="Offer" onPress={() => router.push("/offer")} />
+            <Btn small style={{ flex: 1 }} variant="outline" testID="dash-messages" icon="chatbubbles-outline" label="Chat" onPress={() => router.push("/messages")} />
             <Btn small style={{ flex: 1 }} variant="outline" testID="dash-notifications" icon="notifications-outline" label="Alerts" onPress={() => router.push("/notifications")} />
           </View>
         ) : null}
