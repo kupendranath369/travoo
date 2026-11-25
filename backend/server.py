@@ -3952,6 +3952,10 @@ async def migrate_local_drivers():
                 avail.append({**a, "status": a.get("status", "active"), "id": a.get("id") or nid("av")})
         await db.pro_drivers.update_one({"user_id": p["user_id"]}, {"$set": {"vehicle_ids": ids, "vehicles_migrated": True, "availability": avail,
                                                                                "acceptOutstationTrips": bool(p.get("acceptOutstationTrips")), "resubmit_items": p.get("resubmit_items", [])}})
+    # existing approved drivers (before app modes existed) start in Driver mode; their choice is kept afterwards
+    approved = await db.pro_drivers.distinct("user_id", {"status": "approved"})
+    await db.users.update_many({"mode_chosen": {"$exists": False}, "$or": [{"user_id": {"$in": approved}}, {"driver_status": "approved"}]},
+                               {"$set": {"account_type": "driver", "mode_chosen": True}})
     if moved:
         logger.info("local-driver migration: %s vehicles moved to the shared vehicle list", moved)
 

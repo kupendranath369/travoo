@@ -76,7 +76,7 @@ export function DriverHome() {
       <T size={18} weight="800">Carpool</T>
       <View style={{ flexDirection: "row", gap: space.md }}>
         <Btn style={{ flex: 1 }} testID="driver-offer-ride" variant="outline" icon="add-circle-outline" label="Offer a ride" onPress={() => router.push("/offer")} />
-        <Btn style={{ flex: 1 }} testID="driver-carpool-verify" variant="outline" icon="shield-checkmark-outline" label="Carpool verification" onPress={() => router.push("/driver")} />
+        <Btn style={{ flex: 1 }} testID="driver-carpool-verify" variant="outline" icon="shield-checkmark-outline" label="Verify" onPress={() => router.push("/driver")} />
       </View>
       <Btn testID="driver-earnings" variant="ghost" icon="wallet-outline" label="My earnings" onPress={() => router.push("/earnings")} />
     </ScrollView>

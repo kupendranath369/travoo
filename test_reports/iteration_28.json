@@ -1,0 +1,27 @@
+{
+  "summary": "Iteration 28: tested the Passenger/Driver app mode feature with backend pytest (8/8 passed) and Playwright at 390x844 on the preview URL. A fresh email registration goes to /mode ('How will you use Travoo?') with the mode-passenger and mode-driver cards. A deep link to /profile before choosing also goes back to /mode. Picking Driver shows driver-home with the 'Driver mode' badge and the driver-choose-rent and driver-choose-book cards. Book opened /hire/register?service=book: step 3 had Book preselected and the pro-book-vehicles section visible. Rent opened ?service=rent: step 3 had only Rent preselected and no vehicle section. Submitting Rent gave 'Verification pending', and Home then showed driver-registration-status instead of the choice cards. After approval through the DB, driver-open-dashboard went to /hire/driver. driver-offer-ride went to /offer, driver-carpool-verify to /driver and driver-earnings to /earnings. In the Profile 'My mode' card, switching to Passenger and back to Driver each showed a toast, redirected to /, changed Home, and stayed after reload. A fresh user who picked Passenger got the passenger home. Demo passenger and demo driver were not sent to /mode. Passenger home regression passed: Rent card goes to /hire?service=rent, Book card to /hire?service=book, Find a Ride with empty fields shows its validation message, and recent searches show. All 5 bottom tabs navigate. Logout and login work.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "DriverHome carpool row", "issues": ["At 390px the 'Carpool verification' button label is cut off ('Carpool veri...'). Use a shorter label like 'Verify', stack the two buttons, or allow two lines."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_iter28_mode.py", "/app/test_reports/pytest/iter28.xml"],
+  "action_items": [
+    "Optional: the seeded demo driver (driver@travoo.in, an approved local driver) has account_type='passenger', so after login it sees the passenger home, not the driver dashboard. Consider giving the demo driver account_type='driver' in the seed or a migration. Existing users from before this feature also default to passenger mode without being asked, including approved local drivers. Consider a one-time migration that sets account_type='driver' for users with an approved pro_drivers profile.",
+    "Minor: the 'Carpool verification' button label is cut off on DriverHome at mobile width."
+  ],
+  "critical_code_review_comments": [
+    "hire/register.tsx load(): when a pro_drivers profile already exists, services is overwritten with p.services, so the ?service= query param is ignored. This is fine for pending or rejected users, but a user with a draft or 'none' profile who taps the other choice will not get it preselected.",
+    "In the Profile header, the badge shows the carpool driver_status ('Not submitted') even for an approved local driver in Driver mode. This may confuse users now that the mode is explicit.",
+    "Google sign-up new users get mode_chosen=false and are sent to /mode, which is consistent. Phone OTP registration passes account_type, so mode_chosen=true and those users skip /mode. Confirm this is intended."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter28_mode.py"],
+  "success_rate": {"backend": "100% (8/8)", "frontend": "100%"},
+  "seed_data_creation": "None kept. TEST users test_iter28ui_a and test_iter28ui_b@example.com (UI) and the pytest test_iter28_* users were deleted by user_id. Demo passenger is confirmed in passenger mode at the end.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Run: cd /app/backend/tests && pytest test_iter28_mode.py -c /dev/null -p no:xdist -v. UI flow: language-continue-button > auth-register-link > register > /mode > mode-driver > driver-home. Upload docs with: python ui_setup_iter27.py docs <email>. Wizard: pro-home-place, type 'Hiriyur' in location-search-input, pick location-option-*, then pro-lang-dropdown > pro-lang-kannada > pro-next-button > pro-licence-no / pro-licence-expiry (DD-MM-YYYY) > pro-next-button. Clean up with: ui_setup_iter27.py cleanup <emails>."
+}
