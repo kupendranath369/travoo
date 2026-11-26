@@ -175,8 +175,14 @@ export default function HireScreen() {
       </View>
       <T size={13} color={colors.muted}>{service === "rent" ? "I have a car. I need a driver." : "I need a car and a driver."}</T>
       <Card style={{ gap: 0, paddingVertical: space.sm }}>
-        <LocationField testID="hire-pickup-field" label={t("v2.pickup_loc")} value={pickup} onChange={setPickup} icon="location-outline" />
-        <LocationField testID="hire-destination-field" label="Destination" value={dest} onChange={setDest} icon="navigate-outline" />
+        <View style={{ paddingRight: 44 }}>
+          <LocationField testID="hire-pickup-field" label={t("v2.pickup_loc")} value={pickup} onChange={setPickup} icon="location-outline" />
+          <Pressable testID="hire-swap-button" accessibilityLabel="Swap pickup location and destination" onPress={() => { setPickup(dest); setDest(pickup); setErr(""); }} hitSlop={8}
+            style={{ position: "absolute", right: 0, top: 46, zIndex: 2, width: 36, height: 36, borderRadius: 18, backgroundColor: colors.brandSoft, alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: colors.surfaceSecondary }}>
+            <Ionicons name="swap-vertical" size={18} color={colors.brandPrimary} />
+          </Pressable>
+          <LocationField testID="hire-destination-field" label="Destination" value={dest} onChange={setDest} icon="navigate-outline" />
+        </View>
         <DateField testID="hire-date" label="Travel date" value={date} onChange={setDate} />
       </Card>
       {dest ? (

@@ -5,7 +5,7 @@ import { HomeLoc, Taluk, TalukPicker } from "@/src/components/TalukPicker";
 import { Badge, Btn, Card, Chip, Field, Stepper, T, space } from "@/src/components/ui";
 import { useTheme } from "@/src/theme";
 
-export const SERVICE_LABEL: Record<string, string> = { rent: "Rent a Driver", book: "Book a Driver" };
+export const SERVICE_LABEL: Record<string, string> = { rent: "Rent a Driver", book: "Book Car" };
 export const RENT_OPTIONS = [["hourly", "Hourly"], ["half_day", "Half-day"], ["full_day", "Full-day"], ["multi_day", "Multiple days"], ["outstation", "Outstation"]] as const;
 export const BOOK_OPTIONS = [["one_way", "One-way"], ["round_trip", "Round trip"], ["multi_day", "Multiple days"], ["outstation", "Outstation"]] as const;
 export const VEHICLE_CATS = ["hatchback", "sedan", "suv", "muv", "van", "luxury", "other"];
@@ -75,7 +75,7 @@ export function ServiceAreasEditor({ areas, onChange, homeCode, testPrefix = "ar
 
 const blank: Vehicle = { name: "", reg_no: "", category: "sedan", seats: 4, day_rate: 0, available: true };
 
-/** Vehicles provided for Book a Driver. */
+/** Vehicles provided for Book Car. */
 export function VehiclesEditor({ vehicles, onChange, testPrefix = "veh" }: { vehicles: Vehicle[]; onChange: (v: Vehicle[]) => void; testPrefix?: string }) {
   const { colors } = useTheme();
   const [v, setV] = useState<Vehicle>(blank);

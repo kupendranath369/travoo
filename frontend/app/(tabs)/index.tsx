@@ -66,12 +66,11 @@ function PassengerHome() {
     setFormErr("");
     router.push({ pathname: "/search", params: { from: JSON.stringify(from), to: JSON.stringify(to), date: date ?? "", seats: "1" } });
   };
-  const art = (testID: string, img: string, title: string, sub: string, bg: string, onPress: () => void, delay: number) => (
+  const art = (testID: string, img: number, title: string, sub: string, bg: string, onPress: () => void, delay: number) => (
     <Pressable testID={testID} onPress={onPress} style={({ pressed }) => ({ flex: 1, borderRadius: radius.lg, backgroundColor: bg, overflow: "hidden", padding: space.sm, gap: 2,
       shadowColor: "#14233A", shadowOpacity: 0.08, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 3, transform: [{ scale: pressed ? 0.97 : 1 }] })}>
-      <FloatingImage uri={img} delay={delay} style={{ width: "100%", height: 120 }} />
-      <T size={15} weight="800" center>{title}</T>
-      <T size={11} color={colors.muted} center>{sub}</T>
+      <FloatingImage source={img} delay={delay} style={{ width: "100%", height: 130 }} testID={`${testID}-image`} />
+      <T size={12} weight="700" center accessibilityLabel={title}>{sub}</T>
     </Pressable>
   );
 
@@ -97,12 +96,12 @@ function PassengerHome() {
         <Animated.View entering={FadeInDown.duration(400)} style={{ marginHorizontal: space.lg, marginTop: -90 }}>
           <Card testID="home-search-card" style={{ gap: space.sm, borderWidth: 0, shadowColor: "#14233A", shadowOpacity: 0.1, shadowRadius: 16, shadowOffset: { width: 0, height: 8 }, elevation: 5 }}>
 <View style={{ paddingRight: 44, gap: space.sm }}>
-            <LocationField testID="home-from-field" label="Leaving from" value={from} onChange={(l) => { setFrom(l); setFormErr(""); }} icon="location" />
+            <LocationField testID="home-from-field" label="Leaving from" value={from} onChange={(l) => { setFrom(l); setFormErr(""); }} icon="location-outline" />
             <Pressable testID="home-swap-button" accessibilityLabel="Swap Leaving from and Going to" onPress={() => { setFrom(to); setTo(from); setFormErr(""); }} hitSlop={8}
               style={{ position: "absolute", right: 0, top: 46, zIndex: 2, width: 36, height: 36, borderRadius: 18, backgroundColor: colors.brandSoft, alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: colors.surfaceSecondary }}>
               <Ionicons name="swap-vertical" size={18} color={colors.brandPrimary} />
             </Pressable>
-            <LocationField testID="home-to-field" label="Going to" value={to} onChange={(l) => { setTo(l); setFormErr(""); }} icon="location" />
+            <LocationField testID="home-to-field" label="Going to" value={to} onChange={(l) => { setTo(l); setFormErr(""); }} icon="navigate-outline" />
             </View>
             <DateField testID="home-date" label="Date (any date if empty)" value={date} onChange={setDate} allowClear />
             {formErr ? <T testID="home-form-error" color={colors.error} weight="600">{formErr}</T> : null}
@@ -110,8 +109,8 @@ function PassengerHome() {
           </Card>
         </Animated.View>
         <Animated.View entering={FadeInDown.delay(80).duration(400)} style={{ flexDirection: "row", gap: space.md, paddingHorizontal: space.lg }}>
-          {art("home-rent-driver-card", IMG.rent, "Rent a Driver", "Driver for your car", colors.brandSoft, () => router.push("/hire?service=rent"), 0)}
-          {art("home-book-driver-card", IMG.book, "Book a Driver", "Car with driver", colors.accentSoft, () => router.push("/hire?service=book"), 400)}
+          {art("home-rent-driver-card", require("@/assets/images/tile-rent-driver.png"), "Rent a Driver", "Driver for your car", colors.brandSoft, () => router.push("/hire?service=rent"), 0)}
+          {art("home-book-car-card", require("@/assets/images/tile-book-car.png"), "Book Car", "Car with driver", colors.accentSoft, () => router.push("/hire?service=book"), 400)}
         </Animated.View>
 
         <Animated.View entering={FadeInDown.delay(120).duration(400)} style={{ gap: space.sm, paddingHorizontal: space.lg }}>
