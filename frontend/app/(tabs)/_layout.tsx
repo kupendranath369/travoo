@@ -119,19 +119,19 @@ export default function TabsLayout() {
         headerShown: false,
         tabBarActiveTintColor: colors.brandPrimary,
         tabBarInactiveTintColor: colors.muted,
-        tabBarLabelStyle: { fontFamily: "PJS-SemiBold", fontSize: 11 },
-        tabBarStyle: { backgroundColor: colors.surfaceSecondary, borderTopColor: colors.border, ...(Platform.OS === "web" ? { height: 64 } : {}) },
+        tabBarLabelStyle: { fontFamily: "PJS-Bold", fontSize: 13 },
+        tabBarStyle: { backgroundColor: colors.surfaceSecondary, borderTopColor: colors.border, ...(Platform.OS === "web" ? { height: 68 } : {}) },
         tabBarItemStyle: { alignSelf: "center" },
       }}
     >
       <Tabs.Screen name="index" options={{ title: t("tab.home"), tabBarButtonTestID: "tab-home", tabBarIcon: icon("home", "home-outline") }} />
-      <Tabs.Screen name="driver-requests" options={{ ...hide("driver-requests"), title: "Requests", tabBarButtonTestID: "tab-requests", tabBarIcon: icon("notifications", "notifications-outline"), tabBarBadge: openRequests || undefined, tabBarBadgeStyle: { backgroundColor: colors.brandTertiary, color: colors.onBrandTertiary, fontSize: 10 } }} />
+      <Tabs.Screen name="driver-requests" options={{ ...hide("driver-requests"), title: "Requests", tabBarButtonTestID: "tab-requests", tabBarIcon: icon("notifications", "notifications-outline"), tabBarBadge: openRequests || undefined, tabBarBadgeStyle: { backgroundColor: colors.brandTertiary, color: colors.onBrandTertiary, fontSize: 11 } }} />
       <Tabs.Screen name="driver-trips" options={{ ...hide("driver-trips"), title: "My Trips", tabBarButtonTestID: "tab-trips", tabBarIcon: icon("car", "car-outline") }} />
       <Tabs.Screen name="driver-earnings" options={{ ...hide("driver-earnings"), title: "Earnings", tabBarButtonTestID: "tab-earnings", tabBarIcon: icon("wallet", "wallet-outline") }} />
       <Tabs.Screen name="bookings" options={{ ...hide("bookings"), title: t("tab.bookings"), tabBarButtonTestID: "tab-bookings", tabBarIcon: icon("ticket", "ticket-outline") }} />
       <Tabs.Screen name="offer" options={{ ...hide("offer"), title: "Offer Ride", tabBarButtonTestID: "tab-offer", tabBarIcon: icon("add-circle", "add-circle-outline") }} />
-      <Tabs.Screen name="messages" options={{ ...hide("messages"), title: t("v2.messages"), tabBarButtonTestID: "tab-messages", tabBarIcon: icon("chatbubbles", "chatbubbles-outline"), tabBarBadge: unread ? unread : undefined, tabBarBadgeStyle: { backgroundColor: colors.brandTertiary, color: colors.onBrandTertiary, fontSize: 10 } }} />
-      <Tabs.Screen name="notifications" options={{ ...hide("notifications"), title: t("profile.notifications"), tabBarButtonTestID: "tab-notifications", tabBarIcon: icon("notifications", "notifications-outline"), tabBarBadge: unreadNotifications ? unreadNotifications : undefined, tabBarBadgeStyle: { backgroundColor: colors.brandTertiary, color: colors.onBrandTertiary, fontSize: 10 } }} />
+      <Tabs.Screen name="messages" options={{ ...hide("messages"), title: t("v2.messages"), tabBarButtonTestID: "tab-messages", tabBarIcon: icon("chatbubbles", "chatbubbles-outline"), tabBarBadge: unread ? unread : undefined, tabBarBadgeStyle: { backgroundColor: colors.brandTertiary, color: colors.onBrandTertiary, fontSize: 11 } }} />
+      <Tabs.Screen name="notifications" options={{ ...hide("notifications"), title: t("profile.notifications"), tabBarButtonTestID: "tab-notifications", tabBarIcon: icon("notifications", "notifications-outline"), tabBarBadge: unreadNotifications ? unreadNotifications : undefined, tabBarBadgeStyle: { backgroundColor: colors.brandTertiary, color: colors.onBrandTertiary, fontSize: 11 } }} />
       <Tabs.Screen name="account" options={{ ...hide("account"), title: "Account", tabBarButtonTestID: "tab-account", tabBarIcon: icon("person-circle", "person-circle-outline") }} />
     </Tabs>
     </>

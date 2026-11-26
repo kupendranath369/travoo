@@ -156,7 +156,7 @@ export function LocationSearchModal({ visible, title, onClose, onSelect }: { vis
           </View>
           <View style={{ margin: space.lg, marginBottom: space.sm, flexDirection: "row", alignItems: "center", backgroundColor: colors.surfaceSecondary, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, paddingHorizontal: space.md }}>
             <Ionicons name="search" size={18} color={colors.muted} />
-            <TextInput testID="location-search-input" autoFocus value={q} onChangeText={setQ} placeholder={t("loc.search")} placeholderTextColor={colors.muted} style={{ flex: 1, height: 50, paddingHorizontal: space.sm, fontSize: 15, color: colors.onSurface }} />
+            <TextInput testID="location-search-input" autoFocus value={q} onChangeText={setQ} placeholder={t("loc.search")} placeholderTextColor={colors.muted} style={{ flex: 1, height: 50, paddingHorizontal: space.sm, fontSize: 17, color: colors.onSurface }} />
             {searching ? <ActivityIndicator testID="location-searching" size="small" color={colors.brandPrimary} /> : q ? (
               <Pressable testID="location-clear" onPress={() => setQ("")} hitSlop={10}><Ionicons name="close-circle" size={18} color={colors.muted} /></Pressable>
             ) : null}

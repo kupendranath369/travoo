@@ -74,8 +74,8 @@ export function ServiceTile({ art, title, sub }: { art: number; title: string; s
         <Path d="M0 12 Q 25 0 50 10 T 100 6" stroke={GOLD} strokeWidth={1.2} fill="none" />
       </Svg>
       <View style={{ paddingHorizontal: 10, paddingBottom: 12, paddingTop: 2, alignItems: "center", gap: 2 }}>
-        <Animated.Text numberOfLines={1} adjustsFontSizeToFit style={{ fontFamily: "PJS-ExtraBold", fontSize: 17, color: "#FFFFFF" }}>{title}</Animated.Text>
-        <Animated.Text numberOfLines={1} adjustsFontSizeToFit style={{ fontFamily: "PJS-SemiBold", fontSize: 12, color: GOLD }}>{sub}</Animated.Text>
+        <Animated.Text numberOfLines={1} adjustsFontSizeToFit style={{ fontFamily: "PJS-ExtraBold", fontSize: 19, color: "#FFFFFF" }}>{title}</Animated.Text>
+        <Animated.Text numberOfLines={1} adjustsFontSizeToFit style={{ fontFamily: "PJS-Bold", fontSize: 14, color: GOLD }}>{sub}</Animated.Text>
       </View>
     </View>
   );

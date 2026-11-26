@@ -36,9 +36,13 @@ type TProps = TextProps & {
 };
 
 /** App text: Plus Jakarta Sans for Latin scripts, system native fonts for Indic/Perso-Arabic scripts. */
-export function T({ size = 14, weight = "400", color, center, style, ...rest }: TProps) {
+// Serif (Times-style) text reads smaller than sans at the same size, so small sizes get a bigger lift.
+export const fs = (size: number) => (size <= 14 ? size + 2 : size + Math.round(size * 0.08));
+
+export function T({ size: base = 14, weight = "400", color, center, style, ...rest }: TProps) {
   const { colors } = useTheme();
   const { latin, rtl } = useI18n();
+  const size = latin ? fs(base) : base;
   const font: TextStyle = latin ? { fontFamily: FONT[weight] } : { fontWeight: weight };
   return (
     <Text
@@ -350,7 +354,8 @@ const useStyles = makeStyles((c) => ({
     borderColor: c.border,
     backgroundColor: c.surfaceSecondary,
     paddingHorizontal: space.md,
-    fontSize: 15,
+    fontSize: 17,
+    fontFamily: "PJS-Regular",
     color: c.onSurface,
   },
 }));

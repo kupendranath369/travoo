@@ -48,7 +48,7 @@ const light = {
   onSurfaceTertiary: "#13284A", // text on inputs and chips; also muted text
   surfaceInverse: "#0E2A4F", // tooltips, snackbars, anything popping against the theme
   onSurfaceInverse: "#FFFFFF", // text and icons on the inverse surface
-  muted: "#6F6A5E", // subdued text on surface: captions, timestamps, placeholders
+  muted: "#545048", // subdued text on surface: captions, timestamps, placeholders
 
   // ---------------------------------------------------------------------------
   // Brand: the identity color and the fills built from it.

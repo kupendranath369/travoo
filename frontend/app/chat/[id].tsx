@@ -86,7 +86,7 @@ export default function ChatScreen() {
       {err ? <T testID="chat-error" size={12} color={colors.error} style={{ paddingHorizontal: space.lg }}>{err}</T> : null}
       <KeyboardStickyView offset={{ opened: insets.bottom }}>
         <View style={{ flexDirection: "row", gap: space.sm, padding: space.md, paddingBottom: insets.bottom + space.md, backgroundColor: colors.surfaceSecondary, borderTopWidth: 1, borderTopColor: colors.border }}>
-          <TextInput testID="chat-input" value={text} onChangeText={setText} placeholder={t("chat.ph")} placeholderTextColor={colors.muted} multiline style={{ flex: 1, minHeight: 44, maxHeight: 120, borderRadius: 22, paddingHorizontal: space.lg, paddingTop: 12, backgroundColor: colors.surfaceTertiary, color: colors.onSurface, fontSize: 15 }} />
+          <TextInput testID="chat-input" value={text} onChangeText={setText} placeholder={t("chat.ph")} placeholderTextColor={colors.muted} multiline style={{ flex: 1, minHeight: 44, maxHeight: 120, borderRadius: 22, paddingHorizontal: space.lg, paddingTop: 12, backgroundColor: colors.surfaceTertiary, color: colors.onSurface, fontSize: 17 }} />
           <Pressable testID="chat-send-button" onPress={send} style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: colors.brandPrimary, alignItems: "center", justifyContent: "center" }}>
             <Ionicons name="send" size={18} color={colors.onBrandPrimary} />
           </Pressable>
