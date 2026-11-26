@@ -3,7 +3,7 @@ import os
 import pytest
 import requests
 
-BASE = os.environ.get("EXPO_PUBLIC_BACKEND_URL", "https://mobile-run-7--9r23nwjy.preview.emergentagent.com").rstrip("/")
+BASE = os.environ.get("EXPO_PUBLIC_BACKEND_URL", "https://app-runner-149--3ohxnclk.preview.emergentagent.com").rstrip("/")
 API = f"{BASE}/api"
 RATES = {"hatchback": 11, "sedan": 13, "suv": 17, "muv": 16}
 
