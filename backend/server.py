@@ -560,13 +560,12 @@ GENERIC_RESET = {"status": "accepted", "message": "If an account exists for this
 
 
 def reset_email_html(name: str, web_link: str, app_link: str) -> str:
-    web, app_ = html_escape(web_link, quote=True), html_escape(app_link, quote=True)
+    web = html_escape(web_link, quote=True)
     return email_shell("Reset your password", (
         f'<tr><td style="font-size:15px;line-height:22px;padding-bottom:20px">Hi {html_escape(name)}, we received a request to reset the password '
         'for your Travoo account. Tap the button below to choose a new password.</td></tr>'
         f'<tr><td style="padding-bottom:16px"><a href="{web}" style="background:#1565d8;color:#ffffff;text-decoration:none;'
         'padding:14px 28px;border-radius:10px;font-weight:bold;font-size:16px;display:inline-block">Reset Password</a></td></tr>'
-        f'<tr><td style="font-size:13px;padding-bottom:16px"><a href="{app_}" style="color:#1565d8">Open in the Travoo app instead</a></td></tr>'
         f'<tr><td style="font-size:14px;color:#1a1f36;padding-bottom:12px"><b>This link expires in {RESET_TTL_MIN} minutes</b> and can be used only once.</td></tr>'
         '<tr><td style="font-size:13px;line-height:20px;color:#6b7280;background:#fff7ed;border-radius:8px;padding:12px">'
         '<b>Didn\'t request this?</b> You can safely ignore this email — your password will not change. '
@@ -579,10 +578,8 @@ async def forgot_password(body: ForgotPasswordIn, request: Request):
     await rate_limit(f"forgot:ip:{client_ip(request)}", 10, 900)
     await rate_limit(f"forgot:email:{email}", 3, 900, "Too many reset requests for this email. Please wait 15 minutes.")
     if not email_configured():
-        logger.error("forgot-password requested but email service is not configured (RESEND_API_KEY / RESEND_FROM)")
-        # Return a generic success message even if email is not configured to prevent email enumeration
-        # But log the error for admin visibility
-        return {"message": "If the email exists, a reset link will be sent"}
+        logger.error("forgot-password requested but email service is not configured (EMERGENT_EMAIL_KEY / EMAIL_FROM_NAME)")
+        raise HTTPException(503, "Password reset emails are not available right now. Please contact Travoo support.")
     user = await db.users.find_one({"email": email}, {"_id": 0, "user_id": 1, "name": 1, "email": 1, "role": 1, "suspended": 1})
     if not user or user.get("suspended"):
         return GENERIC_RESET
@@ -822,7 +819,7 @@ async def user_profile(uid: str, _: dict = Depends(get_user)):
 # ---------------------------------------------------------------- locations (search/geocoding/routing live in geo.py)
 @api.get("/geo/states")
 async def states():
-    return await db.locations.find({"type": {"$in": ["state", "union_territory"]}}, LOC_OUT).sort("name", 1).to_list(50)
+    return await db.locations.find({"type": {"$in": ["state", "union_territory"]}}, {**LOC_OUT, "_id": 0}).sort("name", 1).to_list(50)
 
 
 class LocIn(BaseModel):
