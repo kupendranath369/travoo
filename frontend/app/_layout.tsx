@@ -78,11 +78,11 @@ function Gate() {
 
 export default function RootLayout() {
   const [fontsLoaded] = useFonts({
-    "PJS-Regular": require("../assets/fonts/PJS-400.ttf"),
-    "PJS-Medium": require("../assets/fonts/PJS-500.ttf"),
-    "PJS-SemiBold": require("../assets/fonts/PJS-600.ttf"),
-    "PJS-Bold": require("../assets/fonts/PJS-700.ttf"),
-    "PJS-ExtraBold": require("../assets/fonts/PJS-800.ttf"),
+    "PJS-Regular": require("../assets/fonts/Tinos-Regular.ttf"),
+    "PJS-Medium": require("../assets/fonts/Tinos-Regular.ttf"),
+    "PJS-SemiBold": require("../assets/fonts/Tinos-Bold.ttf"),
+    "PJS-Bold": require("../assets/fonts/Tinos-Bold.ttf"),
+    "PJS-ExtraBold": require("../assets/fonts/Tinos-Bold.ttf"),
   });
   if (!fontsLoaded) return null;
   return (
