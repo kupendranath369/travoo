@@ -2963,6 +2963,35 @@ async def pro_register(body: ProDriverIn, user: dict = Depends(get_user)):
     return {"status": status}
 
 
+BOOK_PRICING_DEFAULTS = {"rate_per_km": {"hatchback": 11, "sedan": 13, "suv": 17, "muv": 16}, "driver_allowance_per_day": 300,
+                         "min_km_per_day": 250, "min_fare": 400}
+
+
+def book_price(km: float, service_type: str, days: int, settings: dict) -> dict:
+    """Book a Car estimate per vehicle category: billable km × rate + driver allowance per day."""
+    r = {**BOOK_PRICING_DEFAULTS, **(settings.get("book_pricing") or {})}
+    rates = {**BOOK_PRICING_DEFAULTS["rate_per_km"], **(r.get("rate_per_km") or {})}
+    days = max(1, days)
+    if service_type == "one_way":
+        billable, days = km, 1
+    elif service_type == "round_trip":
+        billable = 2 * km
+    else:
+        billable = max(2 * km, r["min_km_per_day"] * days)
+    allowance = r["driver_allowance_per_day"] * days
+    out = []
+    for cat, rate in rates.items():
+        low = max(r["min_fare"], round(billable * rate + allowance, -1))
+        out.append({"vehicle_type": cat, "rate_per_km": rate, "low": int(low), "high": int(round(low * 1.2, -1))})
+    return {"distance_km": round(km), "billable_km": round(billable), "days": days, "driver_allowance": allowance, "estimates": out}
+
+
+@api.get("/hire/book-estimate")
+async def hire_book_estimate(km: float = Query(gt=0, le=5000), service_type: Literal["one_way", "round_trip", "multi_day", "outstation"] = "one_way",
+                             days: int = Query(1, ge=1, le=30), _: dict = Depends(get_user)):
+    return book_price(km, service_type, days, await get_settings())
+
+
 def hire_estimate(p: dict, service: str, hours: int) -> int:
     if service == "half_day":
         return p["rate_half_day"]

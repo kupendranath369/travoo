@@ -10,6 +10,7 @@ import { isoDate, TimeChips } from "@/src/components/DateChips";
 import { HireDriverArt } from "@/src/components/HireDriverArt";
 import { BOOK_OPTIONS, feeNote, RENT_OPTIONS, SERVICE_LABEL } from "@/src/components/LocalDriverParts";
 import { LocationField } from "@/src/components/LocationField";
+import { BookPrices } from "@/src/components/localdriver/BookPrices";
 import { HomeLoc, Taluk, TalukPicker } from "@/src/components/TalukPicker";
 import { useToast } from "@/src/components/toast";
 import { Avatar, Badge, Btn, Card, Chip, Empty, Field, Header, Loading, Rating, Stepper, T, space } from "@/src/components/ui";
@@ -121,6 +122,7 @@ export default function HireScreen() {
   const pick = (s: "rent" | "book") => { setService(s); setStype(s === "rent" ? "hourly" : "one_way"); setVtype(s === "rent" ? "" : "sedan"); setErr(""); };
 
   const multi = stype === "multi_day" || stype === "outstation";
+  const bookDays = multi ? days : stype === "round_trip" && date && retDate ? Math.max(1, Math.round((Date.parse(retDate) - Date.parse(date)) / 86400000) + 1) : 1;
   const queryParams = () => {
     const q = new URLSearchParams({ subdistrict_code: dt.taluk!.code, date: date!, time, service: service!, service_type: stype, hours: String(hours), days: String(days), vehicle_type: vtype, passengers: String(passengers) });
     if (pt.taluk) q.set("pickup_subdistrict_code", pt.taluk.code);
@@ -226,6 +228,7 @@ export default function HireScreen() {
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: space.sm }}>
             {["hatchback", "sedan", "suv", "muv", "any"].map((v) => <Chip key={v} testID={`hire-vcat-${v}`} label={v === "any" ? "ANY" : v.toUpperCase()} active={vtype === v} onPress={() => setVtype(v)} />)}
           </ScrollView>
+          <BookPrices pickup={pickup} dest={dest} stype={stype} days={bookDays} vtype={vtype} onPick={setVtype} />
         </>
       ) : (
         <>
