@@ -181,3 +181,8 @@ Pan-India intercity paid carpooling app (BlaBlaCar model) called TRAVOO, tagline
 - Cause: no email provider was configured (RESEND_API_KEY / RESEND_FROM missing), so reset links never went out.
 - email_service.py now uses Emergent managed email (EMERGENT_EMAIL_KEY, EMAIL_FROM_NAME=Travoo) with the safety gate. The reset email has an https link only.
 - Undeliverable addresses return 400 with a friendly message. Tested in iteration_35: sending, generic reply, invalid token, rate limit and the UI flow all pass.
+
+## Iteration 36 (Jun 2026) — New tiles, Book Car, swap
+- The home tiles use the user's artwork (assets/images/tile-rent-driver.png, tile-book-car.png) on white cards. FloatingImage now accepts a local `source`.
+- "Book a Driver" is renamed "Book Car" (car with driver) everywhere in the UI. The service key stays `book`.
+- The hire screen has a pickup ⇄ destination swap (hire-swap-button). The home search uses the pickup pin and destination arrow icons. Tested in iteration_36: frontend 100%.

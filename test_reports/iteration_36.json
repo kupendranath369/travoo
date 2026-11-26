@@ -1,0 +1,26 @@
+{
+  "summary": "Frontend-only test at 390x844 as passenger@travoo.in. All requested features work: new floating artwork on the Rent a Driver and Book Car tiles (local PNGs, 480x447 and 480x444, load correctly, objectFit contain so no cropping, translateY animation confirmed from about -5.9 to -0.75), subtitles 'Driver for your car' and 'Car with driver', tiles open /hire?service=rent and /hire?service=book. The UI no longer shows 'Book a Driver' (checked home, the /hire chooser, the hire tabs and the mode chooser). The home search card shows a location-outline pin for 'Leaving from' and a navigate-outline arrow for 'Going to', and home-swap-button swaps the values. hire-swap-button works on both services: Hyderabad <-> Vijayawada exchanged and the destination taluk card updated. No horizontal overflow (scrollWidth 390) and no console or page errors.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "ModeSheet (src/components/ModeSheet.tsx:36)", "issues": ["Passenger description still says 'Book rides, rent or book a driver'. Consider 'Book rides, rent a driver or book a car' to match the new 'Book Car' wording."]},
+      {"screen": "Home art tiles", "issues": ["The uploaded PNGs have a white background, so a light rectangle shows inside the tinted tile (brandSoft/accentSoft). This is cosmetic. A transparent PNG or a matching tile background would look cleaner."]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Optional: update the ModeSheet passenger description to stop saying 'book a driver'.",
+    "Optional/data: the 'Hyderabad, Telangana, 500001' place does not match any taluk. As a destination it shows 'We could not identify the destination taluk'. This is not caused by the swap: choosing it directly gives the same result, and as a pickup it shows no taluk either."
+  ],
+  "critical_code_review_comments": [
+    "The swap buttons on home and hire use the same inline absolute-position style (right:0, top:46). Their position depends on LocationField height, so it may misalign if a field's subtitle wraps to two lines. Consider a shared SwapButton component."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (skipped)", "frontend": "100%"},
+  "seed_data_creation": "None. Recent searches were not created because Find a Ride was not pressed.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Login flow: /language -> tap language-continue-button -> /auth (email/password inputs present by default) -> home. The passenger went straight to home with no mode chooser. To pick a location: click the field testID, fill location-search-input, wait about 3s, click the first [data-testid^=location-option-]."
+}

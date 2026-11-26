@@ -109,8 +109,8 @@ function PassengerHome() {
           </Card>
         </Animated.View>
         <Animated.View entering={FadeInDown.delay(80).duration(400)} style={{ flexDirection: "row", gap: space.md, paddingHorizontal: space.lg }}>
-          {art("home-rent-driver-card", require("@/assets/images/tile-rent-driver.png"), "Rent a Driver", "Driver for your car", colors.brandSoft, () => router.push("/hire?service=rent"), 0)}
-          {art("home-book-car-card", require("@/assets/images/tile-book-car.png"), "Book Car", "Car with driver", colors.accentSoft, () => router.push("/hire?service=book"), 400)}
+          {art("home-rent-driver-card", require("@/assets/images/tile-rent-driver.png"), "Rent a Driver", "Driver for your car", "#FFFFFF", () => router.push("/hire?service=rent"), 0)}
+          {art("home-book-car-card", require("@/assets/images/tile-book-car.png"), "Book Car", "Car with driver", "#FFFFFF", () => router.push("/hire?service=book"), 400)}
         </Animated.View>
 
         <Animated.View entering={FadeInDown.delay(120).duration(400)} style={{ gap: space.sm, paddingHorizontal: space.lg }}>
