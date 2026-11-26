@@ -8,6 +8,7 @@ import { api, pictureUrl } from "@/src/api";
 import { useAuth } from "@/src/auth";
 import { LocalDriverDashboard } from "@/src/components/localdriver/Dashboard";
 import { float, PRO_STATUS } from "@/src/components/localdriver/parts";
+import { NotificationBell } from "@/src/components/NotificationBell";
 import { Avatar, Badge, Btn, IconName, T, radius, space } from "@/src/components/ui";
 import { useTheme } from "@/src/theme";
 
@@ -54,6 +55,7 @@ export function DriverHome() {
         <Avatar name={user?.name ?? ""} uri={pictureUrl(user?.picture)} size={48} />
         <T size={20} weight="800" style={{ flex: 1 }}>Hi, {user?.name?.split(" ")[0]}</T>
         <Badge testID="driver-home-mode" label="Driver Mode" tone="info" />
+        <NotificationBell testID="driver-home-notifications-button" />
       </Pressable>
       {!me ? null : !p ? (
         <>

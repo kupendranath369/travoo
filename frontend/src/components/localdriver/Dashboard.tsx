@@ -8,6 +8,7 @@ import { api, pictureUrl } from "@/src/api";
 import { useBookingAlertSound } from "@/src/alerts";
 import { float, ServiceCard, Switch } from "@/src/components/localdriver/parts";
 import { useToast } from "@/src/components/toast";
+import { NotificationBell } from "@/src/components/NotificationBell";
 import { Avatar, Badge, ErrorBox, Header, IconName, Loading, T, radius, space } from "@/src/components/ui";
 import { inr, useI18n } from "@/src/i18n";
 import { useTheme } from "@/src/theme";
@@ -77,6 +78,7 @@ export function LocalDriverDashboard({ embedded = false }: { embedded?: boolean 
             </View>
           </View>
           {embedded ? <View testID="dash-mode-pill" style={{ alignSelf: "flex-start", paddingHorizontal: space.md, paddingVertical: 6, borderRadius: radius.pill, backgroundColor: colors.brandSecondary }}><T size={12} weight="800" color="#fff">Driver Mode</T></View> : null}
+          {embedded ? <NotificationBell testID="dash-notifications-button" /> : null}
         </Pressable>
 
         <View testID="dash-online-card" style={[float, { flexDirection: "row", alignItems: "center", gap: space.md, padding: space.md, borderRadius: radius.lg, backgroundColor: p.online ? colors.brandSoft : colors.surfaceSecondary }]}>

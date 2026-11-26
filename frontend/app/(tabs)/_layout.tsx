@@ -27,8 +27,8 @@ function useUnreadMessages() {
   return n;
 }
 
-const DRIVER_TABS = ["index", "driver-trips", "driver-earnings", "messages", "notifications"];
-const PASSENGER_TABS = ["index", "bookings", "offer", "messages", "notifications"];
+const DRIVER_TABS = ["index", "driver-trips", "driver-earnings", "messages"];
+const PASSENGER_TABS = ["index", "bookings", "offer", "messages"];
 
 export default function TabsLayout() {
   const { t } = useI18n();
@@ -93,7 +93,7 @@ export default function TabsLayout() {
           <NativeTabs.Trigger.Label>{t("v2.messages")}</NativeTabs.Trigger.Label>
           {unread ? <NativeTabs.Trigger.Badge>{String(unread)}</NativeTabs.Trigger.Badge> : null}
         </NativeTabs.Trigger>
-        <NativeTabs.Trigger name="notifications">
+        <NativeTabs.Trigger name="notifications" hidden>
           <NativeTabs.Trigger.Icon sf="bell.fill" />
           <NativeTabs.Trigger.Label>{t("profile.notifications")}</NativeTabs.Trigger.Label>
           {unreadNotifications ? <NativeTabs.Trigger.Badge>{String(unreadNotifications)}</NativeTabs.Trigger.Badge> : null}
