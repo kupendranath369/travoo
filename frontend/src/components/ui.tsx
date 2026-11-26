@@ -181,15 +181,15 @@ export function Chip({ label, active, onPress, icon, testID }: { label: string; 
         paddingHorizontal: space.md,
         borderRadius: radius.pill,
         borderWidth: 1,
-        borderColor: active ? colors.brandPrimary : colors.border,
-        backgroundColor: active ? colors.brandSoft : colors.surfaceSecondary,
+        borderColor: active ? colors.brandTertiary : colors.border,
+        backgroundColor: active ? colors.brandTertiary : colors.surfaceSecondary,
         flexDirection: "row",
         alignItems: "center",
         gap: space.xs,
       }}
     >
-      {icon ? <Ionicons name={icon} size={15} color={active ? colors.brandPrimary : colors.muted} /> : null}
-      <T size={13} weight="600" color={active ? colors.brandPrimary : colors.onSurface} numberOfLines={1}>
+      {icon ? <Ionicons name={icon} size={15} color={active ? colors.onBrandTertiary : colors.muted} /> : null}
+      <T size={13} weight="600" color={active ? colors.onBrandTertiary : colors.onSurface} numberOfLines={1}>
         {label}
       </T>
     </Pressable>

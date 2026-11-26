@@ -81,6 +81,8 @@ cp frontend/.env.example frontend/.env
 | `DB_NAME` | backend | Database name |
 | `JWT_SECRET` | backend | Long random string used to sign login tokens |
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` | backend | Admin account created on first start |
+| `FRONTEND_URL` | backend | Public web-app origin used for password-reset links |
+| `RESEND_API_KEY` / `RESEND_FROM` | backend | Resend credentials and verified sender address for password-reset email |
 | `EMERGENT_LLM_KEY` | backend | Emergent key — used for document/photo storage and the translation script |
 | `INTEGRATION_PROXY_URL` | backend (optional) | Override for the Emergent storage endpoint |
 | `EXPO_PUBLIC_BACKEND_URL` | frontend | Public URL of the backend (without `/api`), e.g. `http://192.168.1.10:8001` |

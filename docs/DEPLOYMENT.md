@@ -16,7 +16,9 @@ uvicorn server:app --host 0.0.0.0 --port 8001 --workers 1
 ```
 - Run it behind HTTPS (Nginx, Caddy, or the platform's load balancer). Route `/api/*` to port 8001.
 - Use **1 worker**, or run the daily geo-sync task in a single process only.
-- Required env: `MONGO_URL`, `DB_NAME`, `JWT_SECRET`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`, plus `EMERGENT_LLM_KEY` for photo storage (or replace the storage provider).
+- Required env: `MONGO_URL`, `DB_NAME`, `JWT_SECRET`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`, and `FRONTEND_URL`, plus `EMERGENT_LLM_KEY` for photo storage (or replace the storage provider).
+- Password reset email requires `RESEND_API_KEY` and `RESEND_FROM`. Create a Resend API key, verify the sender domain in Resend, and set `RESEND_FROM` to an address on that domain (for example, `Travoo <no-reply@mail.example.com>`). Set `FRONTEND_URL` to the public web-app origin so the emailed reset link opens the deployed app. Keep these values in the deployment secret manager; do not commit real credentials.
+- If either Resend setting is missing, the forgot-password endpoint now returns HTTP 503 instead of falsely reporting that an email was sent.
 
 Minimal Dockerfile:
 ```dockerfile

@@ -579,10 +579,9 @@ async def forgot_password(body: ForgotPasswordIn, request: Request):
     await rate_limit(f"forgot:ip:{client_ip(request)}", 10, 900)
     await rate_limit(f"forgot:email:{email}", 3, 900, "Too many reset requests for this email. Please wait 15 minutes.")
     if not email_configured():
-        logger.error("forgot-password requested but email service is not configured (RESEND_API_KEY / RESEND_FROM)")
-        # Return a generic success message even if email is not configured to prevent email enumeration
-        # But log the error for admin visibility
-        return {"message": "If the email exists, a reset link will be sent"}
+        logger.error("Password reset email unavailable: configure RESEND_API_KEY and RESEND_FROM")
+        # Fail closed: never tell users a reset email was sent when no provider is configured.
+        raise HTTPException(503, "Password reset email is temporarily unavailable. Please contact support.")
     user = await db.users.find_one({"email": email}, {"_id": 0, "user_id": 1, "name": 1, "email": 1, "role": 1, "suspended": 1})
     if not user or user.get("suspended"):
         return GENERIC_RESET

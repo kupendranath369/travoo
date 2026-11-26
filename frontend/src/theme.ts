@@ -40,28 +40,28 @@ const light = {
   // Surfaces: backgrounds, from the screen down to small fills.
   // Each `on` key is the text and icon color for that background.
   // ---------------------------------------------------------------------------
-  surface: "#FBF7EF", // warm cream canvas
-  onSurface: "#17263D", // deep navy text and icons
+  surface: "#F8F6F1", // Ivory White app background
+  onSurface: "#14243A", // Midnight Navy
   surfaceSecondary: "#FFFFFF", // cards, sheets, list rows
-  onSurfaceSecondary: "#17263D", // text and icons on cards, sheets, rows
-  surfaceTertiary: "#F5EFE3", // input backgrounds, chips, deepest nesting
-  onSurfaceTertiary: "#17263D", // text on inputs and chips; also muted text
-  surfaceInverse: "#17263D", // tooltips, snackbars, anything popping against the theme
+  onSurfaceSecondary: "#14243A", // text and icons on cards, sheets, rows
+  surfaceTertiary: "#F8F6F1", // input backgrounds and deepest nesting
+  onSurfaceTertiary: "#14243A", // text on inputs and chips
+  surfaceInverse: "#14243A", // tooltips, snackbars, anything popping against the theme
   onSurfaceInverse: "#FFFFFF", // text and icons on the inverse surface
-  muted: "#6B778C", // subdued text on surface: captions, timestamps, placeholders
+  muted: "#64748B", // Slate Gray secondary text
 
   // ---------------------------------------------------------------------------
   // Brand: the identity color and the fills built from it.
   // Navy and warm gold identity from the provided Travoo reference.
   // ---------------------------------------------------------------------------
-  brand: "#17263D", // deep navy brand anchor
+  brand: "#14243A", // Midnight Navy brand identity
   onBrand: "#FFFFFF", // text and icons placed directly on brand
-  brandPrimary: "#C99422", // warm gold primary CTA and selected states
-  onBrandPrimary: "#17263D", // navy text and icons on gold
-  brandSecondary: "#A87916", // deeper gold for secondary accents
-  onBrandSecondary: "#FFFFFF", // text and icons on brandSecondary
-  brandTertiary: "#E4B84E", // lighter gold for chips, tags, and badges
-  onBrandTertiary: "#17263D", // navy text on gold
+  brandPrimary: "#14243A", // Midnight Navy primary buttons
+  onBrandPrimary: "#FFFFFF", // white text on navy buttons
+  brandSecondary: "#C5A059", // Champagne Gold premium accent
+  onBrandSecondary: "#14243A", // navy text on gold
+  brandTertiary: "#C5A059", // Champagne Gold selected icons and badges
+  onBrandTertiary: "#14243A", // navy text on gold
 
   // ---------------------------------------------------------------------------
   // Status: semantic only, never decorative. Fill for badges, banners and
@@ -71,7 +71,7 @@ const light = {
   success: "#28795A",
   onSuccess: "#FFFFFF",
   warning: "#F5CD47",
-  onWarning: "#172B4D",
+  onWarning: "#14243A",
   error: "#CA3521",
   onError: "#FFFFFF",
   info: "#315C87",
@@ -80,13 +80,13 @@ const light = {
   // ---------------------------------------------------------------------------
   // Lines
   // ---------------------------------------------------------------------------
-  border: "#E7DFD1", // warm hairline outline
-  borderStrong: "#B9A98C", // focus rings and selected outlines
-  divider: "#E7DFD1", // subtle list separators
-  brandSoft: "#F7EBCB", // pale gold fills
-  accentSoft: "#F3E9D9", // pale warm fills
+  border: "rgba(100,116,139,0.2)", // softened Slate Gray outline
+  borderStrong: "#C5A059", // Champagne Gold selected outline
+  divider: "rgba(100,116,139,0.16)", // subtle Slate Gray separators
+  brandSoft: "#F8F6F1", // Ivory White subtle fill
+  accentSoft: "#F8F6F1", // Ivory White accent fill
   successSoft: "#E5F1EA",
-  scrim: "rgba(23,38,61,0.58)",
+  scrim: "rgba(20,36,58,0.58)",
 };
 
 export type ThemeColors = typeof light;

@@ -63,7 +63,7 @@ export default function TabsLayout() {
     return (
       <>
       <RoleChooser visible={user?.mode_chosen === false} />
-      <NativeTabs tintColor={colors.brandPrimary}>
+      <NativeTabs tintColor={colors.brandTertiary}>
         <NativeTabs.Trigger name="index">
           <NativeTabs.Trigger.Icon sf="house.fill" />
           <NativeTabs.Trigger.Label>{t("tab.home")}</NativeTabs.Trigger.Label>
@@ -117,7 +117,7 @@ export default function TabsLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: colors.brandPrimary,
+        tabBarActiveTintColor: colors.brandTertiary,
         tabBarInactiveTintColor: colors.muted,
         tabBarLabelStyle: { fontFamily: "PJS-SemiBold", fontSize: 11 },
           tabBarStyle: { backgroundColor: colors.surface, borderTopColor: colors.border, ...(Platform.OS === "web" ? { height: 68 } : {}) },
