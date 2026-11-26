@@ -7,7 +7,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { api, Loc, locPayload, publicPhoto } from "@/src/api";
 import { DateField } from "@/src/components/Calendar";
 import { isoDate, TimeChips } from "@/src/components/DateChips";
-import { HireDriverArt } from "@/src/components/HireDriverArt";
+import { PremiumButton, PremiumSection, ServiceChoiceCard, ServiceHero, ServiceSwitch } from "@/src/components/hire/Premium";
 import { BOOK_OPTIONS, feeNote, RENT_OPTIONS, SERVICE_LABEL } from "@/src/components/LocalDriverParts";
 import { LocationField } from "@/src/components/LocationField";
 import { BookPrices } from "@/src/components/localdriver/BookPrices";
@@ -41,23 +41,15 @@ function useTaluk(loc: Loc | null) {
 function ServiceChooser({ onPick, favs }: { onPick: (s: "rent" | "book") => void; favs: any[] }) {
   const { colors } = useTheme();
   const router = useRouter();
-  const option = (s: "rent" | "book", icon: any, line: string) => (
-    <Card testID={`hire-choose-${s}`} onPress={() => onPick(s)} style={{ flexDirection: "row", alignItems: "center", gap: space.md, paddingVertical: space.lg }}>
-      <View style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: s === "rent" ? colors.brandSoft : colors.surfaceTertiary, alignItems: "center", justifyContent: "center" }}>
-        {s === "rent" ? <HireDriverArt size={36} /> : <Ionicons name={icon} size={28} color={colors.brandPrimary} />}
-      </View>
-      <View style={{ flex: 1 }}>
-        <T size={17} weight="800">{SERVICE_LABEL[s].toUpperCase()}</T>
-        <T color={colors.muted}>{line}</T>
-      </View>
-      <Ionicons name="chevron-forward" size={22} color={colors.muted} />
-    </Card>
-  );
   return (
     <View style={{ gap: space.md }}>
-      {option("rent", "key-outline", "I have a car. I need a driver.")}
-      {option("book", "car-sport-outline", "I need a car and a driver.")}
-      <T size={12} color={colors.muted}>Drivers are matched by your DESTINATION taluk. Your pickup is shown to drivers so they can decide if they can reach it.</T>
+      <View style={{ gap: 4, marginBottom: space.xs }}>
+        <T size={12} weight="800" color={colors.brandSecondary} style={{ letterSpacing: 1.5 }}>PREMIUM TRAVEL</T>
+        <T size={26} weight="800">How would you like to travel?</T>
+      </View>
+      <ServiceChoiceCard service="rent" onPress={() => onPick("rent")} />
+      <ServiceChoiceCard service="book" onPress={() => onPick("book")} delay={120} />
+      <T size={12} color={colors.muted} center>Drivers are matched by your DESTINATION taluk. Your pickup is shown to drivers so they can decide if they can reach it.</T>
       {favs.length ? (
         <View style={{ gap: space.sm, marginTop: space.md }}>
           <T weight="800">Favourite drivers</T>
@@ -172,11 +164,9 @@ export default function HireScreen() {
   const opts = service === "book" ? BOOK_OPTIONS : RENT_OPTIONS;
   const form = !service ? <ServiceChooser onPick={pick} favs={favs} /> : (
     <View style={{ gap: space.md }}>
-      <View style={{ flexDirection: "row", gap: space.sm }}>
-        {(["rent", "book"] as const).map((s) => <Chip key={s} testID={`hire-service-tab-${s}`} label={SERVICE_LABEL[s]} active={service === s} onPress={() => pick(s)} />)}
-      </View>
-      <T size={13} color={colors.muted}>{service === "rent" ? "I have a car. I need a driver." : "I need a car and a driver."}</T>
-      <Card style={{ gap: 0, paddingVertical: space.sm }}>
+      <ServiceSwitch value={service} onChange={pick} />
+      <ServiceHero service={service} />
+      <PremiumSection icon="map-outline" title="Your journey" testID="hire-journey-section">
         <View style={{ paddingRight: 44 }}>
           <LocationField testID="hire-pickup-field" label={t("v2.pickup_loc")} value={pickup} onChange={setPickup} icon="location-outline" />
           <Pressable testID="hire-swap-button" accessibilityLabel="Swap pickup location and destination" onPress={() => { setPickup(dest); setDest(pickup); setErr(""); }} hitSlop={8}
@@ -186,7 +176,7 @@ export default function HireScreen() {
           <LocationField testID="hire-destination-field" label="Destination" value={dest} onChange={setDest} icon="navigate-outline" />
         </View>
         <DateField testID="hire-date" label="Travel date" value={date} onChange={setDate} />
-      </Card>
+      </PremiumSection>
       {dest ? (
         <Card testID="hire-dest-taluk-card" style={{ gap: space.xs }}>
           <T size={12} color={colors.muted}>Destination taluk (drivers are matched for this area)</T>
@@ -199,7 +189,7 @@ export default function HireScreen() {
           )}
         </Card>
       ) : null}
-      <T size={13} weight="600" color={colors.muted}>{service === "rent" ? "Booking option" : "Trip type"}</T>
+      <PremiumSection icon="time-outline" title={service === "rent" ? "Booking option" : "Trip type"} testID="hire-trip-section">
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: space.sm }}>
         {opts.map(([k, l]) => <Chip key={k} testID={`hire-type-${k}`} label={l} active={stype === k} onPress={() => setStype(k)} />)}
       </ScrollView>
@@ -222,6 +212,8 @@ export default function HireScreen() {
           <Stepper testID="hire-hours" value={hours} max={24} onChange={setHours} />
         </View>
       ) : null}
+      </PremiumSection>
+      <PremiumSection icon="car-sport-outline" title={service === "book" ? "Choose your car" : "Your car"} testID="hire-vehicle-section">
       {service === "book" ? (
         <>
           <T size={13} weight="600" color={colors.muted}>Vehicle category</T>
@@ -239,14 +231,17 @@ export default function HireScreen() {
           <Field testID="hire-vehicle-desc" label="Your car (optional)" value={vdesc} onChangeText={setVdesc} placeholder="Honda City, automatic" />
         </>
       )}
+      </PremiumSection>
+      <PremiumSection icon="people-outline" title="Passengers & notes" testID="hire-extra-section">
       <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
         <T weight="600">{t("search.passengers")}</T>
         <Stepper testID="hire-passengers" value={passengers} max={service === "book" ? 20 : 8} onChange={setPassengers} />
       </View>
       <Field testID="hire-notes" label={service === "rent" ? "Additional instructions" : "Additional requirements"} value={notes} onChangeText={setNotes} multiline maxLength={500} />
+      </PremiumSection>
       {err ? <T testID="hire-error" color={colors.error}>{err}</T> : null}
-      <Btn testID="hire-find-button" icon="search" label={t("v2.find_drivers")} onPress={find} loading={busy && !rows} />
-      <T size={12} color={colors.muted}>{feeNote(service)}</T>
+      <PremiumButton testID="hire-find-button" icon="search" gold={service === "book"} label={t("v2.find_drivers")} onPress={find} loading={busy && !rows} />
+      <T size={12} color={colors.muted} center>{feeNote(service)}</T>
       {rows ? (
         <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm, marginTop: space.sm }}>
           <Ionicons name="location" size={18} color={colors.brandPrimary} />
