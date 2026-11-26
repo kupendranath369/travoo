@@ -147,6 +147,7 @@ app = FastAPI(title="Travoo API")
 
 @app.get("/health", include_in_schema=False)
 @app.head("/health", include_in_schema=False)
+@app.get("/api/health", include_in_schema=False)
 async def health():
     return {"status": "ok"}
 

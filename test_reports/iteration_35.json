@@ -1,0 +1,34 @@
+{
+  "summary": "Phase-1 build/run smoke test (backend + mobile web 390x844 on EXPO_PACKAGER_PROXY_URL). Backend: 19/20 pytest pass. Health, register (consent enforced, 409 on duplicate), login (401 on wrong password, admin blocked from the app login), auth/me, trip search Bengaluru->Chennai (2 seeded trips), trip detail (needs auth), publish a trip as driver@travoo.in, book and cancel (seats go down and come back, 409 on duplicate, 400 when booking your own trip), hire/drivers ([]), hire/local-drivers, identify-taluk, lgd and other hire endpoints all return 200. Admin login gives 200, but GET /api/admin/stats gives 403 'Please set a new password before using the admin portal' because the seeded admin has must_change_password=true. This is by design; I did not change the admin password. Mobile: language -> Continue -> /auth; register a new email user (the consent error shows, then success) -> role chooser modal -> passenger -> home; passenger login; search Bengaluru->Chennai shows '2 rides found'; the trip page loads; Confirm booking -> /booking/TRV-... shows Confirmed; cancelling in the UI shows Cancelled; Rent a Driver and Book a Driver screens open; taluk lookup works (Mysuru Taluk); 'View available drivers' calls /hire/local-drivers (200). No red screen, no page errors, no API errors >=400 in the UI flows.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/admin/stats", "issue": "Returns 403 until the seeded admin changes the password (must_change_password=true). This is expected, but it means the admin APIs can't be smoke-tested with the credentials in test_credentials.md. To unblock testing, either change the password once (POST /api/admin/auth/change-password) and update test_credentials.md, or accept this."},
+      {"endpoint": "POST /api/auth/login", "issue": "Rate limit is 10 logins per email per 15 min. Repeated test runs lock out the shared demo accounts (429). I cleared only my own rate_limits entries."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Trip details route map (OsmMap.web iframe)", "issue": "The map area (200px) was blank in the headless preview. The iframe srcdoc is there, but the Leaflet tiles/CDN did not show in the screenshot. This may be a headless/network artifact. Check it manually on a device.", "testID": "trip-route-map", "priority": "low"}
+    ],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/test_iter35_phase1_smoke.py", "/app/test_reports/pytest/iter35.xml"],
+  "action_items": [
+    "Optional: let the admin change the password once (or document a non-forced admin test account) so admin/stats can be tested.",
+    "Optional: check manually that the trip route map renders on web."
+  ],
+  "critical_code_review_comments": [
+    "GET /api/trips/{id} requires auth (401 without a token). This is fine because the app always sends one, but note it for API consumers.",
+    "server.py is 4059 lines and should be split. This is out of scope for Phase 1."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter35_phase1_smoke.py (new)"],
+  "success_rate": {"backend": "95% (19/20; the only failure is admin/stats blocked by must_change_password, by design)", "frontend": "100% of requested flows"},
+  "seed_data_creation": "Created TEST trips as driver@travoo.in (trip_5532600c901d, trip_c5ec92ecc7aa, trip_c52e8bd55e6d) and cancelled all 3. Created 4 TEST users (test_iter35_*, test_ui35_47945) and deleted them by user_id. Passenger booking TRV-C51F09DC on the seeded trip trip_adf496008b7d was cancelled in the UI, and seats are back to 3. Deleted only the login rate_limit entries for passenger/driver that my runs created. No seed data was changed.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "The app is in /app/frontend. Run pytest with -n 0 (pytest.ini forces xdist). Run: EXPO_PUBLIC_BACKEND_URL=... pytest tests/test_iter35_phase1_smoke.py -n 0. Watch the login rate limit (10 per email per 15 min). UI: language-continue-button -> auth-email-input/auth-password-input/auth-submit-button; register via auth-register-link + auth-consent-checkbox; the role chooser modal (mode-passenger) appears after the first signup; LocationField -> location-search-input -> location-option-<loc_id>; ride-card-<trip_id>; book-confirm-button; booking-cancel-button/booking-cancel-confirm; home-rent-driver-card/home-book-driver-card -> /hire.",
+  "rca_of_issue": ""
+}

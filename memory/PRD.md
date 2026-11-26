@@ -172,3 +172,18 @@ Pan-India intercity paid carpooling app (BlaBlaCar model) called TRAVOO, tagline
 - Passenger/Driver app mode (/mode chooser, Profile switch sheet). Driver tabs: Home(dashboard)/My Trips/Earnings/Messages/Account. Passenger tabs: Home/Bookings/Messages/Notifications/Account.
 - UI redesign from the user's "Travoo Light" sheet: green CTA + blue wordmark/pin (Brand.tsx), scenic splash/home header, 3 home tiles, /find screen, illustrated mode cards, "Become a Travoo Driver" selection, numbered registration progress, dashboard with earnings row + 3x2 tiles, Set Availability with outstation toggle, centred profile + Switch Mode sheet.
 - Tested iteration_31: backend 18/18, frontend 100%
+
+## Roadmap (imported repo, Nov 2026 session)
+- Phase 1 (DONE 2026-11-26): Build & run in preview, fix startup/runtime blockers only.
+- Phase 2 (next): UI polish of navy/gold theme on main flows (find ride, book, hire driver).
+- Phase 3 (later): Web version mirror/parity.
+
+### Phase 1 work log (2026-11-26)
+- Expo app stays in /app/frontend (supervisor already runs from there; no move).
+- Backend crashed on startup (ModuleNotFoundError: resend) -> installed requirements.txt (emergentintegrations/litellm already present; pinned litellm wheel conflicts, skipped).
+- backend/.env: FRONTEND_URL -> current preview URL; added EMERGENT_LLM_KEY. Other env values kept.
+- frontend/.env: EXPO_PUBLIC_BACKEND_URL -> current preview URL.
+- Added GET /api/health alias (existing /health kept).
+- Seed: 167 locations, popular routes, admin, demo driver/passenger, 6 demo trips load on startup.
+- tsc --noEmit clean; web bundle compiles; testing iteration_35: backend 19/20 (admin/stats 403 until admin changes bootstrap password — by design), all mobile core flows pass.
+- Known: no seeded hire-driver profiles (hire search returns []); MSG91 OTP disabled; Resend not configured; EXPO_PACKAGER_HOSTNAME in frontend/.env still points to old preview host (protected var, not modified).
