@@ -86,6 +86,7 @@ function PassengerHome() {
               <T size={13}>Plan your next trip with Travoo</T>
             </View>
             {user?.role === "admin" && icon("shield-checkmark-outline", () => router.push("/admin/login"), "home-admin-button")}
+            {icon("notifications-outline", () => router.push("/notifications"), "home-notifications-button", unread > 0)}
           </Pressable>
         </View>
         <Animated.View entering={FadeInDown.duration(400)} style={{ marginHorizontal: space.lg, marginTop: -6 }}>
