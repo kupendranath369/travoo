@@ -491,5 +491,6 @@
  "geo.type.post_office": "डाक घर",
  "geo.type.pin": "पिन दोहाय ठाउँ",
  "geo.type.place": "जायगा",
- "geo.along_route": "ᱟᱢ ᱨᱮᱠᱟᱵ ᱴᱷᱮᱱ ~{time} ᱨᱮ ᱫᱟᱨᱮᱭᱟ ({n} ᱠᱤᱢᱤ)"
+ "geo.along_route": "ᱟᱢ ᱨᱮᱠᱟᱵ ᱴᱷᱮᱱ ~{time} ᱨᱮ ᱫᱟᱨᱮᱭᱟ ({n} ᱠᱤᱢᱤ)",
+ "svc.book_car": "ᱠᱟᱨ ᱵᱩᱠ ᱢᱮ"
 }

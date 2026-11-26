@@ -6,6 +6,7 @@ import { Pressable, View } from "react-native";
 import { api, Loc, pictureUrl } from "@/src/api";
 import { DocPhotos } from "@/src/components/DocPhotos";
 import { LocationField } from "@/src/components/LocationField";
+import { useServiceLabel } from "@/src/components/LocalDriverParts";
 import { float, ITEM_LABEL, LanguageSelect, ServiceCard } from "@/src/components/localdriver/parts";
 import { VehicleForm } from "@/src/components/localdriver/VehicleForm";
 import { VehicleRow } from "@/src/components/localdriver/VehicleRow";
@@ -102,6 +103,7 @@ export function StepDocs({ me, d, set, items, reload }: { me: any; d: Draft; set
 }
 
 export function StepServices({ me, d, set, items, reload }: { me: any; d: Draft; set: (p: Partial<Draft>) => void; items: string[]; reload: () => void }) {
+  const svcLabel = useServiceLabel();
   const { colors } = useTheme();
   const [form, setForm] = useState<any>(null);
   const toggle = (s: string) => set({ services: d.services.includes(s) ? d.services.filter((x) => x !== s) : [...d.services, s] });
@@ -110,11 +112,11 @@ export function StepServices({ me, d, set, items, reload }: { me: any; d: Draft;
     <View style={{ gap: space.lg }}>
       <View style={{ flexDirection: "row", gap: space.md }}>
         <ServiceCard testID="pro-service-rent" icon="key-outline" title="Rent a Driver" desc="Drive the customer's own vehicle. No vehicle needed." active={d.services.includes("rent")} onPress={() => toggle("rent")} />
-        <ServiceCard testID="pro-service-book" icon="car-sport-outline" title="Book a Driver" desc="You provide the vehicle and drive." active={book} onPress={() => toggle("book")} note="Approved vehicle required" />
+        <ServiceCard testID="pro-service-book" icon="car-sport-outline" title={svcLabel("book")} desc="You provide the vehicle and drive." active={book} onPress={() => toggle("book")} note="Approved vehicle required" />
       </View>
       {book ? (
         <View testID="pro-book-vehicles" style={{ gap: space.sm }}>
-          <T weight="800">Vehicles for Book a Driver</T>
+          <T weight="800">Vehicles for {svcLabel("book")}</T>
           <Flag k="vehicles" items={items} />
           {me.vehicles.length ? <T size={12} color={colors.muted}>Select from your vehicle list (shared with Carpool).</T> : null}
           {me.vehicles.map((v: any) => (

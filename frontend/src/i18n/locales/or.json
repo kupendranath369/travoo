@@ -491,5 +491,6 @@
  "geo.type.post_office": "ଡାକଘର",
  "geo.type.pin": "ପିନ୍ କରାଯାଇଥିବା ସ୍ଥାନ",
  "geo.type.place": "ସ୍ଥାନ",
- "geo.along_route": "ଆପଣଙ୍କ ପିକଅପ୍ ପଏଣ୍ଟ ଦେଇ ~{time}ରେ ଯାଏ ({n} କି.ମି.)"
+ "geo.along_route": "ଆପଣଙ୍କ ପିକଅପ୍ ପଏଣ୍ଟ ଦେଇ ~{time}ରେ ଯାଏ ({n} କି.ମି.)",
+ "svc.book_car": "କାର୍ ବୁକ୍ କରନ୍ତୁ"
 }

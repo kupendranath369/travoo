@@ -491,5 +491,6 @@
  "geo.type.post_office": "પોસ્ટ ઓફિસ",
  "geo.type.pin": "પિન કરેલી જગ્યા",
  "geo.type.place": "જગ્યા",
- "geo.along_route": "તમારા પિકઅપ પરથી ~{time} માં પસાર થાય છે ({n} કિમી)"
+ "geo.along_route": "તમારા પિકઅપ પરથી ~{time} માં પસાર થાય છે ({n} કિમી)",
+ "svc.book_car": "કાર બુક કરો"
 }

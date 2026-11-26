@@ -8,8 +8,8 @@ import { api, Loc, locPayload, publicPhoto } from "@/src/api";
 import { DateField } from "@/src/components/Calendar";
 import { isoDate, TimeChips } from "@/src/components/DateChips";
 import { HireDriverArt } from "@/src/components/HireDriverArt";
-import { BOOK_OPTIONS, feeNote, RENT_OPTIONS, SERVICE_LABEL } from "@/src/components/LocalDriverParts";
-import { LocationField } from "@/src/components/LocationField";
+import { BOOK_OPTIONS, feeNote, RENT_OPTIONS, useServiceLabel } from "@/src/components/LocalDriverParts";
+import { PlacePair } from "@/src/components/LocationField";
 import { HomeLoc, Taluk, TalukPicker } from "@/src/components/TalukPicker";
 import { useToast } from "@/src/components/toast";
 import { Avatar, Badge, Btn, Card, Chip, Empty, Field, Header, Loading, Rating, Stepper, T, space } from "@/src/components/ui";
@@ -40,13 +40,14 @@ function useTaluk(loc: Loc | null) {
 function ServiceChooser({ onPick, favs }: { onPick: (s: "rent" | "book") => void; favs: any[] }) {
   const { colors } = useTheme();
   const router = useRouter();
+  const svcLabel = useServiceLabel();
   const option = (s: "rent" | "book", icon: any, line: string) => (
     <Card testID={`hire-choose-${s}`} onPress={() => onPick(s)} style={{ flexDirection: "row", alignItems: "center", gap: space.md, paddingVertical: space.lg }}>
       <View style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: s === "rent" ? colors.brandSoft : colors.surfaceTertiary, alignItems: "center", justifyContent: "center" }}>
         {s === "rent" ? <HireDriverArt size={36} /> : <Ionicons name={icon} size={28} color={colors.brandPrimary} />}
       </View>
       <View style={{ flex: 1 }}>
-        <T size={17} weight="800">{SERVICE_LABEL[s].toUpperCase()}</T>
+        <T size={17} weight="800">{svcLabel(s).toUpperCase()}</T>
         <T color={colors.muted}>{line}</T>
       </View>
       <Ionicons name="chevron-forward" size={22} color={colors.muted} />
@@ -65,7 +66,7 @@ function ServiceChooser({ onPick, favs }: { onPick: (s: "rent" | "book") => void
               <Avatar name={f.user.name} uri={f.user.has_photo ? publicPhoto(f.user_id) : null} />
               <View style={{ flex: 1 }}>
                 <T weight="700">{f.user.name}</T>
-                <T size={12} color={colors.muted}>{f.services.map((s: string) => SERVICE_LABEL[s]).join(" · ")} · {f.home?.subdistrict_name ?? ""}</T>
+                <T size={12} color={colors.muted}>{f.services.map((s: string) => svcLabel(s)).join(" · ")} · {f.home?.subdistrict_name ?? ""}</T>
               </View>
               <Ionicons name="heart" size={18} color={colors.error} />
             </Card>
@@ -81,6 +82,7 @@ export default function HireScreen() {
   const { colors } = useTheme();
   const { t } = useI18n();
   const router = useRouter();
+  const svcLabel = useServiceLabel();
   const params = useLocalSearchParams();
   const toast = useToast();
   const [service, setService] = useState<"rent" | "book" | null>(null);
@@ -168,15 +170,23 @@ export default function HireScreen() {
   };
 
   const opts = service === "book" ? BOOK_OPTIONS : RENT_OPTIONS;
+  const label = (txt: string) => <T size={12} weight="700" color={colors.muted} style={{ letterSpacing: 0.4 }}>{txt.toUpperCase()}</T>;
+  const row = (txt: string, right: React.ReactNode) => (
+    <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", minHeight: 44 }}>
+      <T weight="600">{txt}</T>
+      {right}
+    </View>
+  );
   const form = !service ? <ServiceChooser onPick={pick} favs={favs} /> : (
     <View style={{ gap: space.md }}>
       <View style={{ flexDirection: "row", gap: space.sm }}>
-        {(["rent", "book"] as const).map((s) => <Chip key={s} testID={`hire-service-tab-${s}`} label={SERVICE_LABEL[s]} active={service === s} onPress={() => pick(s)} />)}
+        {(["rent", "book"] as const).map((s) => <Chip key={s} testID={`hire-service-tab-${s}`} label={svcLabel(s)} active={service === s} onPress={() => pick(s)} />)}
       </View>
       <T size={13} color={colors.muted}>{service === "rent" ? "I have a car. I need a driver." : "I need a car and a driver."}</T>
-      <Card style={{ gap: 0, paddingVertical: space.sm }}>
-        <LocationField testID="hire-pickup-field" label={t("v2.pickup_loc")} value={pickup} onChange={setPickup} icon="location-outline" />
-        <LocationField testID="hire-destination-field" label="Destination" value={dest} onChange={setDest} icon="navigate-outline" />
+      <Card style={{ gap: 0, paddingVertical: space.xs }}>
+        <PlacePair fromTestID="hire-pickup-field" toTestID="hire-destination-field" swapTestID="hire-swap-button" fromLabel={t("v2.pickup_loc")} toLabel="Destination"
+          from={pickup} to={dest} onFrom={setPickup} onTo={setDest} />
+        <View style={{ height: 1, backgroundColor: colors.divider, marginLeft: 36 }} />
         <DateField testID="hire-date" label="Travel date" value={date} onChange={setDate} />
       </Card>
       {dest ? (
@@ -191,50 +201,42 @@ export default function HireScreen() {
           )}
         </Card>
       ) : null}
-      <T size={13} weight="600" color={colors.muted}>{service === "rent" ? "Booking option" : "Trip type"}</T>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: space.sm }}>
-        {opts.map(([k, l]) => <Chip key={k} testID={`hire-type-${k}`} label={l} active={stype === k} onPress={() => setStype(k)} />)}
-      </ScrollView>
-      <T size={13} weight="600" color={colors.muted}>{t("v2.start_time")}</T>
-      <TimeChips testID="hire-time" value={time} onChange={setTime} />
-      {multi ? (
-        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-          <T weight="600">Number of days</T>
-          <Stepper testID="hire-days" value={days} max={30} onChange={setDays} />
-        </View>
-      ) : stype === "round_trip" ? (
-        <View testID="hire-return-section" style={{ gap: space.sm }}>
-          <DateField testID="hire-return-date" label="Return date" value={retDate} onChange={setRetDate} />
-          <T size={13} weight="600" color={colors.muted}>Return time</T>
-          <TimeChips testID="hire-return-time" value={retTime} onChange={setRetTime} />
-        </View>
-      ) : ["hourly", "one_way"].includes(stype) ? (
-        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-          <T weight="600">{stype === "one_way" ? "Estimated trip hours" : "Duration (hours)"}</T>
-          <Stepper testID="hire-hours" value={hours} max={24} onChange={setHours} />
-        </View>
-      ) : null}
-      {service === "book" ? (
-        <>
-          <T size={13} weight="600" color={colors.muted}>Vehicle category</T>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: space.sm }}>
-            {["hatchback", "sedan", "suv", "muv", "any"].map((v) => <Chip key={v} testID={`hire-vcat-${v}`} label={v === "any" ? "ANY" : v.toUpperCase()} active={vtype === v} onPress={() => setVtype(v)} />)}
-          </ScrollView>
-        </>
-      ) : (
-        <>
-          <T size={13} weight="600" color={colors.muted}>Your vehicle type (optional)</T>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: space.sm }}>
-            {RENT_VTYPES.map((v) => <Chip key={v} testID={`hire-vtype-${v}`} label={v.toUpperCase()} active={vtype === v} onPress={() => setVtype(vtype === v ? "" : v)} />)}
-          </ScrollView>
-          <Field testID="hire-vehicle-desc" label="Your car (optional)" value={vdesc} onChangeText={setVdesc} placeholder="Honda City, automatic" />
-        </>
-      )}
-      <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-        <T weight="600">{t("search.passengers")}</T>
-        <Stepper testID="hire-passengers" value={passengers} max={service === "book" ? 20 : 8} onChange={setPassengers} />
-      </View>
-      <Field testID="hire-notes" label={service === "rent" ? "Additional instructions" : "Additional requirements"} value={notes} onChangeText={setNotes} multiline maxLength={500} />
+      <Card style={{ gap: space.sm }}>
+        {label(service === "rent" ? "Booking option" : "Trip type")}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: space.sm }}>
+          {opts.map(([k, l]) => <Chip key={k} testID={`hire-type-${k}`} label={l} active={stype === k} onPress={() => setStype(k)} />)}
+        </ScrollView>
+        {label(t("v2.start_time"))}
+        <TimeChips testID="hire-time" value={time} onChange={setTime} />
+        {multi ? row("Number of days", <Stepper testID="hire-days" value={days} max={30} onChange={setDays} />)
+          : stype === "round_trip" ? (
+          <View testID="hire-return-section" style={{ gap: space.sm }}>
+            <DateField testID="hire-return-date" label="Return date" value={retDate} onChange={setRetDate} />
+            {label("Return time")}
+            <TimeChips testID="hire-return-time" value={retTime} onChange={setRetTime} />
+          </View>
+        ) : ["hourly", "one_way"].includes(stype) ? row(stype === "one_way" ? "Estimated trip hours" : "Duration (hours)", <Stepper testID="hire-hours" value={hours} max={24} onChange={setHours} />) : null}
+      </Card>
+      <Card style={{ gap: space.sm }}>
+        {service === "book" ? (
+          <>
+            {label("Vehicle category")}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: space.sm }}>
+              {["hatchback", "sedan", "suv", "muv", "any"].map((v) => <Chip key={v} testID={`hire-vcat-${v}`} label={v === "any" ? "ANY" : v.toUpperCase()} active={vtype === v} onPress={() => setVtype(v)} />)}
+            </ScrollView>
+          </>
+        ) : (
+          <>
+            {label("Your vehicle type (optional)")}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: space.sm }}>
+              {RENT_VTYPES.map((v) => <Chip key={v} testID={`hire-vtype-${v}`} label={v.toUpperCase()} active={vtype === v} onPress={() => setVtype(vtype === v ? "" : v)} />)}
+            </ScrollView>
+            <Field testID="hire-vehicle-desc" label="Your car (optional)" value={vdesc} onChangeText={setVdesc} placeholder="Honda City, automatic" />
+          </>
+        )}
+        {row(t("search.passengers"), <Stepper testID="hire-passengers" value={passengers} max={service === "book" ? 20 : 8} onChange={setPassengers} />)}
+        <Field testID="hire-notes" label={service === "rent" ? "Additional instructions" : "Additional requirements"} value={notes} onChangeText={setNotes} multiline maxLength={500} />
+      </Card>
       {err ? <T testID="hire-error" color={colors.error}>{err}</T> : null}
       <Btn testID="hire-find-button" icon="search" label={t("v2.find_drivers")} onPress={find} loading={busy && !rows} />
       <T size={12} color={colors.muted}>{feeNote(service)}</T>
@@ -298,7 +300,7 @@ export default function HireScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.surface }}>
-      <Header title={service ? SERVICE_LABEL[service] : t("v2.hire_title")} right={
+      <Header title={service ? svcLabel(service) : t("v2.hire_title")} right={
         <View style={{ flexDirection: "row" }}>
           <Btn small variant="ghost" icon="mail-unread-outline" label="" onPress={() => router.push("/hire/requests")} testID="hire-requests-link" />
           <Btn small variant="ghost" icon="briefcase-outline" label="" onPress={() => router.push("/hire/driver")} testID="hire-driver-dashboard-link" />
@@ -310,7 +312,7 @@ export default function HireScreen() {
         contentContainerStyle={{ padding: space.lg, gap: space.md, paddingBottom: insets.bottom + space.xl }}
         ListHeaderComponent={form}
         ListFooterComponent={footer ?? undefined}
-        ListEmptyComponent={busy && !rows ? <Loading /> : rows ? <Empty icon="person-outline" title={`No eligible ${service ? SERVICE_LABEL[service] : ""} drivers for ${dt.taluk?.name ?? "this taluk"} right now`} /> : undefined}
+        ListEmptyComponent={busy && !rows ? <Loading /> : rows ? <Empty icon="person-outline" title={`No eligible ${service ? svcLabel(service) : ""} drivers for ${dt.taluk?.name ?? "this taluk"} right now`} /> : undefined}
         renderItem={({ item }) => card(item)}
       />
     </View>

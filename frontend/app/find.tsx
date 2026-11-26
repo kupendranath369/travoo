@@ -7,7 +7,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { api, Loc } from "@/src/api";
 import { DateField } from "@/src/components/Calendar";
 import { float } from "@/src/components/localdriver/parts";
-import { LocationField } from "@/src/components/LocationField";
+import { PlacePair } from "@/src/components/LocationField";
 import { Btn, Header, Stepper, T, radius, space } from "@/src/components/ui";
 import { useI18n } from "@/src/i18n";
 import { useTheme } from "@/src/theme";
@@ -40,11 +40,10 @@ export default function FindRide() {
     <View style={{ flex: 1, backgroundColor: colors.surface }}>
       <Header title="Find a Ride" />
       <ScrollView contentContainerStyle={{ padding: space.lg, gap: space.md, paddingBottom: insets.bottom + space.xxl }}>
-        <View style={box}><LocationField testID="find-from-field" label="Leaving from" value={from} onChange={(l) => { setFrom(l); setErr(""); }} icon="location" /></View>
-        <View style={box}><LocationField testID="find-to-field" label="Going to" value={to} onChange={(l) => { setTo(l); setErr(""); }} icon="location" /></View>
-        <Pressable testID="find-swap-button" onPress={() => { setFrom(to); setTo(from); }} style={{ alignSelf: "flex-end", marginTop: -space.sm, flexDirection: "row", gap: 4, alignItems: "center" }}>
-          <Ionicons name="swap-vertical" size={16} color={colors.brandSecondary} /><T size={12} weight="700" color={colors.brandSecondary}>Swap</T>
-        </Pressable>
+        <View style={[box, { paddingVertical: space.xs }]}>
+          <PlacePair fromTestID="find-from-field" toTestID="find-to-field" swapTestID="find-swap-button" fromLabel="Leaving from" toLabel="Going to"
+            from={from} to={to} onFrom={(l) => { setFrom(l); setErr(""); }} onTo={(l) => { setTo(l); setErr(""); }} />
+        </View>
         <View style={[box, { paddingVertical: space.sm }]}><DateField testID="find-date" label="Travel Date" value={date} onChange={setDate} allowClear /></View>
         <View style={[box, { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: space.md }]}>
           <T weight="700">Passengers</T>
@@ -52,7 +51,7 @@ export default function FindRide() {
         </View>
         {err ? <T testID="find-error" color={colors.error} weight="600">{err}</T> : null}
         <Btn testID="find-ride-button" icon="arrow-forward" label="Find a Ride" onPress={() => go(from, to, date)} />
-        <T size={16} weight="800" style={{ marginTop: space.md }}>Popular Routes</T>
+        <T size={18} weight="800" style={{ marginTop: space.lg }}>Popular Routes</T>
         {routes.length === 0 ? <T testID="find-routes-empty" size={13} color={colors.muted}>Your frequent routes will appear here.</T> : null}
         {routes.map((s) => (
           <Pressable key={s.key} testID={`find-route-${s.key}`} onPress={() => go(s.origin, s.destination, null)} style={[box, { flexDirection: "row", alignItems: "center", gap: space.md, minHeight: 52 }]}>

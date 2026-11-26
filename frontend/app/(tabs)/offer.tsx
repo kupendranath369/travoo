@@ -10,7 +10,7 @@ import { useAuth } from "@/src/auth";
 import { DateField } from "@/src/components/Calendar";
 import { formatClock } from "@/src/components/ClockTimePicker";
 import { TimeChips, isoDate } from "@/src/components/DateChips";
-import { LocationField, LocationSearchModal } from "@/src/components/LocationField";
+import { LocationField, LocationSearchModal, PLACE_ICON } from "@/src/components/LocationField";
 import { MapPicker } from "@/src/components/MapPicker";
 import { NearbyChips } from "@/src/components/NearbyChips";
 import { OsmMap } from "@/src/components/OsmMap";
@@ -203,9 +203,9 @@ export default function OfferScreen() {
         ) : (
           <>
             <Card style={{ paddingVertical: space.sm, gap: 0 }}>
-              <LocationField testID="offer-origin-field" label={t("offer.origin")} value={o} onChange={setO} icon="radio-button-on" />
-              <View style={{ height: 1, backgroundColor: colors.divider }} />
-              <LocationField testID="offer-dest-field" label={t("offer.dest")} value={d} onChange={setD} icon="location" />
+              <LocationField testID="offer-origin-field" label={t("offer.origin")} value={o} onChange={setO} icon={PLACE_ICON.from} />
+              <View style={{ height: 1, backgroundColor: colors.divider, marginLeft: 36 }} />
+              <LocationField testID="offer-dest-field" label={t("offer.dest")} value={d} onChange={setD} icon={PLACE_ICON.to} />
             </Card>
             {o && d && routes ? (
               <View style={{ gap: space.sm }}>

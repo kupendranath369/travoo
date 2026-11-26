@@ -10,6 +10,7 @@ import { float } from "@/src/components/localdriver/parts";
 import { T, radius, space } from "@/src/components/ui";
 import { useSetMode } from "@/src/useMode";
 import { useTheme } from "@/src/theme";
+import { useI18n } from "@/src/i18n";
 
 function ModeCard({ img, kicker, title, points, bg, accent, onPress, testID, busy }: { img: string; kicker: string; title: string; points: string[]; bg: string; accent: string; onPress: () => void; testID: string; busy: boolean }) {
   return (
@@ -34,6 +35,7 @@ function ModeCard({ img, kicker, title, points, bg, accent, onPress, testID, bus
 export default function ChooseMode() {
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
+  const { t } = useI18n();
   const router = useRouter();
   const setMode = useSetMode();
   const [busy, setBusy] = useState(false);
@@ -47,7 +49,7 @@ export default function ChooseMode() {
     <ScrollView style={{ flex: 1, backgroundColor: colors.surface }} contentContainerStyle={{ padding: space.lg, paddingTop: insets.top + space.xl, gap: space.lg, paddingBottom: insets.bottom + space.xl }}>
       <View style={{ alignItems: "center" }}><Wordmark size={34} /></View>
       <T testID="mode-title" size={26} weight="800" center>How would you like to use Travoo?</T>
-      <ModeCard testID="mode-passenger" img={IMG.passenger} kicker="I'm a" title="Passenger" points={["Find a Ride", "Rent a Driver", "Book a Driver"]} bg={colors.brandSoft} accent={colors.brandPrimary} busy={busy} onPress={() => pick("passenger")} />
+      <ModeCard testID="mode-passenger" img={IMG.passenger} kicker="I'm a" title="Passenger" points={["Find a Ride", "Rent a Driver", t("svc.book_car")]} bg={colors.brandSoft} accent={colors.brandPrimary} busy={busy} onPress={() => pick("passenger")} />
       <ModeCard testID="mode-driver" img={IMG.driver} kicker="I'm a" title="Driver" points={["Offer a Ride", "Driver Only", "Car with Driver", "Earn with Driving"]} bg={colors.accentSoft} accent={colors.brandTertiary} busy={busy} onPress={() => pick("driver")} />
       {err ? <T testID="mode-error" color={colors.error}>{err}</T> : null}
       <View style={{ flexDirection: "row", alignItems: "center", gap: space.md, padding: space.md, borderRadius: radius.lg, backgroundColor: colors.surfaceSecondary }}>

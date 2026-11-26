@@ -491,5 +491,6 @@
  "geo.type.post_office": "ڈاک خانہ",
  "geo.type.pin": "پن کی گئی جگہ",
  "geo.type.place": "جگہ",
- "geo.along_route": "آپ کے پک اَپ سے گزرتا ہے ~{time} ({n} km)"
+ "geo.along_route": "آپ کے پک اَپ سے گزرتا ہے ~{time} ({n} km)",
+ "svc.book_car": "کار بک کریں"
 }

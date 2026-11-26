@@ -6,7 +6,7 @@ import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { api, publicPhoto } from "@/src/api";
-import { confirmAction, feeNote, SERVICE_LABEL, TYPE_LABEL } from "@/src/components/LocalDriverParts";
+import { confirmAction, feeNote, TYPE_LABEL, useServiceLabel } from "@/src/components/LocalDriverParts";
 import { LiveLocation, TripTimeline } from "@/src/components/localdriver/LiveTrip";
 import { useToast } from "@/src/components/toast";
 import { Avatar, Badge, Btn, Card, ErrorBox, Field, Header, Loading, T, space, statusTone } from "@/src/components/ui";
@@ -40,6 +40,7 @@ export default function HireBooking() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
+  const svcLabel = useServiceLabel();
   const { t, fmtDate, fmtTime } = useI18n();
   const toast = useToast();
   const [h, setH] = useState<any>(null);
@@ -70,7 +71,7 @@ export default function HireBooking() {
             <T testID="hire-booking-id" weight="800" size={18}>{h.booking_id}</T>
             <Badge testID="hire-booking-status" label={t(`status.${h.status}`)} tone={statusTone(h.status)} />
           </View>
-          <Badge icon="key" label={`${SERVICE_LABEL[h.service ?? "rent"].toUpperCase()} · ${TYPE_LABEL[h.service_type] ?? h.service_type}${h.days > 1 ? ` · ${h.days} days` : ""}`} tone="info" />
+          <Badge icon="key" label={`${svcLabel(h.service ?? "rent").toUpperCase()} · ${TYPE_LABEL[h.service_type] ?? h.service_type}${h.days > 1 ? ` · ${h.days} days` : ""}`} tone="info" />
           <T weight="700">{fmtDate(h.date, { weekday: "long", day: "numeric", month: "long" })} · {fmtTime(h.time)} · {h.hours}h</T>
           {h.return_date ? <T testID="hire-booking-return" size={13}>Return: {fmtDate(h.return_date, { weekday: "short", day: "numeric", month: "short" })} · {fmtTime(h.return_time)}</T> : null}
           <T size={13}>Pickup: {h.pickup}{h.pickup_taluk ? ` (${h.pickup_taluk.name})` : ""}</T>

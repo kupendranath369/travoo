@@ -491,5 +491,6 @@
  "geo.type.post_office": "ਡਾਕਘਰ",
  "geo.type.pin": "ਪਿਨ ਕੀਤਾ ਬਿੰਦੂ",
  "geo.type.place": "ਜਗ੍ਹਾ",
- "geo.along_route": "ਤੁਹਾਡੇ ਪਿਕਅੱਪ ਤੋਂ ਲੰਘਦੀ ਹੈ ~{time} ({n} ਕਿਮੀ)"
+ "geo.along_route": "ਤੁਹਾਡੇ ਪਿਕਅੱਪ ਤੋਂ ਲੰਘਦੀ ਹੈ ~{time} ({n} ਕਿਮੀ)",
+ "svc.book_car": "ਕਾਰ ਬੁੱਕ ਕਰੋ"
 }

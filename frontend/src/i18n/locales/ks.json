@@ -491,5 +491,6 @@
  "geo.type.post_office": "ڈاک خانہ",
  "geo.type.pin": "پن کٔرتھ مقام",
  "geo.type.place": "جگہ",
- "geo.along_route": "تُہند پِک اَپ پٮ۪ٹھ گژھان چھُ ~{time} ({n} کِلومیٖٹر)"
+ "geo.along_route": "تُہند پِک اَپ پٮ۪ٹھ گژھان چھُ ~{time} ({n} کِلومیٖٹر)",
+ "svc.book_car": "کار بُک کٔرِو"
 }

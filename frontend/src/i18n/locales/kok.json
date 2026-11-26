@@ -491,5 +491,6 @@
  "geo.type.post_office": "पोस्ट ऑफिस",
  "geo.type.pin": "पिन केल्लो बिंदू",
  "geo.type.place": "जागो",
- "geo.along_route": "तुमच्या पिकअपाच्या वाटेन ~{time} ({n} किमी)"
+ "geo.along_route": "तुमच्या पिकअपाच्या वाटेन ~{time} ({n} किमी)",
+ "svc.book_car": "कार बुक करात"
 }

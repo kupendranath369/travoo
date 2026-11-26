@@ -1182,7 +1182,7 @@ class VehicleIn(BaseModel):
     mileage: Optional[float] = Field(default=None, gt=0, le=60)  # km/l, km/kg (CNG) or km/kWh (EV)
     name: str = Field(default="", max_length=60)
     rc_file_id: Optional[str] = Field(default=None, max_length=40)
-    permit_no: str = Field(default="", max_length=30)  # commercial / tourist permit (Book a Driver)
+    permit_no: str = Field(default="", max_length=30)  # commercial / tourist permit (Book a Car)
     insurance_expiry: Optional[str] = Field(default=None, pattern=r"^\d{2}-\d{2}-\d{4}$")
     day_rate: int = Field(default=0, ge=0, le=20000)
 
@@ -1203,7 +1203,7 @@ async def edit_vehicle(vid: str, body: VehicleIn, user: dict = Depends(get_user)
     upd = {**body.model_dump(), "reg_no": body.reg_no.upper().replace(" ", ""), "updated_at": now()}
     critical = any(upd.get(k) != v.get(k) for k in ("reg_no", "rc_file_id", "permit_no", "insurance_expiry", "vtype", "seats"))
     if critical and v.get("commercial_status") in ("approved", "rejected"):
-        upd["commercial_status"] = "pending"  # changed documents must be re-checked by admin before Book a Driver
+        upd["commercial_status"] = "pending"  # changed documents must be re-checked by admin before Book a Car
         upd["commercial_requested_at"] = now()
     await db.vehicles.update_one({"vehicle_id": vid}, {"$set": upd})
     return await db.vehicles.find_one({"vehicle_id": vid}, {"_id": 0})
@@ -1211,13 +1211,13 @@ async def edit_vehicle(vid: str, body: VehicleIn, user: dict = Depends(get_user)
 
 @api.post("/vehicles/{vid}/commercial")
 async def request_commercial(vid: str, user: dict = Depends(get_user)):
-    """Ask admin to approve this shared vehicle for Book a Driver (RC + permit + valid insurance required)."""
+    """Ask admin to approve this shared vehicle for Book a Car (RC + permit + valid insurance required)."""
     v = await db.vehicles.find_one({"vehicle_id": vid, "owner_id": user["user_id"], "deleted": {"$ne": True}}, {"_id": 0})
     if not v:
         raise HTTPException(404, "Vehicle not found")
     await commercial_ready(v)
     await db.vehicles.update_one({"vehicle_id": vid}, {"$set": {"commercial_status": "pending", "commercial_requested_at": now(), "commercial_note": ""}})
-    await admin_alert("vehicle_review", f"Vehicle {v['reg_no']} sent for Book a Driver approval", user["user_id"])
+    await admin_alert("vehicle_review", f"Vehicle {v['reg_no']} sent for Book a Car approval", user["user_id"])
     return {"ok": True}
 
 
@@ -2823,7 +2823,7 @@ DEFAULT_RATES = {"rate_hourly": 150, "rate_half_day": 600, "rate_full_day": 1100
 
 
 class ProDriverIn(BaseModel):
-    """3-step local-driver registration: home taluk + languages, licence/Aadhaar, services (+ shared vehicles for Book a Driver)."""
+    """3-step local-driver registration: home taluk + languages, licence/Aadhaar, services (+ shared vehicles for Book a Car)."""
     home: "HomeLocIn"
     languages: List[str] = Field(min_length=1, max_length=15)
     licence_no: Optional[str] = Field(default=None, max_length=20)  # reused from carpool verification when omitted
@@ -2931,7 +2931,7 @@ async def pro_register(body: ProDriverIn, user: dict = Depends(get_user)):
     vids = list(dict.fromkeys(body.vehicle_ids)) if "book" in body.services else []
     vs = await db.vehicles.find({"vehicle_id": {"$in": vids}, "owner_id": uid, "deleted": {"$ne": True}}, {"_id": 0}).to_list(10)
     if "book" in body.services and not vs:
-        raise HTTPException(400, "Add at least one vehicle to offer Book a Driver")
+        raise HTTPException(400, "Add at least one vehicle to offer Book a Car")
     for v in vs:
         if v.get("commercial_status") != "approved":
             await commercial_ready(v)
@@ -3249,7 +3249,7 @@ async def pro_settings(body: ProSettingsIn, user: dict = Depends(get_user)):
     upd = {k: v for k, v in body.model_dump().items() if v is not None}
     if body.services is not None:
         if "book" in body.services and not await approved_vehicles(user["user_id"]):
-            raise HTTPException(400, "Book a Driver unlocks after one of your vehicles is approved by Travoo")
+            raise HTTPException(400, "Book a Car unlocks after one of your vehicles is approved by Travoo")
         upd["services"] = sorted(set(body.services))
     if body.blocked_dates is not None:
         if any(not re.fullmatch(r"\d{4}-\d{2}-\d{2}", d) for d in body.blocked_dates):
@@ -3280,7 +3280,7 @@ async def pro_vehicles(body: ProVehiclesIn, user: dict = Depends(get_user)):
     if not p:
         raise HTTPException(404, "Register as a local driver first")
     if "book" in (p.get("services") or []) and not body.vehicles:
-        raise HTTPException(400, "Keep at least one vehicle while offering Book a Driver (or turn Book a Driver off first)")
+        raise HTTPException(400, "Keep at least one vehicle while offering Book a Car (or turn Book a Car off first)")
     vs = vehicles_snapshot(body.vehicles)
     await db.pro_drivers.update_one({"user_id": user["user_id"]}, {"$set": {"vehicles": vs}})
     return {"vehicles": vs}
@@ -3413,10 +3413,10 @@ async def has_clash(driver_id: str, start: datetime, end: datetime, exclude_book
     return False
 
 
-# Rent a Driver = customer's own car; Book a Driver = driver supplies the car too
+# Rent a Driver = customer's own car; Book a Car = driver supplies the car too
 RENT_TYPES = ("hourly", "half_day", "full_day", "multi_day", "outstation")
 BOOK_TYPES = ("one_way", "round_trip", "multi_day", "outstation")
-SERVICE_NAME = {"rent": "Rent a Driver", "book": "Book a Driver"}
+SERVICE_NAME = {"rent": "Rent a Driver", "book": "Book a Car"}
 
 
 def total_hours(service_type: str, hours: int, days: int) -> int:
@@ -3614,7 +3614,7 @@ def taluk_snap(sd: dict) -> dict:
 
 @api.post("/hire/requests")
 async def hire_request_create(body: LocalHireIn, user: dict = Depends(get_user)):
-    """Send a request to eligible drivers. For Rent a Driver, uses pickup location; for Book a Driver, uses destination."""
+    """Send a request to eligible drivers. For Rent a Driver, uses pickup location; for Book a Car, uses destination."""
     sd = await subdistrict_doc(body.subdistrict_code)
     psd = await subdistrict_doc(body.pickup_subdistrict_code) if body.pickup_subdistrict_code else None
     r = request_shape(body.service, body.service_type, body.date, body.time, body.hours, body.days, body.vehicle_type, body.passengers)
@@ -3792,7 +3792,7 @@ def svc_filter(service: str) -> dict:
 
 @api.get("/admin/hire-bookings")
 async def admin_hire_bookings(service: Literal["all", "rent", "book"] = "all", _: dict = Depends(get_admin)):
-    """Local-driver (Rent / Book a Driver) records, kept separate from carpool bookings."""
+    """Local-driver (Rent / Book a Car) records, kept separate from carpool bookings."""
     names: dict = {}
 
     async def name(uid: Optional[str]) -> str:

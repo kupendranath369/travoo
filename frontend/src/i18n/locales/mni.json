@@ -491,5 +491,6 @@
  "geo.type.post_office": "পোস্ট অফিস",
  "geo.type.pin": "থাদোকখিবা পইন্ট",
  "geo.type.place": "মফম",
- "geo.along_route": "ꯑꯗꯨꯒꯤ ꯈꯨꯗꯣꯜ ꯊꯥꯎꯔꯕꯥ ~{time} ({n} km)"
+ "geo.along_route": "ꯑꯗꯨꯒꯤ ꯈꯨꯗꯣꯜ ꯊꯥꯎꯔꯕꯥ ~{time} ({n} km)",
+ "svc.book_car": "কার বুক তৌবিয়ু"
 }

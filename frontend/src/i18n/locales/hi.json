@@ -507,5 +507,6 @@
   "common.pm": "अपराह्न",
   "notif.hire_arrived": "{driver_name} पिकअप पर पहुँच गए हैं",
   "hire.arrived_btn": "मैं पहुँच गया/गई हूँ",
-  "hire.arrived_badge": "ड्राइवर पहुँच गए हैं"
+  "hire.arrived_badge": "ड्राइवर पहुँच गए हैं",
+  "svc.book_car": "कार बुक करें"
 }

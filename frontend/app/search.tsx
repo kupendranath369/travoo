@@ -6,9 +6,9 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { api, Loc, locPayload } from "@/src/api";
 import { DateField } from "@/src/components/Calendar";
-import { LocationField } from "@/src/components/LocationField";
+import { LocationField, PLACE_ICON } from "@/src/components/LocationField";
 import { RideCard } from "@/src/components/RideCard";
-import { Card, Chip, Empty, ErrorBox, Loading, Stepper, T, space } from "@/src/components/ui";
+import { Btn, Card, Chip, Empty, ErrorBox, Loading, Stepper, T, radius, space } from "@/src/components/ui";
 import { inr, useI18n } from "@/src/i18n";
 import { useTheme } from "@/src/theme";
 
@@ -76,17 +76,18 @@ export default function SearchScreen() {
               </Pressable>
               <T size={22} weight="800">{t("search.title")}</T>
             </View>
-            <LocationField testID="search-from-field" label={t("search.from")} value={from} onChange={setFrom} icon="radio-button-on" />
-            <LocationField testID="search-to-field" label={t("search.to")} value={to} onChange={setTo} icon="location" />
-            <DateField testID="search-date" label={t("search.date")} value={date} onChange={setDate} allowClear marked={marked} />
-            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: space.sm }}>
-              <T weight="600">{t("search.passengers")}</T>
-              <Stepper testID="search-passengers" value={seats} onChange={setSeats} />
-            </View>
-            <Pressable testID="search-submit-button" disabled={!from || !to} onPress={() => { if (editing) setEditing(false); else run(); }} style={{ height: 50, borderRadius: 25, backgroundColor: colors.brandPrimary, alignItems: "center", justifyContent: "center", opacity: from && to ? 1 : 0.5, flexDirection: "row", gap: space.sm }}>
-              <Ionicons name="search" size={18} color={colors.onBrandPrimary} />
-              <T weight="700" color={colors.onBrandPrimary}>{t("btn.find")}</T>
-            </Pressable>
+            <Card style={{ paddingVertical: space.xs, gap: 0, marginTop: space.sm, marginBottom: space.md }}>
+              <LocationField testID="search-from-field" label={t("search.from")} value={from} onChange={setFrom} icon={PLACE_ICON.from} />
+              <View style={{ height: 1, backgroundColor: colors.divider, marginLeft: 36 }} />
+              <LocationField testID="search-to-field" label={t("search.to")} value={to} onChange={setTo} icon={PLACE_ICON.to} />
+              <View style={{ height: 1, backgroundColor: colors.divider, marginLeft: 36 }} />
+              <DateField testID="search-date" label={t("search.date")} value={date} onChange={setDate} allowClear marked={marked} />
+              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: space.sm }}>
+                <T weight="600">{t("search.passengers")}</T>
+                <Stepper testID="search-passengers" value={seats} onChange={setSeats} />
+              </View>
+            </Card>
+            <Btn testID="search-submit-button" icon="search" label={t("btn.find")} disabled={!from || !to} onPress={() => { if (editing) setEditing(false); else run(); }} />
             <Pressable testID="search-hire-link" onPress={() => router.push("/hire")} style={{ flexDirection: "row", gap: space.sm, alignItems: "center", justifyContent: "center", paddingTop: space.md }}>
               <Ionicons name="key-outline" size={16} color={colors.brandTertiary} />
               <T weight="700" color={colors.brandTertiary}>{t("v2.hire")} · {t("v2.hire_d")}</T>
@@ -97,7 +98,7 @@ export default function SearchScreen() {
           <Pressable testID="search-back-button" accessibilityLabel={t("common.back")} hitSlop={8} onPress={() => (router.canGoBack() ? router.back() : router.replace("/"))} style={{ width: 44, height: 44, alignItems: "center", justifyContent: "center" }}>
             <Ionicons name="arrow-back" size={22} color={colors.onSurface} />
           </Pressable>
-          <Pressable testID="search-summary" onPress={() => setEditing(true)} style={{ flex: 1, marginRight: space.lg, padding: space.md, borderRadius: 14, backgroundColor: colors.surfaceTertiary, flexDirection: "row", alignItems: "center", gap: space.md }}>
+          <Pressable testID="search-summary" onPress={() => setEditing(true)} style={{ flex: 1, marginRight: space.lg, padding: space.md, borderRadius: radius.md, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, flexDirection: "row", alignItems: "center", gap: space.md }}>
             <Ionicons name="navigate-outline" size={18} color={colors.brandPrimary} />
             <View style={{ flex: 1 }}>
               <T weight="800" numberOfLines={1}>{from?.name} → {to?.name}</T>

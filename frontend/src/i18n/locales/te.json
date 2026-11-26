@@ -491,5 +491,6 @@
  "geo.type.post_office": "తపాలా కార్యాలయం",
  "geo.type.pin": "పిన్ చేసిన స్థానం",
  "geo.type.place": "స్థలం",
- "geo.along_route": "మీ పికప్ పాయింట్ దగ్గరగా ~{time} ({n} కి.మీ) వస్తుంది"
+ "geo.along_route": "మీ పికప్ పాయింట్ దగ్గరగా ~{time} ({n} కి.మీ) వస్తుంది",
+ "svc.book_car": "కారు బుక్ చేయండి"
 }

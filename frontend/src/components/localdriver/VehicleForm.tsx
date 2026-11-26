@@ -60,7 +60,7 @@ export function VehicleForm({ initial, forBook, onSaved, onCancel }: { initial?:
   const set = (k: string, val: any) => setV((x: any) => ({ ...x, [k]: val }));
   const save = async () => {
     setErr("");
-    if (forBook && (!v.rc_file_id || !v.permit_no.trim() || !/^\d{2}-\d{2}-\d{4}$/.test(v.insurance_expiry))) return setErr("Book a Driver needs the RC, permit number and insurance expiry (DD-MM-YYYY)");
+    if (forBook && (!v.rc_file_id || !v.permit_no.trim() || !/^\d{2}-\d{2}-\d{4}$/.test(v.insurance_expiry))) return setErr("Book a Car needs the RC, permit number and insurance expiry (DD-MM-YYYY)");
     setBusy(true);
     try {
       const body = { name: v.name.trim(), make: v.make.trim(), model: v.model.trim() || "-", vtype: v.vtype, reg_no: v.reg_no.trim(), seats: v.seats, rc_file_id: v.rc_file_id,
@@ -92,7 +92,7 @@ export function VehicleForm({ initial, forBook, onSaved, onCancel }: { initial?:
           <Field testID="vehicle-permit" label="Commercial / tourist permit number" value={v.permit_no} onChangeText={(x) => set("permit_no", x)} maxLength={30} />
           <Field testID="vehicle-insurance" label="Insurance valid until (DD-MM-YYYY)" placeholder="31-12-2027" value={v.insurance_expiry ?? ""} onChangeText={(x) => set("insurance_expiry", x)} maxLength={10} keyboardType="numbers-and-punctuation" />
           <Field testID="vehicle-day-rate" label="Vehicle charge per day (₹)" value={String(v.day_rate || "")} onChangeText={(x) => set("day_rate", x.replace(/\D/g, ""))} keyboardType="number-pad" maxLength={5} />
-          <T size={11} color={colors.muted}>Travoo checks the RC, permit and insurance before this vehicle can be used for Book a Driver.</T>
+          <T size={11} color={colors.muted}>Travoo checks the RC, permit and insurance before this vehicle can be used for Book a Car.</T>
         </>
       ) : null}
       {err ? <T testID="vehicle-form-error" size={13} color={colors.error}>{err}</T> : null}

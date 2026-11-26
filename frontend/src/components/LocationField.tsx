@@ -22,13 +22,15 @@ const TYPE_ICON: Record<string, any> = {
 
 export const locSub = (l: Loc) => [...new Set([l.sub_district, l.district, l.state, l.pin].filter(Boolean))].join(", ");
 
-export function LocationField({ label, value, onChange, icon = "location-outline", testID }: { label: string; value: Loc | null; onChange: (l: Loc) => void; icon?: any; testID: string }) {
+export function LocationField({ label, value, onChange, icon = "location", testID }: { label: string; value: Loc | null; onChange: (l: Loc) => void; icon?: any; testID: string }) {
   const [open, setOpen] = useState(false);
   const { colors } = useTheme();
   return (
     <>
       <Pressable testID={testID} onPress={() => setOpen(true)} style={{ flexDirection: "row", alignItems: "center", gap: space.md, minHeight: 56, paddingVertical: space.sm }}>
-        <Ionicons name={icon} size={20} color={colors.brandPrimary} />
+        <View style={{ width: 24, alignItems: "center" }}>
+          <Ionicons name={icon} size={20} color={icon === PLACE_ICON.to ? colors.brandTertiary : colors.brandPrimary} />
+        </View>
         <View style={{ flex: 1 }}>
           <T size={12} color={colors.muted}>{label}</T>
           <T size={15} weight="700" numberOfLines={1} color={value ? colors.onSurface : colors.muted}>
@@ -39,6 +41,37 @@ export function LocationField({ label, value, onChange, icon = "location-outline
       </Pressable>
       <LocationSearchModal visible={open} title={label} onClose={() => setOpen(false)} onSelect={(l) => { onChange(l); setOpen(false); }} />
     </>
+  );
+}
+
+/** One icon pair everywhere a place is chosen: start ("Leaving from" / "Pick up") and end ("Going to" / "Destination"). */
+export const PLACE_ICON = { from: "radio-button-on", to: "location" } as const;
+
+export function SwapButton({ onPress, testID }: { onPress: () => void; testID: string }) {
+  const { colors } = useTheme();
+  return (
+    <Pressable testID={testID} accessibilityLabel="Swap pickup and destination" onPress={onPress} hitSlop={8}
+      style={({ pressed }) => ({ width: 36, height: 36, borderRadius: 18, backgroundColor: colors.brandSoft, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: colors.border, opacity: pressed ? 0.7 : 1 })}>
+      <Ionicons name="swap-vertical" size={18} color={colors.brandPrimary} />
+    </Pressable>
+  );
+}
+
+/** Start + end place fields with a divider and a swap button on the right. */
+export function PlacePair({ from, to, onFrom, onTo, fromLabel, toLabel, fromTestID, toTestID, swapTestID }: {
+  from: Loc | null; to: Loc | null; onFrom: (l: Loc | null) => void; onTo: (l: Loc | null) => void;
+  fromLabel: string; toLabel: string; fromTestID: string; toTestID: string; swapTestID: string;
+}) {
+  const { colors } = useTheme();
+  return (
+    <View style={{ flexDirection: "row", alignItems: "center", gap: space.sm }}>
+      <View style={{ flex: 1 }}>
+        <LocationField testID={fromTestID} label={fromLabel} value={from} onChange={onFrom} icon={PLACE_ICON.from} />
+        <View style={{ height: 1, backgroundColor: colors.divider, marginLeft: 36 }} />
+        <LocationField testID={toTestID} label={toLabel} value={to} onChange={onTo} icon={PLACE_ICON.to} />
+      </View>
+      <SwapButton testID={swapTestID} onPress={() => { onFrom(to); onTo(from); }} />
+    </View>
   );
 }
 

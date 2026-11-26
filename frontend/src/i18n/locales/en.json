@@ -560,5 +560,6 @@
   "hire.arrived_btn": "I have arrived",
   "hire.arrived_badge": "Driver has arrived",
   "booking.arrived_btn": "I have arrived",
-  "booking.arrived_badge": "Driver has arrived"
+  "booking.arrived_badge": "Driver has arrived",
+  "svc.book_car": "Book a Car"
 }

@@ -491,5 +491,6 @@
  "geo.type.post_office": "डाकघर",
  "geo.type.pin": "पिन लगाओल जगह",
  "geo.type.place": "जगह",
- "geo.along_route": "अहाँक पिकअप लगसँ ~{time} ({n} किमी) गुजरैत अछि"
+ "geo.along_route": "अहाँक पिकअप लगसँ ~{time} ({n} किमी) गुजरैत अछि",
+ "svc.book_car": "कार बुक करू"
 }

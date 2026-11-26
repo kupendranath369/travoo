@@ -42,7 +42,7 @@ export function AdminProCard({ p, act, onPreview }: { p: any; act: (path: string
       <T size={12}>Home: {p.home ? `${p.home.subdistrict_name} ${p.home.sub_label}, ${p.home.district_name}, ${p.home.state_name}` : "not set"}{p.home?.geo ? " · location pinned" : ""}</T>
       <T size={12}>Languages: {(p.languages ?? []).join(", ")}</T>
       <View style={{ flexDirection: "row", gap: space.xs, flexWrap: "wrap" }}>
-        {(p.services ?? ["rent"]).map((s: string) => <Badge key={s} testID={`admin-pro-service-${s}-${p.user_id}`} label={s === "book" ? "Book a Driver" : "Rent a Driver"} tone="info" />)}
+        {(p.services ?? ["rent"]).map((s: string) => <Badge key={s} testID={`admin-pro-service-${s}-${p.user_id}`} label={s === "book" ? "Book a Car" : "Rent a Driver"} tone="info" />)}
         <Badge testID={`admin-pro-avail-${p.user_id}`} label={p.availability_status === "available" ? "ONLINE" : "OFFLINE"} tone={p.availability_status === "available" ? "success" : "muted"} />
         <Badge label={p.acceptOutstationTrips ? "Outstation on" : "Local only"} tone="muted" />
       </View>

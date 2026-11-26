@@ -63,7 +63,7 @@ export function DriverHome() {
           </View>
           <Option testID="driver-choose-carpool" icon="people" tint={colors.brandPrimary} title="Offer a Ride" desc="Share your trip and travel together (Carpool)" on={pick.includes("carpool")} onPress={() => toggle("carpool")} />
           <Option testID="driver-choose-rent" icon="person" tint={colors.brandSecondary} title="Driver Only" desc="Drive a customer's own car (Rent a Driver)" on={pick.includes("rent")} onPress={() => toggle("rent")} />
-          <Option testID="driver-choose-book" icon="car-sport" tint={colors.brandTertiary} title="Car with Driver" desc="Provide your car with driving service (Book a Driver)" on={pick.includes("book")} onPress={() => toggle("book")} />
+          <Option testID="driver-choose-book" icon="car-sport" tint={colors.brandTertiary} title="Car with Driver" desc="Provide your car with driving service (Book a Car)" on={pick.includes("book")} onPress={() => toggle("book")} />
           <Btn testID="driver-choose-continue" icon="arrow-forward" label="Continue" disabled={!pick.length} onPress={next} />
         </>
       ) : (

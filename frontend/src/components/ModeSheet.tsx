@@ -33,7 +33,7 @@ export function ModeSheet({ open, current, onClose, onSwitch }: { open: boolean;
           <T size={20} weight="800" style={{ flex: 1 }} center>Change Role</T>
           <Pressable testID="mode-sheet-close" onPress={onClose} hitSlop={10}><Ionicons name="close" size={24} color={colors.onSurface} /></Pressable>
         </View>
-        <Opt testID="mode-sheet-passenger" icon="people" title="Passenger" desc="Book rides, rent or book a driver" on={pick === "passenger"} onPress={() => setPick("passenger")} />
+        <Opt testID="mode-sheet-passenger" icon="people" title="Passenger" desc="Book rides, rent or book a car" on={pick === "passenger"} onPress={() => setPick("passenger")} />
         <Opt testID="mode-sheet-driver" icon="person" title="Driver" desc="Offer rides, work as a driver or provide car with driver" on={pick === "driver"} onPress={() => setPick("driver")} />
         <Btn testID="mode-sheet-switch" variant="navy" label="Change Role" disabled={pick === current} loading={busy} onPress={async () => { setBusy(true); await onSwitch(pick); setBusy(false); }} />
       </View>

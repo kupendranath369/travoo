@@ -81,7 +81,7 @@ export function Btn({ label, onPress, variant = "primary", icon, loading, disabl
   }[variant];
   const fg =
     variant === "outline" || variant === "ghost"
-      ? colors.brandSecondary
+      ? colors.brandPrimary
       : variant === "navy"
         ? colors.onBrand
         : variant === "accent"

@@ -187,3 +187,11 @@ Pan-India intercity paid carpooling app (BlaBlaCar model) called TRAVOO, tagline
 - Seed: 167 locations, popular routes, admin, demo driver/passenger, 6 demo trips load on startup.
 - tsc --noEmit clean; web bundle compiles; testing iteration_35: backend 19/20 (admin/stats 403 until admin changes bootstrap password — by design), all mobile core flows pass.
 - Known: no seeded hire-driver profiles (hire search returns []); MSG91 OTP disabled; Resend not configured; EXPO_PACKAGER_HOSTNAME in frontend/.env still points to old preview host (protected var, not modified).
+
+### Phase 2 work log (2026-11-26) — UI polish + user changes
+- Splash: new TRAVOO wordmark loaded from URL in src/components/Splash.tsx (expo-image, aspect 2000:682, local PNG placeholder for instant paint); native splash app.json -> assets/images/splash-logo.png (converted from webp), white bg, width 280.
+- Rename "Book a Driver" -> "Book a Car" across frontend + backend labels; new i18n key `svc.book_car` in all 23 locales; `useServiceLabel()` hook (LocalDriverParts) used on home, hire, hire requests/detail, mode, role chooser, driver services step.
+- Place inputs: `PLACE_ICON` (radio-button-on = from/pickup, location = to/destination), `SwapButton`, `PlacePair` in LocationField.tsx; used in home, /find, /search, offer, trip timeline, Rent a Driver + Book a Car (swap added: hire-swap-button).
+- Polish: hire form grouped into cards with section labels; search editor in card + standard Btn; trip pay note radius tokens; outline/ghost buttons now navy text (gold-on-white contrast fix); booking id no longer wraps.
+- Tested iteration_36: all Phase 2 flows pass.
+- Phase 3 (next): Web version parity.

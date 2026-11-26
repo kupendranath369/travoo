@@ -491,5 +491,6 @@
  "geo.type.post_office": "डाकघर",
  "geo.type.pin": "पिन लग्गी जगह",
  "geo.type.place": "जगह",
- "geo.along_route": "तुआढ़े पिकअप दे कोल्हों ~{time} च लंघदा ऐ ({n} किमी)"
+ "geo.along_route": "तुआढ़े पिकअप दे कोल्हों ~{time} च लंघदा ऐ ({n} किमी)",
+ "svc.book_car": "कार बुक करो"
 }

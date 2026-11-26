@@ -4,7 +4,7 @@ import { RefreshControl, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { api } from "@/src/api";
-import { confirmAction, SERVICE_LABEL, TYPE_LABEL } from "@/src/components/LocalDriverParts";
+import { confirmAction, TYPE_LABEL, useServiceLabel } from "@/src/components/LocalDriverParts";
 import { useToast } from "@/src/components/toast";
 import { Badge, Btn, Card, Chip, Empty, Header, Loading, T, space } from "@/src/components/ui";
 import { useI18n } from "@/src/i18n";
@@ -14,6 +14,7 @@ import { useTheme } from "@/src/theme";
 export default function HireRequests() {
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
+  const svcLabel = useServiceLabel();
   const { fmtDate } = useI18n();
   const router = useRouter();
   const toast = useToast();
@@ -52,7 +53,7 @@ export default function HireRequests() {
                 <T weight="800" style={{ flex: 1 }}>{r.pickup} → {r.destination || "Local"}</T>
                 <Badge testID={`hire-request-status-${r.request_id}`} label={r.status === "open" ? "Open" : r.status === "fulfilled" ? "Driver confirmed" : r.status === "expired" ? "Expired" : r.status === "cancelled" ? "Cancelled" : r.status === "declined" ? "Declined" : r.status} tone={r.status === "open" ? "warning" : r.status === "fulfilled" ? "success" : "muted"} />
               </View>
-              <Badge testID={`hire-request-service-${r.request_id}`} label={`${SERVICE_LABEL[r.service ?? "rent"]} · ${TYPE_LABEL[r.service_type] ?? r.service_type}${r.days > 1 ? ` · ${r.days} days` : ""}`} tone="info" />
+              <Badge testID={`hire-request-service-${r.request_id}`} label={`${svcLabel(r.service ?? "rent")} · ${TYPE_LABEL[r.service_type] ?? r.service_type}${r.days > 1 ? ` · ${r.days} days` : ""}`} tone="info" />
               <T size={13}>Pickup: {r.pickup}{r.pickup_taluk && r.dest_taluk ? ` (${r.pickup_taluk.name})` : ""}</T>
               {r.dest_taluk ? <T size={13}>Destination taluk: {r.dest_taluk.name} {r.dest_taluk.sub_label}, {r.dest_taluk.district_name}</T> : null}
               <T size={12} color={colors.muted}>{when(r)}{!r.dest_taluk && r.pickup_taluk ? ` · ${r.pickup_taluk.name} ${r.pickup_taluk.sub_label}, ${r.pickup_taluk.district_name}` : ""}</T>

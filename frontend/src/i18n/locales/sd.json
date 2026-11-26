@@ -491,5 +491,6 @@
  "geo.type.post_office": "پوست آفيس",
  "geo.type.pin": "پن ڪيل هنڌ",
  "geo.type.place": "جاءِ",
- "geo.along_route": "توهان جي پڪ اپ وٽان لڳ ڀڳ {time} ۾ ({n} ڪلوميٽر) گذري ٿو"
+ "geo.along_route": "توهان جي پڪ اپ وٽان لڳ ڀڳ {time} ۾ ({n} ڪلوميٽر) گذري ٿو",
+ "svc.book_car": "ڪار بُڪ ڪريو"
 }

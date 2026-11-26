@@ -9,6 +9,7 @@ import { float } from "@/src/components/localdriver/parts";
 import { T, radius, space } from "@/src/components/ui";
 import { useSetMode } from "@/src/useMode";
 import { useTheme } from "@/src/theme";
+import { useI18n } from "@/src/i18n";
 
 function RoleCard({ img, title, points, bg, accent, onPress, testID, busy, delay }: { img: string; title: string; points: string[]; bg: string; accent: string; onPress: () => void; testID: string; busy: boolean; delay: number }) {
   const { colors } = useTheme();
@@ -31,6 +32,7 @@ function RoleCard({ img, title, points, bg, accent, onPress, testID, busy, delay
 /** Floating window shown once after registration: pick Passenger or Driver (changeable later in Profile → Change Role). */
 export function RoleChooser({ visible }: { visible: boolean }) {
   const { colors } = useTheme();
+  const { t } = useI18n();
   const setMode = useSetMode();
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -46,7 +48,7 @@ export function RoleChooser({ visible }: { visible: boolean }) {
           <ScrollView contentContainerStyle={{ padding: space.xl, gap: space.md }}>
             <T testID="mode-title" size={22} weight="800" center>How would you like to use Travoo?</T>
             <T size={13} color={colors.muted} center>Choose your role. You can change it anytime in Profile.</T>
-            <RoleCard testID="mode-passenger" img={IMG.passenger} title="I am a Passenger" points={["Find a Ride", "Rent a Driver", "Book a Driver"]} bg={colors.brandSoft} accent={colors.brandTertiary} busy={busy} delay={100} onPress={() => pick("passenger")} />
+            <RoleCard testID="mode-passenger" img={IMG.passenger} title="I am a Passenger" points={["Find a Ride", "Rent a Driver", t("svc.book_car")]} bg={colors.brandSoft} accent={colors.brandTertiary} busy={busy} delay={100} onPress={() => pick("passenger")} />
             <RoleCard testID="mode-driver" img={IMG.driver} title="I am a Driver" points={["Offer a Ride", "Driver Only", "Car with Driver"]} bg={colors.accentSoft} accent={colors.brandTertiary} busy={busy} delay={250} onPress={() => pick("driver")} />
             {err ? <T testID="mode-error" color={colors.error} center>{err}</T> : null}
           </ScrollView>

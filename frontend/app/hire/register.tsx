@@ -41,7 +41,7 @@ function StatusView({ me, onFix }: { me: any; onFix: () => void }) {
         <T size={13}>Home: {p.home?.subdistrict_name} {p.home?.sub_label}, {p.home?.district_name}</T>
         <T size={13}>Languages: {(p.languages ?? []).join(", ")}</T>
         <T size={13}>Licence: {p.licence_no} · valid until {p.licence_expiry}</T>
-        <T size={13}>Services: {(p.services ?? []).map((s: string) => (s === "book" ? "Book a Driver" : "Rent a Driver")).join(" + ")}</T>
+        <T size={13}>Services: {(p.services ?? []).map((s: string) => (s === "book" ? "Book a Car" : "Rent a Driver")).join(" + ")}</T>
       </Card>
       {fix ? <Btn testID="pro-fix-button" icon="create-outline" label="Fix and resubmit" onPress={onFix} /> : null}
       {p.status === "approved" ? <Btn testID="pro-open-dashboard" label="Open Local Driver Dashboard" onPress={() => router.replace("/hire/driver")} /> : null}
@@ -102,7 +102,7 @@ export default function LocalDriverRegister() {
     }
     if (step === 2) {
       if (!d.services.length) return "Choose at least one service";
-      if (d.services.includes("book") && !d.vehicle_ids.length) return "Add or select at least one vehicle for Book a Driver";
+      if (d.services.includes("book") && !d.vehicle_ids.length) return "Add or select at least one vehicle for Book a Car";
     }
     return "";
   };

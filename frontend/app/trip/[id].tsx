@@ -8,10 +8,11 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { api, publicPhoto } from "@/src/api";
 import { DriverReviews } from "@/src/components/DriverReviews";
 import { FeatureCard } from "@/src/components/FeatureCard";
+import { PLACE_ICON } from "@/src/components/LocationField";
 import { OsmMap } from "@/src/components/OsmMap";
 import { fmtDur } from "@/src/components/RideCard";
 import { useToast } from "@/src/components/toast";
-import { Avatar, Badge, Btn, Card, Chip, ErrorBox, Field, Header, Loading, Rating, Stepper, T, space, statusTone } from "@/src/components/ui";
+import { Avatar, Badge, Btn, Card, Chip, ErrorBox, Field, Header, Loading, Rating, Stepper, T, radius, space, statusTone } from "@/src/components/ui";
 import { inr, useI18n } from "@/src/i18n";
 import { openRouteInMaps } from "@/src/maps";
 import { useTheme } from "@/src/theme";
@@ -87,7 +88,9 @@ export default function TripScreen() {
           ].map(([tm, l, sub, c]: any, i: number) => (
             <View key={i} style={{ flexDirection: "row", gap: space.md }}>
               <T weight="800" style={{ width: 48 }}>{tm}</T>
-              <Ionicons name={i === 0 ? "radio-button-on" : "location"} size={18} color={c} />
+              <View style={{ width: 24, alignItems: "center" }}>
+                <Ionicons name={i === 0 ? PLACE_ICON.from : PLACE_ICON.to} size={18} color={c} />
+              </View>
               <View style={{ flex: 1 }}>
                 <T weight="800">{l.name}</T>
                 <T size={12} color={colors.muted}>{sub} · {[l.district, l.state].filter(Boolean).join(", ")}</T>
@@ -245,7 +248,7 @@ export default function TripScreen() {
               <Chip testID="book-pay-cash" icon="cash-outline" label={t("pay.cash")} active={pay === "cash"} onPress={() => setPay("cash")} />
               <Chip testID="book-pay-upi" icon="phone-portrait-outline" label={t("pay.upi_m")} active={pay === "upi"} onPress={() => setPay("upi")} />
             </View>
-            <View style={{ backgroundColor: colors.accentSoft, borderRadius: 12, padding: space.md, gap: 4 }}>
+            <View style={{ backgroundColor: colors.accentSoft, borderRadius: radius.md, padding: space.md, gap: space.xs, borderWidth: 1, borderColor: colors.border }}>
               <T weight="800" color={colors.brandTertiary}>{t("pay.direct")}</T>
               <T size={12} color={colors.muted}>{t("pay.note")}</T>
             </View>

@@ -491,5 +491,6 @@
  "geo.type.post_office": "ডাকঘৰ",
  "geo.type.pin": "পিন কৰা স্থান",
  "geo.type.place": "ঠাই",
- "geo.along_route": "আপোনাৰ উঠিবলগীয়া ঠাইৰ কাষেৰে যায় ~{time} ({n} km)"
+ "geo.along_route": "আপোনাৰ উঠিবলগীয়া ঠাইৰ কাষেৰে যায় ~{time} ({n} km)",
+ "svc.book_car": "গাড়ী বুক কৰক"
 }

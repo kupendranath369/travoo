@@ -11,7 +11,7 @@ export const LANG_OPTIONS = ["Kannada", "Hindi", "English", "Tamil", "Telugu", "
   "Assamese", "Konkani", "Tulu", "Bhojpuri", "Rajasthani", "Kashmiri", "Maithili", "Nepali", "Sindhi", "Manipuri"];
 
 export const PRO_STATUS: Record<string, { label: string; tone: "info" | "success" | "warning" | "error" | "muted"; icon: IconName; text: string }> = {
-  none: { label: "Not registered", tone: "muted", icon: "person-add-outline", text: "Register once to offer Rent a Driver and Book a Driver." },
+  none: { label: "Not registered", tone: "muted", icon: "person-add-outline", text: "Register once to offer Rent a Driver and Book a Car." },
   under_review: { label: "Verification pending", tone: "warning", icon: "time-outline", text: "Travoo is checking your documents. We will notify you after the review." },
   approved: { label: "Approved", tone: "success", icon: "shield-checkmark", text: "You are a verified Travoo local driver." },
   rejected: { label: "Rejected", tone: "error", icon: "close-circle-outline", text: "Your registration was not approved. Fix the items below and submit again." },
@@ -22,7 +22,7 @@ export const ITEM_LABEL: Record<string, string> = { home: "Home location", langu
   licence_front: "Licence front photo", licence_back: "Licence back photo", id_proof: "Aadhaar front photo", vehicles: "Vehicle details" };
 
 export const COMMERCIAL: Record<string, { label: string; tone: "info" | "success" | "warning" | "error" | "muted" }> = {
-  approved: { label: "Approved for Book a Driver", tone: "success" }, pending: { label: "Approval pending", tone: "warning" },
+  approved: { label: "Approved for Book a Car", tone: "success" }, pending: { label: "Approval pending", tone: "warning" },
   rejected: { label: "Not approved", tone: "error" }, none: { label: "Carpool only", tone: "muted" },
 };
 

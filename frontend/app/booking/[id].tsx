@@ -125,7 +125,7 @@ export default function BookingScreen() {
             <LogoMark size={40} />
             <View style={{ flex: 1 }}>
               <T size={12} color={colors.muted}>{t("booking.id")}</T>
-              <T testID="booking-id" size={18} weight="800">{b.booking_id}</T>
+              <T testID="booking-id" size={18} weight="800" numberOfLines={1} adjustsFontSizeToFit>{b.booking_id}</T>
             </View>
             <Pressable testID="booking-header-chat-button" onPress={() => router.push(`/chat/${b.booking_id}`)} style={{ padding: space.sm }}>
               <Ionicons name="chatbubbles-outline" size={24} color={colors.brandPrimary} />

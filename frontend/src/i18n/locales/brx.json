@@ -491,5 +491,6 @@
  "geo.type.post_office": "डाखर आफिस",
  "geo.type.pin": "पिन खालामना जायगा",
  "geo.type.place": "जायगा",
- "geo.along_route": "नोंनि लाबोनाय थानायाव फासै~{time} ({n} कि.मि.)"
+ "geo.along_route": "नोंनि लाबोनाय थानायाव फासै~{time} ({n} कि.मि.)",
+ "svc.book_car": "कार बुक खालाम"
 }

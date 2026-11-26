@@ -35,7 +35,7 @@ export default function DriverTripsTab() {
       {!hires ? <Loading /> : (
         <FlatList data={data} keyExtractor={(i) => i.booking_id ?? i.trip_id} refreshControl={<RefreshControl refreshing={false} onRefresh={load} />}
           contentContainerStyle={{ padding: space.lg, gap: space.md, paddingBottom: 120 }}
-          ListEmptyComponent={<Empty icon="car-outline" title="No trips here yet" body={tab === "carpool" ? "Rides you publish appear here." : "Accepted Rent / Book a Driver trips appear here."} />}
+          ListEmptyComponent={<Empty icon="car-outline" title="No trips here yet" body={tab === "carpool" ? "Rides you publish appear here." : "Accepted Rent / Book a Car trips appear here."} />}
           renderItem={({ item }) => tab === "carpool" ? (
             <Card testID={`trips-ride-${item.trip_id}`} onPress={() => router.push(`/trip/${item.trip_id}`)} style={{ gap: space.xs }}>
               <View style={{ flexDirection: "row", justifyContent: "space-between", gap: space.sm }}>
@@ -50,7 +50,7 @@ export default function DriverTripsTab() {
                 <T weight="800" style={{ flex: 1 }} numberOfLines={1}>{item.route}</T>
                 <Badge label={item.status} tone={statusTone(item.status)} />
               </View>
-              <T size={13} color={colors.muted}>{fmtDate(item.date)} · {item.time} · {item.service === "book" ? "Book a Driver" : "Rent a Driver"} · {item.hours} h</T>
+              <T size={13} color={colors.muted}>{fmtDate(item.date)} · {item.time} · {item.service === "book" ? "Book a Car" : "Rent a Driver"} · {item.hours} h</T>
               <T weight="800" color={colors.success}>{inr(item.service_fee)}</T>
             </Card>
           )} />

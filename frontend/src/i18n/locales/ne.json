@@ -491,5 +491,6 @@
  "geo.type.post_office": "हुलाक कार्यालय",
  "geo.type.pin": "पिन गरिएको बिन्दु",
  "geo.type.place": "स्थान",
- "geo.along_route": "तपाईंको पिकअपबाट ~{time} मा जान्छ ({n} किमी)"
+ "geo.along_route": "तपाईंको पिकअपबाट ~{time} मा जान्छ ({n} किमी)",
+ "svc.book_car": "कार बुक गर्नुहोस्"
 }

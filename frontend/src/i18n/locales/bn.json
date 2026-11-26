@@ -491,5 +491,6 @@
  "geo.type.post_office": "ডাকঘর",
  "geo.type.pin": "পিন করা জায়গা",
  "geo.type.place": "জায়গা",
- "geo.along_route": "আপনার পিকআপ পয়েন্ট দিয়ে ~{time} পরে যাবে ({n} কিমি)"
+ "geo.along_route": "আপনার পিকআপ পয়েন্ট দিয়ে ~{time} পরে যাবে ({n} কিমি)",
+ "svc.book_car": "গাড়ি বুক করুন"
 }
