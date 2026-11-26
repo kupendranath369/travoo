@@ -1,48 +1,41 @@
-import Ionicons from "@react-native-vector-icons/ionicons";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import React, { useEffect } from "react";
-import { Text, useWindowDimensions, View } from "react-native";
-import Animated, { Easing, FadeIn, FadeOut, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming } from "react-native-reanimated";
+import { Text, View } from "react-native";
+import Animated, { Easing, FadeIn, FadeInDown, FadeOut, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming } from "react-native-reanimated";
 
-import { BrandPin, IMG, Wordmark } from "@/src/components/Brand";
+const BG = "#001A33";
 
-const ROAD = 92;
-
-/** Opening screen: blue sea coast with a car driving along the road. */
+/** Opening screen: sunset highway photo with the Travoo logo. */
 export function Splash() {
-  const { width } = useWindowDimensions();
-  const x = useSharedValue(-120);
-  const bump = useSharedValue(0);
-  const dash = useSharedValue(0);
+  const zoom = useSharedValue(1.08);
+  const glow = useSharedValue(0.4);
   useEffect(() => {
-    x.value = withRepeat(withTiming(width + 40, { duration: 2200, easing: Easing.inOut(Easing.quad) }), -1);
-    bump.value = withRepeat(withSequence(withTiming(-3, { duration: 160 }), withTiming(0, { duration: 160 })), -1);
-    dash.value = withRepeat(withTiming(-60, { duration: 500, easing: Easing.linear }), -1);
-  }, [width, x, bump, dash]);
-  const car = useAnimatedStyle(() => ({ transform: [{ translateX: x.value }, { translateY: bump.value }] }));
-  const lines = useAnimatedStyle(() => ({ transform: [{ translateX: dash.value }] }));
+    zoom.value = withTiming(1, { duration: 2600, easing: Easing.out(Easing.quad) });
+    glow.value = withRepeat(withSequence(withTiming(1, { duration: 700 }), withTiming(0.4, { duration: 700 })), -1);
+  }, [zoom, glow]);
+  const bg = useAnimatedStyle(() => ({ transform: [{ scale: zoom.value }] }));
+  const dot = useAnimatedStyle(() => ({ opacity: glow.value }));
   return (
-    <Animated.View entering={FadeIn.duration(500)} exiting={FadeOut.duration(500)} testID="splash-screen" style={{ flex: 1, backgroundColor: "#FAF6EE" }}>
-      <LinearGradient colors={["#F3E3BF", "#FAF6EE"]} style={{ position: "absolute", width: "100%", height: "60%" }} />
-      <View style={{ position: "absolute", left: 0, right: 0, bottom: ROAD, height: "42%" }}>
-        <Image source={{ uri: IMG.header }} style={{ width: "100%", height: "100%" }} contentFit="cover" />
-        <LinearGradient colors={["#FAF6EE", "rgba(250,246,238,0)"]} style={{ position: "absolute", left: 0, right: 0, top: 0, height: 70 }} />
-      </View>
-      <View style={{ alignItems: "center", paddingTop: "22%", gap: 10 }}>
-        <BrandPin size={64} />
-        <Wordmark size={56} />
-        <Text style={{ fontFamily: "PJS-SemiBold", fontSize: 15, color: "#0E2A4F" }}>Your Travel. Your Driver. Your Way.</Text>
-      </View>
-      <View testID="splash-road" style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: ROAD, backgroundColor: "#0E2A4F", overflow: "hidden" }}>
-        <View style={{ height: 6, backgroundColor: "#D4A437" }} />
-        <Animated.View style={[{ position: "absolute", top: ROAD / 2, flexDirection: "row", gap: 30, width: width + 120 }, lines]}>
-          {Array.from({ length: Math.ceil(width / 60) + 2 }).map((_, i) => <View key={i} style={{ width: 30, height: 5, borderRadius: 3, backgroundColor: "#fff" }} />)}
-        </Animated.View>
-      </View>
-      <Animated.View testID="splash-car" style={[{ position: "absolute", bottom: ROAD - 58, left: 0 }, car]}>
-        <Ionicons name="car-sport" size={84} color="#B5852A" />
+    <Animated.View entering={FadeIn.duration(400)} exiting={FadeOut.duration(500)} testID="splash-screen" style={{ flex: 1, backgroundColor: BG, overflow: "hidden" }}>
+      <Animated.View style={[{ position: "absolute", width: "100%", height: "100%" }, bg]}>
+        <Image testID="splash-background" source={require("@/assets/images/splash-bg.jpg")} style={{ width: "100%", height: "100%" }} contentFit="cover" contentPosition="bottom" />
       </Animated.View>
+      <LinearGradient colors={[BG, "rgba(0,26,51,0.6)", "rgba(0,26,51,0)"]} locations={[0, 0.3, 0.55]} style={{ position: "absolute", width: "100%", height: "100%" }} />
+      <Animated.View entering={FadeInDown.delay(250).duration(700)} style={{ alignItems: "center", paddingTop: "28%", paddingHorizontal: 32, gap: 18 }}>
+        <Image testID="splash-logo" source={require("@/assets/images/travoo-logo-white.png")} style={{ width: "86%", maxWidth: 360, aspectRatio: 1867 / 295 }} contentFit="contain" accessibilityLabel="Travoo" />
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+          {["Travel", "Share", "Drive"].map((w, i) => (
+            <React.Fragment key={w}>
+              {i ? <View style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: "#F5A623" }} /> : null}
+              <Text style={{ fontFamily: "PJS-SemiBold", fontSize: 17, color: "#FFFFFF", letterSpacing: 0.5 }}>{w}</Text>
+            </React.Fragment>
+          ))}
+        </View>
+      </Animated.View>
+      <View style={{ position: "absolute", bottom: 48, left: 0, right: 0, flexDirection: "row", justifyContent: "center", gap: 8 }}>
+        {[0, 1, 2].map((i) => <Animated.View key={i} style={[{ width: 8, height: 8, borderRadius: 4, backgroundColor: "#FFFFFF" }, i === 1 ? dot : { opacity: 0.5 }]} />)}
+      </View>
     </Animated.View>
   );
 }
