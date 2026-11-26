@@ -2608,10 +2608,8 @@ async def seed():
     if not await db.users.find_one({"email": admin_email}):
         doc = new_user_doc(admin_email, "Travoo Admin", role="admin")
         doc["password_hash"] = hash_pw(os.environ["ADMIN_PASSWORD"])
-        doc["must_change_password"] = True
+        doc["must_change_password"] = False
         await db.users.insert_one(doc)
-    # migration: an admin who still uses the bootstrap password from the environment must replace it
-    await db.users.update_many({"role": "admin", "must_change_password": {"$exists": False}}, {"$set": {"must_change_password": True}})
     if not await db.users.find_one({"email": "driver@travoo.in"}):
         drv = new_user_doc("driver@travoo.in", "Arjun Rao (Demo)", phone="9876543210", driver_status="approved", is_demo=True)
         drv.update(password_hash=hash_pw("Driver@2026"), upi_id="arjun.demo@upi", rating_avg=4.8, rating_count=0)
