@@ -172,3 +172,7 @@ Pan-India intercity paid carpooling app (BlaBlaCar model) called TRAVOO, tagline
 - Passenger/Driver app mode (/mode chooser, Profile switch sheet). Driver tabs: Home(dashboard)/My Trips/Earnings/Messages/Account. Passenger tabs: Home/Bookings/Messages/Notifications/Account.
 - UI redesign from the user's "Travoo Light" sheet: green CTA + blue wordmark/pin (Brand.tsx), scenic splash/home header, 3 home tiles, /find screen, illustrated mode cards, "Become a Travoo Driver" selection, numbered registration progress, dashboard with earnings row + 3x2 tiles, Set Availability with outstation toggle, centred profile + Switch Mode sheet.
 - Tested iteration_31: backend 18/18, frontend 100%
+
+## Iteration 32 (Jun 2026) — Run & Google key
+- Backend had stopped starting (the resend library was missing). Reinstalled the libraries in requirements.txt and the app runs again.
+- GOOGLE_PLACES_API_KEY added through secrets. Google currently answers 403 ACCESS_DENIED: the key's project needs billing and Places API (New) turned on. Until then search falls back to OpenStreetMap automatically.
