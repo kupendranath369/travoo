@@ -1,0 +1,33 @@
+{
+  "summary": "Re-tested the forgot-password email fix (Emergent managed email). Backend: 5/6 pass. Sending to delivered@resend.dev returns 200 accepted, the password_resets record gets provider_status=accepted and provider_email_id, and the log line 'Email accepted id=...' matches. An unknown email gets the same generic 200 reply. An invalid reset token gets 400. The reset email HTML has only https links (no travoo://) and passes _assert_safe_email. The 4th request for the same email returns 429. Failing: admin@travoo.in. The backend itself returns 502 JSON with the friendly message (checked on localhost:8001), but the public preview ingress swaps any 502 body for its own HTML 'Bad gateway' page. So clients only ever see the friendly text through localhost, and the app shows 'Something went wrong'. It does not crash. Frontend: language picker, then /forgot-password, then submit delivered@resend.dev shows 'Check your email' plus a toast. Total real sends: 2, both to delivered@resend.dev. The provider rejects admin@travoo.in with 422 before sending.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/auth/forgot-password (send failure)", "issue": "Backend returns HTTP 502 when the provider rejects an address (422 undeliverable_recipient). The preview ingress replaces 502 response bodies with its own HTML page, so the friendly detail never reaches the client. Use a status the ingress passes through, e.g. 422 or 400 for undeliverable_recipient and 503 for provider outages, and verify that status through the public URL."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "Forgot password with an undeliverable email", "issue": "The forgot-error element shows the generic 'Something went wrong' instead of the backend message, because the ingress returns an HTML 502 page and api() falls back. Root cause is in the backend (see above).", "affected_selectors": ["forgot-error"]}
+    ],
+    "design_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/test_iter35_forgot_password_email.py", "/app/test_reports/pytest/iter35.xml"],
+  "action_items": [
+    "Change the forgot-password send-failure status from 502 to one the ingress does not intercept, e.g. 422 for undeliverable_recipient and 503 for provider outages. Then confirm through the public URL that the JSON detail arrives."
+  ],
+  "critical_code_review_comments": [
+    "Every EmailSendFailed maps to one generic message. If the provider returns undeliverable_recipient, a clearer message such as 'This email address cannot receive mail' would help, though it slightly weakens the no-enumeration guarantee because it only appears for registered users.",
+    "The 502 only happens for registered users; unknown emails always get 200. Through the error status, a caller can tell that an address is registered but undeliverable. This is minor enumeration.",
+    "The idempotency_key argument is passed to send_email but never sent to the provider.",
+    "The app_link argument of reset_email_html is unused. That is fine, since only https links are allowed in the email."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter35_forgot_password_email.py"],
+  "success_rate": {"backend": "83% (5/6)", "frontend": "100% for the success flow; error message is generic"},
+  "seed_data_creation": "Created a temporary user delivered@resend.dev named TEST_Delivered, plus password_resets docs. Deleted both by user_id. The audit entries from password.reset_requested remain. Deleted only rate_limits keys matching forgot:ip:* or forgot:email:(delivered@resend.dev|admin@travoo.in|test_*).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run the tests with -n 0, because the tests depend on order. The test re-registers delivered@resend.dev if it is missing and deletes it at teardown. Each run sends 1 real email to delivered@resend.dev. The provider rejects admin@travoo.in with 422 before sending. The ingress intercepts 502 bodies, so check error statuses through the public URL.",
+  "rca of the issue": "Original bug: no email provider was configured. It is fixed: Emergent email returns 202 and the email ids are logged. Remaining issue: 502 is used as the app-level error status, and the Cloudflare-style ingress replaces 502 response bodies."
+}

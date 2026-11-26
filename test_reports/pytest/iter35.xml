@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="6" time="3.725" timestamp="2026-11-26T10:04:51.210908+00:00" hostname="agent-env-896e607f-a7f3-46ba-9db3-55076c256622"><testcase classname="tests.test_iter35_forgot_password_email" name="test_forgot_existing_user_sends_email" time="2.031" /><testcase classname="tests.test_iter35_forgot_password_email" name="test_forgot_unknown_email_generic" time="0.129" /><testcase classname="tests.test_iter35_forgot_password_email" name="test_reset_invalid_token" time="0.183" /><testcase classname="tests.test_iter35_forgot_password_email" name="test_reset_email_html_https_only" time="0.355" /><testcase classname="tests.test_iter35_forgot_password_email" name="test_rate_limit_fourth_request" time="0.576" /><testcase classname="tests.test_iter35_forgot_password_email" name="test_forgot_undeliverable_admin" time="0.244"><failure message="requests.exceptions.JSONDecodeError: Expecting value: line 1 column 1 (char 0)">/root/.venv/lib/python3.11/site-packages/requests/models.py:1116: in json
+    return complexjson.loads(self.text, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.11/json/__init__.py:346: in loads
+    return _default_decoder.decode(s)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.11/json/decoder.py:337: in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.11/json/decoder.py:355: in raw_decode
+    raise JSONDecodeError("Expecting value", s, err.value) from None
+E   json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+
+During handling of the above exception, another exception occurred:
+tests/test_iter35_forgot_password_email.py:106: in test_forgot_undeliverable_admin
+    assert "couldn't send" in r.json()["detail"]
+                              ^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/models.py:1120: in json
+    raise RequestsJSONDecodeError(e.msg, e.doc, e.pos)
+E   requests.exceptions.JSONDecodeError: Expecting value: line 1 column 1 (char 0)</failure></testcase></testsuite></testsuites>

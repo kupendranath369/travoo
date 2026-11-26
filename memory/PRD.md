@@ -176,3 +176,8 @@ Pan-India intercity paid carpooling app (BlaBlaCar model) called TRAVOO, tagline
 ## Iteration 32 (Jun 2026) — Run & Google key
 - Backend had stopped starting (the resend library was missing). Reinstalled the libraries in requirements.txt and the app runs again.
 - GOOGLE_PLACES_API_KEY added through secrets. Google currently answers 403 ACCESS_DENIED: the key's project needs billing and Places API (New) turned on. Until then search falls back to OpenStreetMap automatically.
+
+## Iteration 33–35 (Jun 2026) — Password reset email fixed
+- Cause: no email provider was configured (RESEND_API_KEY / RESEND_FROM missing), so reset links never went out.
+- email_service.py now uses Emergent managed email (EMERGENT_EMAIL_KEY, EMAIL_FROM_NAME=Travoo) with the safety gate. The reset email has an https link only.
+- Undeliverable addresses return 400 with a friendly message. Tested in iteration_35: sending, generic reply, invalid token, rate limit and the UI flow all pass.

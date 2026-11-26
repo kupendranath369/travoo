@@ -598,7 +598,7 @@ async def forgot_password(body: ForgotPasswordIn, request: Request):
                                     idempotency_key=f"password-reset/{rid}")
     except (EmailNotConfigured, EmailSendFailed):
         await db.password_resets.update_one({"request_id": rid}, {"$set": {"provider_status": "failed", "used_at": now()}})
-        raise HTTPException(502, "We couldn't send the reset email right now. Please try again in a few minutes.")
+        raise HTTPException(400, "We couldn't send the reset email to this address. Please check the email or try again in a few minutes.")
     await db.password_resets.update_one({"request_id": rid}, {"$set": {"provider_status": "accepted", "provider_email_id": email_id}})
     await audit(user["user_id"], "password.reset_requested", user["user_id"], {"request_id": rid})
     return GENERIC_RESET
