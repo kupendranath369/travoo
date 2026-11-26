@@ -16,3 +16,13 @@ export function FloatingImage({ uri, source, style, delay = 0, testID, accessibi
     </Animated.View>
   );
 }
+
+/** Same gentle float for any content. */
+export function FloatingView({ children, delay = 0, testID }: { children: React.ReactNode; delay?: number; testID?: string }) {
+  const y = useSharedValue(0);
+  useEffect(() => {
+    y.value = withDelay(delay, withRepeat(withSequence(withTiming(-5, { duration: 1400, easing: Easing.inOut(Easing.quad) }), withTiming(0, { duration: 1400, easing: Easing.inOut(Easing.quad) })), -1));
+  }, [delay, y]);
+  const st = useAnimatedStyle(() => ({ transform: [{ translateY: y.value }] }));
+  return <Animated.View testID={testID} style={st}>{children}</Animated.View>;
+}

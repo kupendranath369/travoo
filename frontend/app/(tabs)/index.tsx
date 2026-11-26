@@ -7,11 +7,9 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { api, Loc, pictureUrl } from "@/src/api";
 import { DateField } from "@/src/components/Calendar";
-import { FloatingImage } from "@/src/components/FloatingImage";
+import { FloatingView } from "@/src/components/FloatingImage";
 import { LocationField } from "@/src/components/LocationField";
-import { IMG } from "@/src/components/Brand";
-import { Image } from "expo-image";
-import { LinearGradient } from "expo-linear-gradient";
+import { ServiceTile, TravelScene } from "@/src/components/HomeScene";
 import { RideCard } from "@/src/components/RideCard";
 import { Avatar, Btn, Card, IconName, T, radius, space } from "@/src/components/ui";
 import { useAuth } from "@/src/auth";
@@ -66,9 +64,9 @@ function PassengerHome() {
     setFormErr("");
     router.push({ pathname: "/search", params: { from: JSON.stringify(from), to: JSON.stringify(to), date: date ?? "", seats: "1" } });
   };
-  const art = (testID: string, img: number, title: string, sub: string, bg: string, onPress: () => void, delay: number) => (
-    <Pressable testID={testID} onPress={onPress} style={({ pressed }) => ({ flex: 1, backgroundColor: bg, transform: [{ scale: pressed ? 0.97 : 1 }] })}>
-      <FloatingImage source={img} delay={delay} style={{ width: "100%", height: 165 }} testID={`${testID}-image`} accessibilityLabel={`${title}. ${sub}`} />
+  const art = (testID: string, img: number, title: string, sub: string, onPress: () => void, delay: number) => (
+    <Pressable testID={testID} onPress={onPress} accessibilityLabel={`${title}. ${sub}`} style={({ pressed }) => ({ flex: 1, transform: [{ scale: pressed ? 0.97 : 1 }] })}>
+      <FloatingView delay={delay} testID={`${testID}-image`}><ServiceTile art={img} title={title} sub={sub} /></FloatingView>
     </Pressable>
   );
 
@@ -79,9 +77,8 @@ function PassengerHome() {
         contentContainerStyle={{ gap: space.md, paddingBottom: (usesNativeTabs ? insets.bottom : 0) + space.xl }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); await load(); setRefreshing(false); }} />}
       >
-        <View testID="home-header" style={{ height: 190 + insets.top }}>
-          <Image source={{ uri: IMG.header }} style={{ position: "absolute", width: "100%", height: "100%" }} contentFit="cover" />
-          <LinearGradient colors={["rgba(255,255,255,0.95)", "rgba(255,255,255,0.6)", "rgba(255,255,255,0)"]} style={{ position: "absolute", width: "100%", height: "80%" }} />
+        <View testID="home-header" style={{ height: 250 + insets.top }}>
+          <TravelScene height={250 + insets.top} />
           <Pressable testID="home-profile-section" onPress={() => router.push("/profile")} style={{ paddingTop: insets.top + space.sm, paddingHorizontal: space.lg, flexDirection: "row", alignItems: "center", gap: space.md }}>
             <Avatar name={user?.name ?? ""} uri={pictureUrl(user?.picture)} size={48} />
             <View style={{ flex: 1 }}>
@@ -91,7 +88,7 @@ function PassengerHome() {
             {user?.role === "admin" && icon("shield-checkmark-outline", () => router.push("/admin/login"), "home-admin-button")}
           </Pressable>
         </View>
-        <Animated.View entering={FadeInDown.duration(400)} style={{ marginHorizontal: space.lg, marginTop: -90 }}>
+        <Animated.View entering={FadeInDown.duration(400)} style={{ marginHorizontal: space.lg, marginTop: -6 }}>
           <Card testID="home-search-card" style={{ gap: space.sm, borderWidth: 0, shadowColor: "#14233A", shadowOpacity: 0.1, shadowRadius: 16, shadowOffset: { width: 0, height: 8 }, elevation: 5 }}>
 <View style={{ paddingRight: 44, gap: space.sm }}>
             <LocationField testID="home-from-field" label="Leaving from" value={from} onChange={(l) => { setFrom(l); setFormErr(""); }} icon="location-outline" />
@@ -107,8 +104,8 @@ function PassengerHome() {
           </Card>
         </Animated.View>
         <Animated.View entering={FadeInDown.delay(80).duration(400)} style={{ flexDirection: "row", gap: space.md, paddingHorizontal: space.lg }}>
-          {art("home-rent-driver-card", require("@/assets/images/tile-rent-driver.png"), "Rent a Driver", "Driver for your car", "transparent", () => router.push("/hire?service=rent"), 0)}
-          {art("home-book-car-card", require("@/assets/images/tile-book-car.png"), "Book a Car", "Car with driver", "transparent", () => router.push("/hire?service=book"), 400)}
+          {art("home-rent-driver-card", require("@/assets/images/tile-rent-driver-art.jpg"), "Rent a Driver", "Driver for your car", () => router.push("/hire?service=rent"), 0)}
+          {art("home-book-car-card", require("@/assets/images/tile-book-car-art.jpg"), "Book a Car", "Car with driver", () => router.push("/hire?service=book"), 400)}
         </Animated.View>
 
         <Animated.View entering={FadeInDown.delay(120).duration(400)} style={{ gap: space.sm, paddingHorizontal: space.lg }}>
