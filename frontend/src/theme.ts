@@ -40,53 +40,53 @@ const light = {
   // Surfaces: backgrounds, from the screen down to small fills.
   // Each `on` key is the text and icon color for that background.
   // ---------------------------------------------------------------------------
-  surface: "#F4F8F5", // primary canvas, most of every screen
-  onSurface: "#14233A", // text and icons on the canvas
+  surface: "#FAF6EE", // primary canvas, most of every screen
+  onSurface: "#0E2341", // text and icons on the canvas
   surfaceSecondary: "#FFFFFF", // cards, sheets, list rows
-  onSurfaceSecondary: "#172B4D", // text and icons on cards, sheets, rows
-  surfaceTertiary: "#EEF3F0", // input backgrounds, chips, deepest nesting
-  onSurfaceTertiary: "#172B4D", // text on inputs and chips; also muted text
-  surfaceInverse: "#14233A", // tooltips, snackbars, anything popping against the theme
+  onSurfaceSecondary: "#13284A", // text and icons on cards, sheets, rows
+  surfaceTertiary: "#F3EDE0", // input backgrounds, chips, deepest nesting
+  onSurfaceTertiary: "#13284A", // text on inputs and chips; also muted text
+  surfaceInverse: "#0E2A4F", // tooltips, snackbars, anything popping against the theme
   onSurfaceInverse: "#FFFFFF", // text and icons on the inverse surface
-  muted: "#6B778C", // subdued text on surface: captions, timestamps, placeholders
+  muted: "#6F6A5E", // subdued text on surface: captions, timestamps, placeholders
 
   // ---------------------------------------------------------------------------
   // Brand: the identity color and the fills built from it.
   // Neutral by default; replace with the design guidelines values.
   // ---------------------------------------------------------------------------
-  brand: "#1565D8", // base hue, anchor only; Primary, Secondary, Tertiary are weights of it
+  brand: "#0E2A4F", // base hue, anchor only; Primary, Secondary, Tertiary are weights of it
   onBrand: "#FFFFFF", // text and icons placed directly on brand
-  brandPrimary: "#1E73E8", // primary CTA, active tab indicator, selected states
+  brandPrimary: "#0F2D55", // primary CTA, active tab indicator, selected states
   onBrandPrimary: "#FFFFFF", // text and icons on brandPrimary
-  brandSecondary: "#1E73E8", // secondary CTA, less prominent accents
+  brandSecondary: "#B5852A", // secondary CTA, less prominent accents
   onBrandSecondary: "#FFFFFF", // text and icons on brandSecondary
-  brandTertiary: "#FF9500", // chips, tags, badges, subtle brand moments
-  onBrandTertiary: "#FFFFFF", // text and icons on brandTertiary
+  brandTertiary: "#D4A437", // chips, tags, badges, subtle brand moments
+  onBrandTertiary: "#14233A", // text and icons on brandTertiary
 
   // ---------------------------------------------------------------------------
   // Status: semantic only, never decorative. Fill for badges, banners and
   // toasts; the `on` key is text on that fill. The plain key is also safe as
   // text on `surface`.
   // ---------------------------------------------------------------------------
-  success: "#1565D8",
+  success: "#1F7A4D",
   onSuccess: "#FFFFFF",
-  warning: "#F5CD47",
-  onWarning: "#172B4D",
-  error: "#CA3521",
+  warning: "#E8B53A",
+  onWarning: "#14233A",
+  error: "#C8372D",
   onError: "#FFFFFF",
-  info: "#1E73E8",
+  info: "#0F2D55",
   onInfo: "#FFFFFF",
 
   // ---------------------------------------------------------------------------
   // Lines
   // ---------------------------------------------------------------------------
-  border: "#DFE1E6", // hairline outline, 0.5pt or 1pt max: inputs, cards
-  borderStrong: "#B3BAC5", // focus rings, selected outlines, 1.5pt max
-  divider: "#DFE1E6", // subtle list separators
-  brandSoft: "#E8F1FD", // pale blue fills
-  accentSoft: "#FFF4E0", // pale orange fills
-  successSoft: "#E3EEFC",
-  scrim: "rgba(20,35,58,0.55)",
+  border: "#E8E0CF", // hairline outline, 0.5pt or 1pt max: inputs, cards
+  borderStrong: "#C9BC9F", // focus rings, selected outlines, 1.5pt max
+  divider: "#EDE6D6", // subtle list separators
+  brandSoft: "#E7ECF3", // pale blue fills
+  accentSoft: "#FBF1DA", // pale orange fills
+  successSoft: "#E3F1E8",
+  scrim: "rgba(14,42,79,0.55)",
 };
 
 export type ThemeColors = typeof light;

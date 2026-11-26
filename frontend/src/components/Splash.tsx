@@ -23,25 +23,25 @@ export function Splash() {
   const car = useAnimatedStyle(() => ({ transform: [{ translateX: x.value }, { translateY: bump.value }] }));
   const lines = useAnimatedStyle(() => ({ transform: [{ translateX: dash.value }] }));
   return (
-    <Animated.View entering={FadeIn.duration(500)} exiting={FadeOut.duration(500)} testID="splash-screen" style={{ flex: 1, backgroundColor: "#E8F4FD" }}>
-      <LinearGradient colors={["#CFE7FB", "#EEF7FE"]} style={{ position: "absolute", width: "100%", height: "60%" }} />
+    <Animated.View entering={FadeIn.duration(500)} exiting={FadeOut.duration(500)} testID="splash-screen" style={{ flex: 1, backgroundColor: "#FAF6EE" }}>
+      <LinearGradient colors={["#F3E3BF", "#FAF6EE"]} style={{ position: "absolute", width: "100%", height: "60%" }} />
       <View style={{ position: "absolute", left: 0, right: 0, bottom: ROAD, height: "42%" }}>
         <Image source={{ uri: IMG.header }} style={{ width: "100%", height: "100%" }} contentFit="cover" />
-        <LinearGradient colors={["#EEF7FE", "rgba(238,247,254,0)"]} style={{ position: "absolute", left: 0, right: 0, top: 0, height: 70 }} />
+        <LinearGradient colors={["#FAF6EE", "rgba(250,246,238,0)"]} style={{ position: "absolute", left: 0, right: 0, top: 0, height: 70 }} />
       </View>
       <View style={{ alignItems: "center", paddingTop: "22%", gap: 10 }}>
         <BrandPin size={64} />
         <Wordmark size={56} />
-        <Text style={{ fontFamily: "PJS-SemiBold", fontSize: 15, color: "#14233A" }}>Your Travel. Your Driver. Your Way.</Text>
+        <Text style={{ fontFamily: "PJS-SemiBold", fontSize: 15, color: "#0E2A4F" }}>Your Travel. Your Driver. Your Way.</Text>
       </View>
-      <View testID="splash-road" style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: ROAD, backgroundColor: "#3A4656", overflow: "hidden" }}>
-        <View style={{ height: 6, backgroundColor: "#E9D9B6" }} />
+      <View testID="splash-road" style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: ROAD, backgroundColor: "#0E2A4F", overflow: "hidden" }}>
+        <View style={{ height: 6, backgroundColor: "#D4A437" }} />
         <Animated.View style={[{ position: "absolute", top: ROAD / 2, flexDirection: "row", gap: 30, width: width + 120 }, lines]}>
           {Array.from({ length: Math.ceil(width / 60) + 2 }).map((_, i) => <View key={i} style={{ width: 30, height: 5, borderRadius: 3, backgroundColor: "#fff" }} />)}
         </Animated.View>
       </View>
       <Animated.View testID="splash-car" style={[{ position: "absolute", bottom: ROAD - 58, left: 0 }, car]}>
-        <Ionicons name="car-sport" size={84} color="#1E73E8" />
+        <Ionicons name="car-sport" size={84} color="#B5852A" />
       </Animated.View>
     </Animated.View>
   );
