@@ -1,0 +1,20 @@
+{
+  "summary": "Frontend-only re-check at 390x844 as passenger@travoo.in (language -> Continue -> login). Home tiles home-rent-driver-card / home-book-car-card show only the pictures (card innerText is empty, so no caption below). The words 'Rent a Driver / Driver for your car' and 'Book a Car / Car with driver' are inside the PNGs. Both images load (naturalWidth 480, complete=true) with objectFit contain, are 157x150 inside 173x166 cards so nothing is cropped, and float (translateY changes between samples). aria-labels are set ('Rent a Driver. Driver for your car', 'Book a Car. Car with driver'). Tapping the tiles opens /hire?service=rent and /hire?service=book. The hire header and the service tabs say 'Rent a Driver' / 'Book a Car'. 'Book Car' and 'Book a Driver' appear nowhere in the rendered UI or in a grep of app/ and src/. The mode chooser (mode.tsx, RoleChooser.tsx) says 'Book a Car'; I checked this in the code only, because the passenger account skipped the chooser. The swap buttons work on home (Hyderabad<->Vijayawada) and on hire (Hyderabad<->Warangal).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Home tiles", "issues": ["The subtitle drawn into the image ('Driver for your car' / 'Car with driver') shows at about 8px on a 390px-wide screen and is hard to read. Enlarging the subtitle in the artwork would help.", "The tile PNGs are RGB with a white background and their own rounded border, set inside a white card with padding. This looks fine on a light theme but would show a white box in dark mode."]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": ["Optional: enlarge the subtitle text in tile-rent-driver.png and tile-book-car.png so it is readable at 150px height", "Optional: if dark mode is supported, check how the tile backgrounds look"],
+  "critical_code_review_comments": ["The art() function still takes title, sub and bg arguments. Only title and sub are used (for the accessibility label), and bg is always #FFFFFF. This is fine, just a little redundant."],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (skipped)", "frontend": "100%"},
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Passenger login goes directly to home with no mode chooser. Location picker options use testids location-option-*. Hire fields are hire-pickup-field and hire-destination-field."
+}

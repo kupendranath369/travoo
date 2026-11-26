@@ -186,3 +186,4 @@ Pan-India intercity paid carpooling app (BlaBlaCar model) called TRAVOO, tagline
 - The home tiles use the user's artwork (assets/images/tile-rent-driver.png, tile-book-car.png) on white cards. FloatingImage now accepts a local `source`.
 - "Book a Driver" is renamed "Book Car" (car with driver) everywhere in the UI. The service key stays `book`.
 - The hire screen has a pickup ⇄ destination swap (hire-swap-button). The home search uses the pickup pin and destination arrow icons. Tested in iteration_36: frontend 100%.
+- Iteration 37: the tile artwork now has the text inside the image ("Rent a Driver / Driver for your car", "Book a Car / Car with driver"), transparent corners, and no caption below. The UI label is now "Book a Car". Tested in iteration_37: frontend 100%. Edit script: /tmp/edit.py (temporary)
