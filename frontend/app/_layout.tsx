@@ -57,14 +57,14 @@ function Gate() {
   // Hide splash screen after auth/language is ready
   useEffect(() => {
     if (!loading && ready) {
-      const timer = setTimeout(() => setShowSplash(false), 1500);
+      const timer = setTimeout(() => setShowSplash(false), 2500);
       return () => clearTimeout(timer);
     }
   }, [loading, ready]);
 
   if (showSplash) {
     return (
-      <Splash />
+      <Splash onStart={!loading && ready ? () => setShowSplash(false) : undefined} />
     );
   }
 
