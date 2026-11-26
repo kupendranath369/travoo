@@ -1,6 +1,6 @@
 import Ionicons from "@react-native-vector-icons/ionicons";
 import { useFocusEffect, useRouter, useLocalSearchParams } from "expo-router";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { FlatList, Pressable, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -98,6 +98,7 @@ export default function HireScreen() {
   const [err, setErr] = useState("");
   const [changeTaluk, setChangeTaluk] = useState(false);
   const [manual, setManual] = useState<HomeLoc>(emptyLoc);
+  const listRef = useRef<FlatList>(null);
   const dt = useTaluk(dest);
   const pt = useTaluk(pickup);
 
@@ -111,7 +112,7 @@ export default function HireScreen() {
   }, [params.service]));
   useEffect(() => { setRows(null); setNearby(null); }, [service, dest?.loc_id, dt.taluk?.code, stype, date, time, hours, days, vtype, passengers]);
   useEffect(() => { setChangeTaluk(!!dest && !dt.busy && !dt.taluk); }, [dest, dt.busy, dt.taluk]);
-  const pick = (s: "rent" | "book") => { setService(s); setStype(s === "rent" ? "hourly" : "one_way"); setVtype(s === "rent" ? "" : "sedan"); setErr(""); };
+  const pick = (s: "rent" | "book") => { setService(s); setStype(s === "rent" ? "hourly" : "one_way"); setVtype(s === "rent" ? "" : "sedan"); setErr(""); listRef.current?.scrollToOffset({ offset: 0, animated: true }); };
 
   const multi = stype === "multi_day" || stype === "outstation";
   const bookDays = multi ? days : stype === "round_trip" && date && retDate ? Math.max(1, Math.round((Date.parse(retDate) - Date.parse(date)) / 86400000) + 1) : 1;
@@ -308,6 +309,7 @@ export default function HireScreen() {
           <Btn small variant="ghost" icon="briefcase-outline" label="" onPress={() => router.push("/hire/driver")} testID="hire-driver-dashboard-link" />
         </View>} />
       <FlatList
+        ref={listRef}
         data={rows ?? []}
         keyExtractor={(d) => d.user_id}
         keyboardShouldPersistTaps="handled"

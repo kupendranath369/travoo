@@ -316,7 +316,7 @@ def get_router(db, get_admin: Callable) -> APIRouter:
 
     async def pin_lookup(pin: str) -> Optional[dict]:
         doc = await db.pincodes.find_one({"pin": pin}, {"_id": 0})
-        if doc and doc.get("synced_at") and doc["synced_at"].replace(tzinfo=timezone.utc) > now() - timedelta(days=30):
+        if doc and doc.get("lat") is not None and doc.get("synced_at") and doc["synced_at"].replace(tzinfo=timezone.utc) > now() - timedelta(days=30):
             return doc
         try:
             data = await P["india_post"].get(f"{INDIA_POST}/pincode/{pin}", timeout=10)
@@ -325,7 +325,7 @@ def get_router(db, get_admin: Callable) -> APIRouter:
             logger.warning("india post failed: %s", exc)
             return doc
         if not offices:
-            return None
+            return doc
         first = offices[0]
         center = None
         try:

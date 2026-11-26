@@ -13,7 +13,7 @@ export type Svc = "rent" | "book";
 export const SVC: Record<Svc, { img: any; icon: IconName; title: string; line: string; points: string[] }> = {
   rent: { img: require("@/assets/images/hero-rent-driver.jpg"), icon: "speedometer-outline", title: "Rent a Driver", line: "Have a car? Hire a verified driver for your trip.",
     points: ["Verified & trusted drivers", "Flexible bookings", "Local & outstation trips"] },
-  book: { img: require("@/assets/images/hero-book-car.jpg"), icon: "car-sport", title: "Book Car", line: "Don't have a car? Book a car with a driver for your journey.",
+  book: { img: require("@/assets/images/hero-book-car.jpg"), icon: "car-sport", title: "Book a Car", line: "Don't have a car? Book a car with a driver for your journey.",
     points: ["Car + Driver in one booking", "Multiple vehicle options", "For local & outstation travel"] },
 };
 
@@ -50,7 +50,7 @@ export function ServiceHero({ service }: { service: Svc }) {
     <Animated.View key={service} entering={FadeInDown.duration(450)} testID={`hire-hero-${service}`}
       style={{ height: 270, borderRadius: 28, overflow: "hidden", shadowColor: "#0E2A4F", shadowOpacity: 0.25, shadowRadius: 20, shadowOffset: { width: 0, height: 10 }, elevation: 8 }}>
       <Image source={s.img} style={{ position: "absolute", width: "100%", height: "100%" }} contentFit="cover" transition={250} />
-      <LinearGradient colors={navyFade} locations={[0.15, 0.55, 1]} style={{ position: "absolute", width: "100%", height: "100%" }} />
+      <LinearGradient colors={navyFade} locations={[0.3, 0.62, 1]} style={{ position: "absolute", width: "100%", height: "100%" }} />
       <View style={{ flex: 1, justifyContent: "flex-end", padding: space.lg, gap: space.sm }}>
         <GoldBadge icon={s.icon} size={52} />
         <T testID="hire-hero-title" size={26} weight="800" color="#FFFFFF">{s.title}</T>

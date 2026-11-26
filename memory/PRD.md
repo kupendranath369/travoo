@@ -191,3 +191,9 @@ Pan-India intercity paid carpooling app (BlaBlaCar model) called TRAVOO, tagline
 ## Iteration 38 (Jun 2026) — Book a Car price estimates
 - GET /api/hire/book-estimate (auth): per car type (hatchback 11, sedan 13, suv 17, muv 16 ₹/km). Charged km: one-way = km; round trip = 2×km; multi-day/outstation = max(2×km, 250×days). Price = km × rate + ₹300 driver allowance per day; minimum ₹400; high = low×1.2. Admin override via settings.book_pricing.
 - BookPrices card on /hire (Book a Car): road distance from /api/route/estimate (OSRM). Tapping a row selects the car type. Tested in iteration_38: backend 17/17, frontend 100%.
+
+## Update 2026-11-26
+- Theme changed to navy / gold / cream (src/theme.ts) to match the user's UI collage.
+- Rent a Driver / Book a Car (app/hire/index.tsx) redesigned with src/components/hire/Premium.tsx: photo chooser cards, hero, navy/gold switch, section cards and gradient CTA. All features unchanged.
+- All-India data loaded: LGD (36 states, 790 districts, 7,112 taluks, 677,729 villages) via backend/scripts/run_lgd_import.py; India Post (19,586 PINs, 165,627 post offices with coordinates) via backend/scripts/import_pincodes.py + scripts/fill_pin_gaps.py. Production DB needs these scripts run once (or admin LGD import).
+- Backlog: home tiles in new style, gold-tinted active chips, Hindi/regional strings for new hero text.

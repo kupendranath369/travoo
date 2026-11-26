@@ -1,0 +1,37 @@
+{
+  "summary": "Tested the premium Rent a Driver / Book Car redesign at 390x844 and the all-India PIN/LGD data. Backend: 15/16 pytest pass. PIN lookup works for 110011, 673001, 560001, 794001, 744101 (Andaman) and 190001. 400 for bad PINs, 404 for 999999. Searching a 6-digit PIN or a prefix (6735) returns post offices with the matching PIN. Searching Kunnamangalam works. LGD has 36 states, Kerala has 14 districts, and subdistricts, villages and subdistrict search all work. The one failure: PIN 682555 (Kavaratti, Lakshadweep) has lat=null, so /geo/pincode gives an empty locations list. 36 of the 19,586 PINs have no coordinates and 11 of them also have an empty state and district. Frontend: the chooser shows both photo cards, and each has 3 check points and a CTA. Both images load (naturalWidth 1000). The CTA opens the form. The switch changes the hero, the header (Rent a Driver / Book a Car), the trip chips (hourly vs one_way) and the vehicle chips (vtype vs vcat). Deep links ?service=book and ?service=rent work. Find with empty fields shows a validation error. Pickup Kozhikode and destination PIN 673571 (Chelavur post office) give the taluk 'Kozhikode Taluk · Kozhikode, Kerala'. Book shows a 12 km estimate with 4 car prices, and tapping a price row works. Round trip shows the return section. The passengers stepper works. Find shows 'DRIVERS FOR KOZHIKODE (0)' with the empty state, and 'Search nearby' shows NEARBY-AREA DRIVERS (0). In Rent mode, Kunnamangalam is identified and the vtype chip, car text box, swap and Find all work. scrollWidth stays 390 with no horizontal overflow, and there were no page errors.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/geo/pincode/{pin} and /api/geo/search?q=<pin>", "issue": "36 imported PINs have lat/lng = null, so pin_locs() returns [] and their post offices cannot be searched or picked. Examples: 682555 Kavaratti, the Lakshadweep capital; 781020 Guwahati; 400113; 500931 and 500934 in Hyderabad. 11 of these also have an empty state and district. The import script should geocode a fallback (district centroid or Nominatim postalcode) instead of storing null."},
+      {"endpoint": "geo.pin_lookup", "issue": "Imported docs get synced_at = the import time and expire after 30 days. After that, every PIN lookup calls the live India Post API again. If India Post returns 'no offices' for a PIN, the function returns None (404) even though a valid imported doc exists. It should fall back to the stored doc when the live result is empty."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/hire", "issues": [
+        "The service name is inconsistent: the header says 'Book a Car' (SERVICE_LABEL) but the chooser card, CTA, hero title and switch tab say 'Book Car'.",
+        "Tapping a chooser card does not scroll the list back to the top, so the user lands partway down the form with the new hero half off-screen. Call FlatList scrollToOffset(0) in pick()."
+      ]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_iter39_pincodes_lgd.py", "/app/test_reports/pytest/iter39.xml"],
+  "action_items": [
+    "Backfill coordinates for the 36 PINs with lat=null (e.g. 682555 Kavaratti) and fill in their empty state and district.",
+    "In pin_lookup, fall back to the stored imported doc when India Post returns no offices after the 30-day TTL. Or make imported docs not expire.",
+    "Optional: use one label ('Book a Car' or 'Book Car') everywhere, and scroll to the top when a chooser card is picked."
+  ],
+  "critical_code_review_comments": [
+    "/app/memory/test_credentials.md does not exist. The rider test.rider@example.com / Test@12345 still works.",
+    "The location count is 165,442, while the import claimed 165,627 post offices. The gap is probably deduplication by loc_id slug, so post offices with the same name under one PIN are merged."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter39_pincodes_lgd.py"],
+  "success_rate": {"backend": "94% (15/16; the only failure is missing coordinates for Lakshadweep 682555)", "frontend": "100%"},
+  "test_credentials": "test.rider@example.com / Test@12345 (works; /app/memory/test_credentials.md is missing)",
+  "seed_data_creation": "None. No requests were sent (no drivers exist).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Login testids: auth-email-input, auth-password-input, auth-submit-button, then mode-passenger. LocationField: click the field testid, fill location-search-input, wait about 5 s, click location-option-*. Steppers use <id>-plus/-minus. Book prices use book-price-<v>-amount."
+}
