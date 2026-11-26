@@ -71,7 +71,8 @@
         {
           "color": "#1E73E8"
         }
-      ]
+      ],
+      "expo-audio"
     ],
     "experiments": {
       "typedRoutes": true

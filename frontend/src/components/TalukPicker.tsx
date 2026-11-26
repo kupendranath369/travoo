@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { api } from "@/src/api";
 import { Btn, T, radius, space } from "@/src/components/ui";
+import { useI18n } from "@/src/i18n";
 import { useTheme } from "@/src/theme";
 
 export type Taluk = { code: string; name: string; district_code: string; district_name: string; state_code: string; state_name: string; sub_label?: string };
@@ -16,6 +17,7 @@ function PickerModal({ visible, title, load, remote, allowCustom, onPick, onClos
   visible: boolean; title: string; load: (q: string) => Promise<Item[]>; remote?: boolean; allowCustom?: boolean; onPick: (i: Item | { code: null; name: string }) => void; onClose: () => void;
 }) {
   const { colors } = useTheme();
+  const { t } = useI18n();
   const insets = useSafeAreaInsets();
   const [q, setQ] = useState("");
   const [items, setItems] = useState<Item[] | null>(null);
@@ -35,7 +37,7 @@ function PickerModal({ visible, title, load, remote, allowCustom, onPick, onClos
         </View>
         <View style={{ marginHorizontal: space.lg, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, flexDirection: "row", alignItems: "center", paddingHorizontal: space.md, height: 48 }}>
           <Ionicons name="search" size={18} color={colors.muted} />
-          <TextInput testID="picker-search" value={q} onChangeText={setQ} placeholder="Search" placeholderTextColor={colors.muted} autoFocus style={{ flex: 1, marginLeft: space.sm, color: colors.onSurface, fontSize: 16 }} />
+          <TextInput testID="picker-search" value={q} onChangeText={setQ} placeholder={t("picker.search")} placeholderTextColor={colors.muted} autoFocus style={{ flex: 1, marginLeft: space.sm, color: colors.onSurface, fontSize: 16 }} />
         </View>
         <FlatList
           data={shown}
@@ -44,10 +46,10 @@ function PickerModal({ visible, title, load, remote, allowCustom, onPick, onClos
           contentContainerStyle={{ paddingHorizontal: space.lg, paddingTop: space.sm, paddingBottom: insets.bottom + space.xl }}
           ListHeaderComponent={allowCustom && q.trim().length >= 2 ? (
             <Pressable testID="picker-use-typed" onPress={() => onPick({ code: null, name: q.trim() })} style={{ paddingVertical: space.md, borderBottomWidth: 1, borderBottomColor: colors.divider }}>
-              <T weight="700" color={colors.brandPrimary}>Use “{q.trim()}”</T>
+              <T weight="700" color={colors.brandPrimary}>{t("picker.use_typed", { q: q.trim() })}</T>
             </Pressable>
           ) : undefined}
-          ListEmptyComponent={<T color={colors.muted} style={{ paddingVertical: space.lg }}>{items === null ? "Loading…" : "No matches"}</T>}
+          ListEmptyComponent={<T color={colors.muted} style={{ paddingVertical: space.lg }}>{items === null ? t("picker.loading") : t("picker.no_matches")}</T>}
           renderItem={({ item }) => (
             <Pressable testID={`picker-item-${item.code}`} onPress={() => onPick(item)} style={{ minHeight: 48, justifyContent: "center", paddingVertical: space.md, paddingHorizontal: space.xs, borderBottomWidth: 1, borderBottomColor: colors.divider }}>
               <T weight="600">{item.name}</T>
@@ -97,19 +99,19 @@ export function TalukPicker({ value, onChange, withCity = false, testPrefix = "t
           {value.village_name ? <Btn small variant="ghost" testID={`${testPrefix}-village-clear`} label="Clear village" onPress={() => onChange({ ...value, village_code: null, village_name: null })} /> : null}
         </>
       ) : null}
-      <PickerModal visible={open === "state"} title="State / Union Territory" onClose={() => setOpen(null)}
+      <PickerModal visible={open === "state"} title={t("taluk.state")} onClose={() => setOpen(null)}
         load={() => api("/lgd/states").then((r) => r.map((s: any) => ({ code: s.code, name: s.name, sub: `${s.is_ut ? "Union Territory" : "State"} · ${s.sub_label}s`, sub_label: s.sub_label })))}
         onPick={(i: any) => { setState({ code: i.code, name: i.name, sub_label: i.sub_label }); setDistrict(null); onChange({ taluk: null, ...reset }); setOpen(null); }} />
-      <PickerModal visible={open === "district"} title="District" onClose={() => setOpen(null)}
+      <PickerModal visible={open === "district"} title={t("taluk.district")} onClose={() => setOpen(null)}
         load={() => api(`/lgd/districts?state_code=${st?.code}`).then((r) => r.map((d: any) => ({ code: d.code, name: d.name })))}
         onPick={(i: any) => { setDistrict({ code: i.code, name: i.name }); onChange({ taluk: null, ...reset }); setOpen(null); }} />
       <PickerModal visible={open === "taluk"} title={subLabel} onClose={() => setOpen(null)}
         load={() => api(`/lgd/subdistricts?district_code=${ds?.code}`).then((r) => r.map((d: any) => ({ ...d, sub: d.district_name })))}
         onPick={(i: any) => { onChange({ taluk: { ...i, sub_label: st?.sub_label }, ...reset }); setOpen(null); }} />
-      <PickerModal visible={open === "city"} title="City / Town" remote allowCustom onClose={() => setOpen(null)}
+      <PickerModal visible={open === "city"} title={t("taluk.city")} remote allowCustom onClose={() => setOpen(null)}
         load={(q) => api(`/lgd/villages?subdistrict_code=${tk?.code}&q=${encodeURIComponent(q)}`).then((r) => r.map((v: any) => ({ code: v.code, name: v.name, sub: v.category })))}
         onPick={(i) => { onChange({ ...value, city: i.name, city_code: i.code }); setOpen(null); }} />
-      <PickerModal visible={open === "village"} title="Village" remote onClose={() => setOpen(null)}
+      <PickerModal visible={open === "village"} title={t("taluk.village")} remote onClose={() => setOpen(null)}
         load={(q) => api(`/lgd/villages?subdistrict_code=${tk?.code}&q=${encodeURIComponent(q)}`).then((r) => r.map((v: any) => ({ code: v.code, name: v.name })))}
         onPick={(i) => { onChange({ ...value, village_code: i.code, village_name: i.name }); setOpen(null); }} />
     </View>

@@ -92,12 +92,12 @@ export default function AuthScreen() {
             <>
               <T testID="auth-verified-phone" size={13} color={colors.success} weight="700">Verified {ticket.phone}</T>
               <Field testID="auth-name-input" label={t("auth.name")} value={f.name} onChangeText={set("name")} autoCapitalize="words" />
-              <T weight="600">I want to</T>
+              <T weight="600">{t("auth.i_want_to")}</T>
               <View style={{ flexDirection: "row", gap: space.sm }}>
                 {(["passenger", "driver"] as const).map((k) => (
                   <Pressable key={k} testID={`auth-type-${k}`} onPress={() => setAccountType(k)} style={{ flex: 1, minHeight: 56, borderRadius: radius.md, borderWidth: 1.5, borderColor: accountType === k ? colors.brandPrimary : colors.border, backgroundColor: accountType === k ? colors.brandSoft : colors.surfaceSecondary, alignItems: "center", justifyContent: "center", gap: 2, padding: space.sm }}>
                     <Ionicons name={k === "passenger" ? "person-outline" : "car-sport-outline"} size={20} color={accountType === k ? colors.brandPrimary : colors.muted} />
-                    <T size={13} weight="700" color={accountType === k ? colors.brandPrimary : colors.onSurface}>{k === "passenger" ? "Travel as passenger" : "Drive & offer rides"}</T>
+                    <T size={13} weight="700" color={accountType === k ? colors.brandPrimary : colors.onSurface}>{k === "passenger" ? t("auth.role_passenger") : t("auth.role_driver")}</T>
                   </Pressable>
                 ))}
               </View>

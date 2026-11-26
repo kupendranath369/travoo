@@ -5,6 +5,7 @@ import { Pressable, RefreshControl, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { api, pictureUrl } from "@/src/api";
+import { useBookingAlertSound } from "@/src/alerts";
 import { float, ServiceCard, Switch } from "@/src/components/localdriver/parts";
 import { useToast } from "@/src/components/toast";
 import { Avatar, Badge, ErrorBox, Header, IconName, Loading, T, radius, space } from "@/src/components/ui";
@@ -44,6 +45,7 @@ export function LocalDriverDashboard({ embedded = false }: { embedded?: boolean 
     }).catch((e) => setErr(e.message));
   }, [router, embedded]);
   useFocusEffect(useCallback(() => { load(); }, [load]));
+  useBookingAlertSound(api, d?.profile?.status === "approved");
   if (err) return <View style={{ flex: 1 }}><Header title="Local Driver" /><ErrorBox message={err} onRetry={load} /></View>;
   if (!d) return <View style={{ flex: 1 }}>{embedded ? null : <Header title="Local Driver" />}<Loading /></View>;
 

@@ -15,7 +15,7 @@ import { useTheme } from "@/src/theme";
 
 function Contact({ label, u, photo, bid, status }: { label: string; u: any; photo?: string; bid: string; status: string }) {
   const { colors } = useTheme();
-  const { t } = useI18n();
+  const { t, fmtTime } = useI18n();
   const router = useRouter();
   return (
     <Card style={{ gap: space.sm }}>
@@ -71,14 +71,15 @@ export default function HireBooking() {
             <Badge testID="hire-booking-status" label={t(`status.${h.status}`)} tone={statusTone(h.status)} />
           </View>
           <Badge icon="key" label={`${SERVICE_LABEL[h.service ?? "rent"].toUpperCase()} · ${TYPE_LABEL[h.service_type] ?? h.service_type}${h.days > 1 ? ` · ${h.days} days` : ""}`} tone="info" />
-          <T weight="700">{fmtDate(h.date, { weekday: "long", day: "numeric", month: "long" })} · {h.time} · {h.hours}h</T>
-          {h.return_date ? <T testID="hire-booking-return" size={13}>Return: {fmtDate(h.return_date, { weekday: "short", day: "numeric", month: "short" })} · {h.return_time}</T> : null}
+          <T weight="700">{fmtDate(h.date, { weekday: "long", day: "numeric", month: "long" })} · {fmtTime(h.time)} · {h.hours}h</T>
+          {h.return_date ? <T testID="hire-booking-return" size={13}>Return: {fmtDate(h.return_date, { weekday: "short", day: "numeric", month: "short" })} · {fmtTime(h.return_time)}</T> : null}
           <T size={13}>Pickup: {h.pickup}{h.pickup_taluk ? ` (${h.pickup_taluk.name})` : ""}</T>
           {h.destination ? <T size={13}>Destination: {h.destination}{h.dest_taluk ? ` (${h.dest_taluk.name} ${h.dest_taluk.sub_label ?? ""})` : ""}</T> : null}
           {h.vehicle ? <T testID="hire-booking-vehicle" size={13}>Vehicle provided: {h.vehicle.name} · {h.vehicle.reg_no} · {h.vehicle.category.toUpperCase()} · {h.vehicle.seats} seats</T>
             : h.vehicle_desc || h.vehicle_type ? <T size={13}>{t("v2.your_vehicle")}: {h.vehicle_desc || "—"}{h.vehicle_type ? ` (${h.vehicle_type})` : ""}</T> : null}
           {h.notes ? <T size={12} color={colors.muted}>Notes: {h.notes}</T> : null}
-          {h.arriving_at && h.status === "confirmed" ? <Badge testID="hire-arriving-badge" icon="navigate" label="Driver is arriving" tone="success" /> : null}
+          {h.arrived_at && h.status === "confirmed" ? <Badge testID="hire-arrived-badge" icon="location" label={t("hire.arrived_badge")} tone="success" /> : null}
+          {h.arriving_at && h.status === "confirmed" && !h.arrived_at ? <Badge testID="hire-arriving-badge" icon="navigate" label="Driver is arriving" tone="success" /> : null}
           <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
             <T weight="700">{t("v2.est_charge")}</T>
             <T size={20} weight="800" color={colors.brandPrimary}>{inr(h.service_fee)}</T>
@@ -94,7 +95,7 @@ export default function HireBooking() {
           </View>
         ) : null}
         {h.is_driver && h.status === "confirmed" && !h.arriving_at ? <Btn testID="hire-arriving-button" icon="navigate-outline" label="I am arriving" loading={busy === "arriving"} onPress={() => act("arriving")} /> : null}
-        {h.is_driver && h.status === "confirmed" && h.arriving_at && !h.arrived_at ? <Btn testID="hire-arrived-button" icon="location" label="Arrived at pickup" loading={busy === "arrived"} onPress={() => act("arrived")} /> : null}
+        {h.is_driver && h.status === "confirmed" && h.arriving_at && !h.arrived_at ? <Btn testID="hire-arrived-button" icon="location" label={t("hire.arrived_btn")} loading={busy === "arrived"} onPress={() => act("arrived")} /> : null}
         {h.is_driver && h.status === "confirmed" && h.arriving_at ? <Btn testID="hire-start-button" variant={h.arrived_at ? "primary" : "outline"} icon="play" label={t("trip.start")} loading={busy === "start"} onPress={() => act("start")} /> : null}
         {h.is_driver && h.status === "started" ? <Btn testID="hire-complete-button" variant="navy" icon="flag" label={t("trip.complete")} loading={busy === "complete"} onPress={() => act("complete")} /> : null}
         {["pending", "confirmed"].includes(h.status) ? <Btn testID="hire-cancel-button" variant="ghost" label={t("booking.cancel")} onPress={() => confirmAction("Cancel this booking?", "The other person will be notified.", () => act("cancel", undefined, { reason: "Cancelled" }))} /> : null}

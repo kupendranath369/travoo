@@ -86,6 +86,7 @@ type Ctx = {
   setLang: (code: string) => Promise<void>;
   t: (key: string, params?: Record<string, string | number>) => string;
   fmtDate: (iso: string, opts?: Intl.DateTimeFormatOptions) => string;
+  fmtTime: (hhmm: string) => string;
 };
 
 const I18nContext = createContext<Ctx | null>(null);
@@ -135,6 +136,17 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
     [lang],
   );
 
+  const fmtTime = useCallback(
+    (hhmm: string) => {
+      const [h, m] = hhmm.split(":").map(Number);
+      if (Number.isNaN(h) || Number.isNaN(m)) return hhmm;
+      const period = h >= 12 ? "PM" : "AM";
+      const hour = h % 12 || 12;
+      return `${hour}:${String(m).padStart(2, "0")} ${period}`;
+    },
+    [],
+  );
+
   const value = useMemo(
     () => ({
       lang,
@@ -145,8 +157,9 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
       setLang,
       t,
       fmtDate,
+      fmtTime,
     }),
-    [lang, ready, chosen, setLang, t, fmtDate],
+    [lang, ready, chosen, setLang, t, fmtDate, fmtTime],
   );
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
 }

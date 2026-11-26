@@ -2651,7 +2651,7 @@ async def log_contact(viewer: str, owner: str, bid: str):
 
 SYS_EVENTS = {"booking_confirmed", "booking_rejected", "booking_cancelled", "trip_cancelled", "trip_started", "trip_completed",
               "booking_request", "new_booking", "hire_request", "hire_confirmed", "hire_rejected", "hire_cancelled", "hire_completed", "trip_updated",
-              "hire_arriving"}
+              "hire_arriving", "hire_arrived"}
 
 
 async def sys_message(bid: str, ntype: str, params: dict):
@@ -3090,20 +3090,14 @@ async def hire_action(bid: str, action: Literal["accept", "reject", "start", "co
     if not h or user["user_id"] not in (h["passenger_id"], h["driver_id"]):
         raise HTTPException(404, "Booking not found")
     is_driver = user["user_id"] == h["driver_id"]
-    if action == "arriving":  # status stays confirmed; customer is told the driver is on the way
+    if action in ("arriving", "arrived"):  # status stays confirmed; customer is told the driver is on the way / has arrived
         if not is_driver:
             raise HTTPException(403, "Only the driver can do this")
-        if not (await db.hires.update_one({"booking_id": bid, "status": "confirmed"}, {"$set": {"arriving_at": now()}})).modified_count:
-            raise HTTPException(400, "Cannot mark arriving for this booking now")
-        await notify(h["passenger_id"], "hire_arriving", {"pickup": h["pickup"], "route": h["route"]}, bid)
-        return {"ok": True}
-    if action == "arrived":
-        if not is_driver:
-            raise HTTPException(403, "Only the driver can do this")
-        if not (await db.hires.update_one({"booking_id": bid, "status": "confirmed", "arriving_at": {"$ne": None}}, {"$set": {"arrived_at": now()}})).modified_count:
-            raise HTTPException(400, "Tap 'I am arriving' first")
-        await notify(h["passenger_id"], "hire_arriving", {"pickup": h["pickup"], "route": h["route"]}, bid)
-        await sys_message(bid, "hire_arrived", {"pickup": h["pickup"]})
+        field = "arriving_at" if action == "arriving" else "arrived_at"
+        if not (await db.hires.update_one({"booking_id": bid, "status": "confirmed"}, {"$set": {field: now()}})).modified_count:
+            raise HTTPException(400, "Cannot mark this for the booking now")
+        await notify(h["passenger_id"], "hire_arriving" if action == "arriving" else "hire_arrived",
+                     {"pickup": h["pickup"], "route": h["route"], "driver_name": (await public_user(user["user_id"])).get("name", "")}, bid)
         return {"ok": True}
     rules = {"accept": (["pending"], "confirmed", True), "reject": (["pending"], "rejected", True), "start": (["confirmed"], "started", True),
              "complete": (["started"], "completed", True), "cancel": (["pending", "confirmed"], "cancelled", None)}
