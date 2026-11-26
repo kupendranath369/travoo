@@ -120,7 +120,7 @@ export default function TabsLayout() {
         tabBarActiveTintColor: colors.brandPrimary,
         tabBarInactiveTintColor: colors.muted,
         tabBarLabelStyle: { fontFamily: "PJS-SemiBold", fontSize: 11 },
-        tabBarStyle: { backgroundColor: colors.surfaceSecondary, borderTopColor: colors.border, ...(Platform.OS === "web" ? { height: 64 } : {}) },
+          tabBarStyle: { backgroundColor: colors.surface, borderTopColor: colors.border, ...(Platform.OS === "web" ? { height: 68 } : {}) },
         tabBarItemStyle: { alignSelf: "center" },
       }}
     >

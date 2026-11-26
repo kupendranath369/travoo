@@ -31,7 +31,7 @@
 // Feel free to add as many new colors as you need to support the design guidelines.
 
 import { useMemo } from "react";
-import { Appearance, StyleSheet, useColorScheme } from "react-native";
+import { Appearance, StyleSheet, useColorScheme, type ImageStyle, type TextStyle, type ViewStyle } from "react-native";
 
 export type ColorScheme = "light" | "dark";
 
@@ -40,53 +40,53 @@ const light = {
   // Surfaces: backgrounds, from the screen down to small fills.
   // Each `on` key is the text and icon color for that background.
   // ---------------------------------------------------------------------------
-  surface: "#F4F8F5", // primary canvas, most of every screen
-  onSurface: "#14233A", // text and icons on the canvas
+  surface: "#FBF7EF", // warm cream canvas
+  onSurface: "#17263D", // deep navy text and icons
   surfaceSecondary: "#FFFFFF", // cards, sheets, list rows
-  onSurfaceSecondary: "#172B4D", // text and icons on cards, sheets, rows
-  surfaceTertiary: "#EEF3F0", // input backgrounds, chips, deepest nesting
-  onSurfaceTertiary: "#172B4D", // text on inputs and chips; also muted text
-  surfaceInverse: "#14233A", // tooltips, snackbars, anything popping against the theme
+  onSurfaceSecondary: "#17263D", // text and icons on cards, sheets, rows
+  surfaceTertiary: "#F5EFE3", // input backgrounds, chips, deepest nesting
+  onSurfaceTertiary: "#17263D", // text on inputs and chips; also muted text
+  surfaceInverse: "#17263D", // tooltips, snackbars, anything popping against the theme
   onSurfaceInverse: "#FFFFFF", // text and icons on the inverse surface
   muted: "#6B778C", // subdued text on surface: captions, timestamps, placeholders
 
   // ---------------------------------------------------------------------------
   // Brand: the identity color and the fills built from it.
-  // Neutral by default; replace with the design guidelines values.
+  // Navy and warm gold identity from the provided Travoo reference.
   // ---------------------------------------------------------------------------
-  brand: "#1565D8", // base hue, anchor only; Primary, Secondary, Tertiary are weights of it
+  brand: "#17263D", // deep navy brand anchor
   onBrand: "#FFFFFF", // text and icons placed directly on brand
-  brandPrimary: "#1E73E8", // primary CTA, active tab indicator, selected states
-  onBrandPrimary: "#FFFFFF", // text and icons on brandPrimary
-  brandSecondary: "#1E73E8", // secondary CTA, less prominent accents
+  brandPrimary: "#C99422", // warm gold primary CTA and selected states
+  onBrandPrimary: "#17263D", // navy text and icons on gold
+  brandSecondary: "#A87916", // deeper gold for secondary accents
   onBrandSecondary: "#FFFFFF", // text and icons on brandSecondary
-  brandTertiary: "#FF9500", // chips, tags, badges, subtle brand moments
-  onBrandTertiary: "#FFFFFF", // text and icons on brandTertiary
+  brandTertiary: "#E4B84E", // lighter gold for chips, tags, and badges
+  onBrandTertiary: "#17263D", // navy text on gold
 
   // ---------------------------------------------------------------------------
   // Status: semantic only, never decorative. Fill for badges, banners and
   // toasts; the `on` key is text on that fill. The plain key is also safe as
   // text on `surface`.
   // ---------------------------------------------------------------------------
-  success: "#1565D8",
+  success: "#28795A",
   onSuccess: "#FFFFFF",
   warning: "#F5CD47",
   onWarning: "#172B4D",
   error: "#CA3521",
   onError: "#FFFFFF",
-  info: "#1E73E8",
+  info: "#315C87",
   onInfo: "#FFFFFF",
 
   // ---------------------------------------------------------------------------
   // Lines
   // ---------------------------------------------------------------------------
-  border: "#DFE1E6", // hairline outline, 0.5pt or 1pt max: inputs, cards
-  borderStrong: "#B3BAC5", // focus rings, selected outlines, 1.5pt max
-  divider: "#DFE1E6", // subtle list separators
-  brandSoft: "#E8F1FD", // pale blue fills
-  accentSoft: "#FFF4E0", // pale orange fills
-  successSoft: "#E3EEFC",
-  scrim: "rgba(20,35,58,0.55)",
+  border: "#E7DFD1", // warm hairline outline
+  borderStrong: "#B9A98C", // focus rings and selected outlines
+  divider: "#E7DFD1", // subtle list separators
+  brandSoft: "#F7EBCB", // pale gold fills
+  accentSoft: "#F3E9D9", // pale warm fills
+  successSoft: "#E5F1EA",
+  scrim: "rgba(23,38,61,0.58)",
 };
 
 export type ThemeColors = typeof light;
@@ -118,13 +118,11 @@ export function useTheme(): { scheme: ColorScheme; colors: ThemeColors } {
 
 // Themed StyleSheet: returns a hook that builds the sheet from the active
 // scheme's colors and memoizes it until the scheme changes.
-export function makeStyles<T extends StyleSheet.NamedStyles<T> | StyleSheet.NamedStyles<any>>(
-  factory: (colors: ThemeColors) => T & StyleSheet.NamedStyles<any>,
-): () => T {
+type NamedStyles = Record<string, ViewStyle | TextStyle | ImageStyle>;
+
+export function makeStyles<T extends NamedStyles>(factory: (colors: ThemeColors) => T): () => T {
   return function useStyles(): T {
     const { colors } = useTheme();
-    return useMemo(() => StyleSheet.create(factory(colors)), [colors]);
+    return useMemo(() => StyleSheet.create(factory(colors) as any) as T, [colors]);
   };
 }
-
-

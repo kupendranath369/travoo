@@ -48,6 +48,8 @@ export type Loc = {
   aliases?: string[];
   source?: string;
   sub_district?: string;
+  locality?: string;
+  city?: string;
   address?: string;
   precision?: string;
 };

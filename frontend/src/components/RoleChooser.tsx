@@ -14,7 +14,7 @@ function RoleCard({ img, title, points, bg, accent, onPress, testID, busy, delay
   return (
     <Animated.View entering={FadeInDown.delay(delay).duration(450)}>
       <Pressable testID={testID} disabled={busy} onPress={onPress} style={({ pressed }) => [float, { flexDirection: "row", alignItems: "center", overflow: "hidden", borderRadius: radius.lg,
-        backgroundColor: bg, minHeight: 150, opacity: busy ? 0.6 : 1, transform: [{ scale: pressed ? 0.97 : 1 }] }]}>
+        backgroundColor: bg, minHeight: 150, borderWidth: 1, borderColor: accent, opacity: busy ? 0.6 : 1, transform: [{ scale: pressed ? 0.985 : 1 }] }]}>
         <FloatingImage uri={img} delay={delay} style={{ width: "40%", height: 150 }} />
         <View style={{ flex: 1, padding: space.md, gap: 4 }}>
           <T size={22} weight="800" color={accent}>{title}</T>
@@ -41,8 +41,8 @@ export function RoleChooser({ visible }: { visible: boolean }) {
   return (
     <Modal visible={visible} transparent animationType="fade" statusBarTranslucent onRequestClose={() => {}}>
       <View style={{ flex: 1, backgroundColor: colors.scrim, justifyContent: "center", padding: space.lg }}>
-        <Animated.View entering={ZoomIn.duration(350)} testID="role-chooser" style={{ backgroundColor: colors.surface, borderRadius: 24, maxHeight: "92%" }}>
-          <ScrollView contentContainerStyle={{ padding: space.lg, gap: space.md }}>
+        <Animated.View entering={ZoomIn.duration(350)} testID="role-chooser" style={{ backgroundColor: colors.surface, borderRadius: radius.lg, maxHeight: "92%", borderWidth: 1, borderColor: colors.border }}>
+          <ScrollView contentContainerStyle={{ padding: space.xl, gap: space.md }}>
             <T testID="mode-title" size={22} weight="800" center>How would you like to use Travoo?</T>
             <T size={13} color={colors.muted} center>Choose your role. You can change it anytime in Profile.</T>
             <RoleCard testID="mode-passenger" img={IMG.passenger} title="I am a Passenger" points={["Find a Ride", "Rent a Driver", "Book a Driver"]} bg={colors.brandSoft} accent={colors.brandPrimary} busy={busy} delay={100} onPress={() => pick("passenger")} />

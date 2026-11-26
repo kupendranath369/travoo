@@ -29,7 +29,7 @@ export function YesNoSwipe({ value, onChange, testID }: { value: boolean; onChan
   const bg = x.interpolate({ inputRange: [0, 1], outputRange: [colors.border, colors.brandPrimary] });
   return (
     <Animated.View {...pan.panHandlers} testID={testID} role="switch" aria-checked={value}
-      style={{ userSelect: "none", width: W, height: H, borderRadius: radius.pill, backgroundColor: bg, justifyContent: "center" }}>
+      style={{ width: W, height: H, borderRadius: radius.pill, backgroundColor: bg, justifyContent: "center" }}>
       <Animated.View style={{ position: "absolute", left, width: KNOB, height: H - 4, borderRadius: radius.pill, backgroundColor: "#fff",
         shadowColor: "#000", shadowOpacity: 0.15, shadowRadius: 4, shadowOffset: { width: 0, height: 1 }, elevation: 2 }} />
       <View style={{ flexDirection: "row" }}>

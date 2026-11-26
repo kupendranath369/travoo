@@ -218,7 +218,6 @@ export function AvailabilityPicker({ availability = [], onChange, onSave, saving
               value={newDate}
               onChange={setNewDate}
               allowClear={false}
-              minDate={new Date()} // Prevent past dates
             />
 
             <ClockTimePicker testID="avail-from" label="Available From" value={newFrom} onChange={setNewFrom}

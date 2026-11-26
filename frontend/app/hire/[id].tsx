@@ -40,7 +40,7 @@ export default function HireBooking() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
-  const { t, fmtDate } = useI18n();
+  const { t, fmtDate, fmtTime } = useI18n();
   const toast = useToast();
   const [h, setH] = useState<any>(null);
   const [err, setErr] = useState("");

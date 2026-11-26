@@ -24,7 +24,7 @@ import { makeStyles, useTheme } from "@/src/theme";
 
 export type IconName = React.ComponentProps<typeof Ionicons>["name"];
 export const space = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32, xxxl: 48 };
-export const radius = { sm: 6, md: 12, lg: 20, pill: 999 };
+export const radius = { sm: 10, md: 16, lg: 24, pill: 999 };
 
 const FONT: Record<string, string> = { "400": "PJS-Regular", "500": "PJS-Medium", "600": "PJS-SemiBold", "700": "PJS-Bold", "800": "PJS-ExtraBold" };
 
@@ -79,7 +79,14 @@ export function Btn({ label, onPress, variant = "primary", icon, loading, disabl
     ghost: "transparent",
     danger: colors.error,
   }[variant];
-  const fg = variant === "outline" || variant === "ghost" ? colors.brandPrimary : colors.onBrandPrimary;
+  const fg =
+    variant === "outline" || variant === "ghost"
+      ? colors.brandSecondary
+      : variant === "navy"
+        ? colors.onBrand
+        : variant === "accent"
+          ? colors.onBrandTertiary
+          : colors.onBrandPrimary;
   return (
     <AnimatedPressable
       testID={testID}
@@ -93,7 +100,7 @@ export function Btn({ label, onPress, variant = "primary", icon, loading, disabl
       style={[
         {
           backgroundColor: bg,
-          minHeight: small ? 40 : 52,
+          minHeight: small ? 42 : 54,
           paddingHorizontal: small ? space.md : space.lg,
           borderRadius: radius.pill,
           flexDirection: "row",
@@ -338,14 +345,14 @@ const useStyles = makeStyles((c) => ({
     borderWidth: 1,
     borderColor: c.border,
     shadowColor: c.brand,
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 1,
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 7 },
+    elevation: 3,
   },
   input: {
-    minHeight: 50,
-    borderRadius: radius.md,
+    minHeight: 52,
+    borderRadius: radius.pill,
     borderWidth: 1,
     borderColor: c.border,
     backgroundColor: c.surfaceSecondary,
