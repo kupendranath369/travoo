@@ -187,3 +187,7 @@ Pan-India intercity paid carpooling app (BlaBlaCar model) called TRAVOO, tagline
 - "Book a Driver" is renamed "Book Car" (car with driver) everywhere in the UI. The service key stays `book`.
 - The hire screen has a pickup ⇄ destination swap (hire-swap-button). The home search uses the pickup pin and destination arrow icons. Tested in iteration_36: frontend 100%.
 - Iteration 37: the tile artwork now has the text inside the image ("Rent a Driver / Driver for your car", "Book a Car / Car with driver"), transparent corners, and no caption below. The UI label is now "Book a Car". Tested in iteration_37: frontend 100%. Edit script: /tmp/edit.py (temporary)
+
+## Iteration 38 (Jun 2026) — Book a Car price estimates
+- GET /api/hire/book-estimate (auth): per car type (hatchback 11, sedan 13, suv 17, muv 16 ₹/km). Charged km: one-way = km; round trip = 2×km; multi-day/outstation = max(2×km, 250×days). Price = km × rate + ₹300 driver allowance per day; minimum ₹400; high = low×1.2. Admin override via settings.book_pricing.
+- BookPrices card on /hire (Book a Car): road distance from /api/route/estimate (OSRM). Tapping a row selects the car type. Tested in iteration_38: backend 17/17, frontend 100%.

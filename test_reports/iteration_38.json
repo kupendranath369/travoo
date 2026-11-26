@@ -1,0 +1,18 @@
+{
+  "summary": "Tested Book a Car per-vehicle price estimate. Backend GET /api/hire/book-estimate: 17/17 pytest pass (401 without auth, formula for all 4 service types incl. min-km/day floor and days forced to 1 for one_way, rates, high=low*1.2, validation 422 for km<=0, >5000, non-numeric, missing km, bad service_type, days 0/31). Frontend at 390px: hint shown before places; after Hyderabad -> Vijayawada the card shows 273 km and 4 rows with amounts that match the formula (hatchback Rs3,300-3,960, sedan 3,850-4,620, suv 4,940-5,930, muv 4,670-5,600). Tapping a row selects the matching hire-vcat chip and highlights the row; tapping a chip highlights the row too. Round trip (546 km charged; return date +2 days -> 3 days), multi_day (2 days -> 546 km; 4 days -> 1000 km floor), outstation all update the prices, and one-way is cheapest. Swap keeps the card (275 km on the reverse route from OSRM). The Rent a Driver tab shows no card or hint. scrollWidth is 390, so no overflow, and there were no console errors.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": ["/app/backend/tests/test_iter38_book_estimate.py", "/app/test_reports/pytest/iter38.xml"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "BookPrices calls /route/estimate (OSRM) again every time trip type or days change, even though only the km input stays the same. Consider caching distance_km by pickup/dest loc_id and only re-calling /hire/book-estimate.",
+    "Each pytest-xdist worker logs in separately, and with the 10 logins/email/15 min limit, test suites can lock out passenger@travoo.in (this run hit 429 for the UI login). The iter38 test now caches its token in /tmp/iter38_tok."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter38_book_estimate.py"],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "passenger@travoo.in / Passenger@2026 (temporarily rate limited by login 429 during this run; the UI test used a temporary TEST_BookPrice user, now deleted)",
+  "seed_data_creation": "Created and then deleted TEST_BookPrice user (test_bookprice_a0fb78@example.com, user_6db2ba21b1f6) by user_id",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Login testids: auth-email-input, auth-password-input, auth-submit-button. Calendar day testids: <field>-day-YYYY-MM-DD. Days stepper: hire-days-plus/minus. Avoid many passenger logins (10/15 min limit)."
+}
