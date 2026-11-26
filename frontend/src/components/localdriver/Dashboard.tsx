@@ -111,7 +111,7 @@ export function LocalDriverDashboard({ embedded = false }: { embedded?: boolean 
           <View testID="dash-services-panel" style={{ gap: space.md }}>
             <View style={{ flexDirection: "row", gap: space.md }}>
               <ServiceCard testID="dash-service-rent" icon="key-outline" title="Driver Only" desc="Customer's vehicle (Rent a Driver)" active={p.services.includes("rent")} onPress={() => svc("rent")} />
-              <ServiceCard testID="dash-service-book" icon="car-sport-outline" title="Car with Driver" desc="Your vehicle (Book Car)" active={p.services.includes("book") && d.book_ready} disabled={!d.book_ready}
+              <ServiceCard testID="dash-service-book" icon="car-sport-outline" title="Car with Driver" desc="Your vehicle (Book a Car)" active={p.services.includes("book") && d.book_ready} disabled={!d.book_ready}
                 note={d.book_ready ? undefined : "Needs an approved vehicle"} onPress={() => svc("book")} />
             </View>
             <View style={[float, { flexDirection: "row", alignItems: "center", gap: space.md, padding: space.md, borderRadius: radius.lg, backgroundColor: colors.surfaceSecondary }]}>

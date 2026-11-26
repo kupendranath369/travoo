@@ -397,7 +397,7 @@ export default function AdminScreen() {
               {["under_review", "approved", "resubmit", "rejected", "suspended", "all"].map((s) => <Chip key={s} testID={`admin-pro-filter-${s}`} label={s === "suspended" ? "Suspended" : s === "all" ? "All" : t(`verify.status.${s}`)} active={dStatus === s} onPress={() => setDStatus(s)} />)}
             </ScrollView>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: space.sm }}>
-              {[["all", "All services"], ["rent", "Rent a Driver"], ["book", "Book Car"]].map(([k, l]) => <Chip key={k} testID={`admin-svc-filter-${k}`} label={l} active={svc === k} onPress={() => setSvc(k)} />)}
+              {[["all", "All services"], ["rent", "Rent a Driver"], ["book", "Book a Car"]].map(([k, l]) => <Chip key={k} testID={`admin-svc-filter-${k}`} label={l} active={svc === k} onPress={() => setSvc(k)} />)}
             </ScrollView>
             {data.length === 0 ? <Empty title={t("admin.empty")} /> : null}
             {data.map((p: any) => <AdminProCard key={p.user_id} p={p} act={act} onPreview={setPreview} />)}
@@ -461,14 +461,14 @@ export default function AdminScreen() {
         return (
           <>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: space.sm }}>
-              {[["all", "All services"], ["rent", "Rent a Driver"], ["book", "Book Car"]].map(([k, l]) => <Chip key={k} testID={`admin-svc-filter-${k}`} label={l} active={svc === k} onPress={() => setSvc(k)} />)}
+              {[["all", "All services"], ["rent", "Rent a Driver"], ["book", "Book a Car"]].map(([k, l]) => <Chip key={k} testID={`admin-svc-filter-${k}`} label={l} active={svc === k} onPress={() => setSvc(k)} />)}
             </ScrollView>
             <T weight="800">Bookings ({data.bookings?.length ?? 0})</T>
             {(data.bookings ?? []).length === 0 ? <Empty title={t("admin.empty")} /> : null}
             {(data.bookings ?? []).map((b: any) => (
               <Card key={b.booking_id} testID={`admin-hire-${b.booking_id}`} onPress={() => router.push(`/hire/${b.booking_id}`)} style={{ gap: 4, padding: space.md }}>
                 <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-                  <T weight="700">{b.booking_id} · {b.service === "book" ? "Book Car" : "Rent a Driver"}</T>
+                  <T weight="700">{b.booking_id} · {b.service === "book" ? "Book a Car" : "Rent a Driver"}</T>
                   <Badge label={t(`status.${b.status}`)} tone={statusTone(b.status)} />
                 </View>
                 <T size={12}>{b.route} · {b.date} {b.time} · {inr(b.service_fee)}</T>
@@ -479,7 +479,7 @@ export default function AdminScreen() {
             {(data.requests ?? []).map((r: any) => (
               <Card key={r.request_id} testID={`admin-hire-req-${r.request_id}`} style={{ gap: 4, padding: space.md }}>
                 <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-                  <T weight="700">{r.request_id} · {r.service === "book" ? "Book Car" : "Rent a Driver"}</T>
+                  <T weight="700">{r.request_id} · {r.service === "book" ? "Book a Car" : "Rent a Driver"}</T>
                   <Badge label={r.status} tone={r.status === "fulfilled" ? "success" : r.status === "open" ? "warning" : "muted"} />
                 </View>
                 <T size={12}>{r.pickup} → {r.destination || "—"} · {r.date} {r.time}</T>

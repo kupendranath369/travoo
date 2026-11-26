@@ -45,7 +45,7 @@ export function RoleChooser({ visible }: { visible: boolean }) {
           <ScrollView contentContainerStyle={{ padding: space.lg, gap: space.md }}>
             <T testID="mode-title" size={22} weight="800" center>How would you like to use Travoo?</T>
             <T size={13} color={colors.muted} center>Choose your role. You can change it anytime in Profile.</T>
-            <RoleCard testID="mode-passenger" img={IMG.passenger} title="I am a Passenger" points={["Find a Ride", "Rent a Driver", "Book Car"]} bg={colors.brandSoft} accent={colors.brandPrimary} busy={busy} delay={100} onPress={() => pick("passenger")} />
+            <RoleCard testID="mode-passenger" img={IMG.passenger} title="I am a Passenger" points={["Find a Ride", "Rent a Driver", "Book a Car"]} bg={colors.brandSoft} accent={colors.brandPrimary} busy={busy} delay={100} onPress={() => pick("passenger")} />
             <RoleCard testID="mode-driver" img={IMG.driver} title="I am a Driver" points={["Offer a Ride", "Driver Only", "Car with Driver"]} bg={colors.accentSoft} accent={colors.brandTertiary} busy={busy} delay={250} onPress={() => pick("driver")} />
             {err ? <T testID="mode-error" color={colors.error} center>{err}</T> : null}
           </ScrollView>

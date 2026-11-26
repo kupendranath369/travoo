@@ -110,11 +110,11 @@ export function StepServices({ me, d, set, items, reload }: { me: any; d: Draft;
     <View style={{ gap: space.lg }}>
       <View style={{ flexDirection: "row", gap: space.md }}>
         <ServiceCard testID="pro-service-rent" icon="key-outline" title="Rent a Driver" desc="Drive the customer's own vehicle. No vehicle needed." active={d.services.includes("rent")} onPress={() => toggle("rent")} />
-        <ServiceCard testID="pro-service-book" icon="car-sport-outline" title="Book Car" desc="You provide the vehicle and drive." active={book} onPress={() => toggle("book")} note="Approved vehicle required" />
+        <ServiceCard testID="pro-service-book" icon="car-sport-outline" title="Book a Car" desc="You provide the vehicle and drive." active={book} onPress={() => toggle("book")} note="Approved vehicle required" />
       </View>
       {book ? (
         <View testID="pro-book-vehicles" style={{ gap: space.sm }}>
-          <T weight="800">Vehicles for Book Car</T>
+          <T weight="800">Vehicles for Book a Car</T>
           <Flag k="vehicles" items={items} />
           {me.vehicles.length ? <T size={12} color={colors.muted}>Select from your vehicle list (shared with Carpool).</T> : null}
           {me.vehicles.map((v: any) => (

@@ -8,7 +8,7 @@ import { Chip, T, radius, space } from "@/src/components/ui";
 import { inr, useI18n } from "@/src/i18n";
 import { useTheme } from "@/src/theme";
 
-const SVC = [["all", "All"], ["carpool", "Carpooling"], ["rent", "Rent a Driver"], ["book", "Book Car"]] as const;
+const SVC = [["all", "All"], ["carpool", "Carpooling"], ["rent", "Rent a Driver"], ["book", "Book a Car"]] as const;
 const PER = [["today", "Today"], ["week", "This week"], ["month", "This month"]] as const;
 
 /** Unified earnings from completed bookings only (carpool + local driver), no simulated numbers. */
@@ -45,7 +45,7 @@ export function UnifiedEarnings() {
         <View key={i.id} testID={`earn-item-${i.id}`} style={{ flexDirection: "row", alignItems: "center", gap: space.sm, paddingVertical: space.xs }}>
           <View style={{ flex: 1 }}>
             <T size={13} weight="700" numberOfLines={1}>{i.route}</T>
-            <T size={11} color={colors.muted}>{i.service === "carpool" ? "Carpooling" : i.service === "book" ? "Book Car" : "Rent a Driver"} · {fmtDate(i.at.slice(0, 10))}</T>
+            <T size={11} color={colors.muted}>{i.service === "carpool" ? "Carpooling" : i.service === "book" ? "Book a Car" : "Rent a Driver"} · {fmtDate(i.at.slice(0, 10))}</T>
           </View>
           <T weight="800">{inr(i.net)}</T>
         </View>

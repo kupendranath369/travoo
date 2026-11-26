@@ -47,7 +47,7 @@ export default function ChooseMode() {
     <ScrollView style={{ flex: 1, backgroundColor: colors.surface }} contentContainerStyle={{ padding: space.lg, paddingTop: insets.top + space.xl, gap: space.lg, paddingBottom: insets.bottom + space.xl }}>
       <View style={{ alignItems: "center" }}><Wordmark size={34} /></View>
       <T testID="mode-title" size={26} weight="800" center>How would you like to use Travoo?</T>
-      <ModeCard testID="mode-passenger" img={IMG.passenger} kicker="I'm a" title="Passenger" points={["Find a Ride", "Rent a Driver", "Book Car"]} bg={colors.brandSoft} accent={colors.brandPrimary} busy={busy} onPress={() => pick("passenger")} />
+      <ModeCard testID="mode-passenger" img={IMG.passenger} kicker="I'm a" title="Passenger" points={["Find a Ride", "Rent a Driver", "Book a Car"]} bg={colors.brandSoft} accent={colors.brandPrimary} busy={busy} onPress={() => pick("passenger")} />
       <ModeCard testID="mode-driver" img={IMG.driver} kicker="I'm a" title="Driver" points={["Offer a Ride", "Driver Only", "Car with Driver", "Earn with Driving"]} bg={colors.accentSoft} accent={colors.brandTertiary} busy={busy} onPress={() => pick("driver")} />
       {err ? <T testID="mode-error" color={colors.error}>{err}</T> : null}
       <View style={{ flexDirection: "row", alignItems: "center", gap: space.md, padding: space.md, borderRadius: radius.lg, backgroundColor: colors.surfaceSecondary }}>
