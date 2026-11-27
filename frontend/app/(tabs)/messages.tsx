@@ -8,11 +8,13 @@ import { Avatar, Badge, Card, Empty, Header, Loading, T, space } from "@/src/com
 import { useI18n } from "@/src/i18n";
 import { usesNativeTabs } from "@/src/navigation";
 import { useTheme } from "@/src/theme";
+import { useNotifText } from "@/src/components/notifText";
 
 export default function MessagesScreen() {
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
   const { t, fmtDate } = useI18n();
+  const nt = useNotifText();
   const router = useRouter();
   const [items, setItems] = useState<any[] | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -39,7 +41,7 @@ export default function MessagesScreen() {
                   {item.last ? <T size={11} color={colors.muted}>{fmtDate(item.last.created_at, { day: "numeric", month: "short" })}</T> : null}
                 </View>
                 <T size={12} color={colors.muted} numberOfLines={1}>{item.kind === "hire" ? `${t("v2.hire")} · ` : ""}{item.booking_id} · {item.route}</T>
-                <T size={13} numberOfLines={1} weight={item.unread ? "700" : "400"}>{item.last ? (item.last.sender_id === "system" ? t(`notif.${item.last.sys_type}`, item.last.params) : item.last.text) : t("chat.empty")}</T>
+                <T size={13} numberOfLines={1} weight={item.unread ? "700" : "400"}>{item.last ? (item.last.sender_id === "system" ? nt(item.last.sys_type, item.last.params) : item.last.text) : t("chat.empty")}</T>
               </View>
               {item.unread ? <Badge testID={`unread-${item.booking_id}`} label={String(item.unread)} tone="accent" /> : null}
             </Card>

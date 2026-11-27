@@ -202,10 +202,10 @@ export default function TripScreen() {
             {trip.status === "scheduled" && edit ? (
               <Card style={{ gap: space.md }}>
                 <View testID="trip-edit-reschedule" style={{ gap: space.sm, padding: space.md, borderRadius: radius.md, backgroundColor: colors.surfaceTertiary }}>
-                  <T weight="800">Reschedule</T>
+                  <T weight="800">{t("trip.reschedule")}</T>
                   <DateField testID="trip-edit-date" label={t("offer.date")} value={edit.date} onChange={(x) => setEdit({ ...edit, date: x })} />
                   <TimeChips testID="trip-edit-time" value={edit.time} onChange={(x) => setEdit({ ...edit, time: x })} />
-                  {booked ? <T size={12} color={colors.muted}>Passengers who booked will be notified of the new date and time.</T> : null}
+                  {booked ? <T size={12} color={colors.muted}>{t("trip.reschedule_note")}</T> : null}
                 </View>
                 <Field testID="trip-edit-pickup" label={t("offer.pickup")} value={edit.pickup_point} onChangeText={(x) => setEdit({ ...edit, pickup_point: x })} />
                 <Field testID="trip-edit-drop" label={t("offer.drop")} value={edit.drop_point} onChangeText={(x) => setEdit({ ...edit, drop_point: x })} />
@@ -214,6 +214,7 @@ export default function TripScreen() {
                   <Stepper testID="trip-edit-seats" value={edit.seats} min={Math.max(1, booked)} max={["hatchback", "sedan", "other"].includes(trip.vehicle?.vtype) ? 3 : 8} onChange={(x) => setEdit({ ...edit, seats: x })} />
                 </View>
                 <Field testID="trip-edit-notes" label={t("offer.notes")} value={edit.notes} onChangeText={(x) => setEdit({ ...edit, notes: x })} multiline />
+                {actionErr ? <T testID="trip-edit-error" color={colors.error} weight="600">{actionErr}</T> : null}
                 <Btn testID="trip-edit-save" label={t("common.save")} loading={busy === "edit"} onPress={async () => { setBusy("edit"); try { setActionErr(""); await api(`/trips/${id}`, { method: "PUT", body: edit }); setEdit(null); await load(); } catch (e: any) { setActionErr(e.message); } setBusy(""); }} />
               </Card>
             ) : null}

@@ -10,12 +10,14 @@ import { useAuth } from "@/src/auth";
 import { Avatar, Empty, Header, T, space } from "@/src/components/ui";
 import { useI18n } from "@/src/i18n";
 import { useTheme } from "@/src/theme";
+import { useNotifText } from "@/src/components/notifText";
 
 export default function ChatScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
   const { t } = useI18n();
+  const nt = useNotifText();
   const { user } = useAuth();
   const [msgs, setMsgs] = useState<any[]>([]);
   const [text, setText] = useState("");
@@ -64,7 +66,7 @@ export default function ChatScreen() {
           if (item.sender_id === "system")
             return (
               <View testID={`system-message-${item.message_id}`} style={{ alignSelf: "center", backgroundColor: colors.brandSoft, borderRadius: 12, paddingHorizontal: space.md, paddingVertical: 6, maxWidth: "90%" }}>
-                <T size={12} weight="600" color={colors.brandPrimary} center>{t(`notif.${item.sys_type}`, item.params)}</T>
+                <T size={12} weight="600" color={colors.brandPrimary} center>{nt(item.sys_type, item.params)}</T>
               </View>
             );
           const mine = item.sender_id === user?.user_id;

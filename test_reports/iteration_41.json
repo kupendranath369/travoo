@@ -1,0 +1,37 @@
+{
+  "summary": "Tested trip reschedule end to end. Backend PUT /api/trips/{tid} with date/time: 13/13 pytest cases pass. Covered: trip date/time/departure_at/arrival recalculated, rescheduled_at set, all bookings (including cancelled ones) updated, trip_rescheduled notification sent only to active passengers, trip_updated sent when date/time are unchanged, time-only change works, past or <30 min departure returns 400, bad format returns 422, impossible dates (2027-02-30, 25:99) return 400, non-owner and cancelled trip return 404, existing edits (pickup/drop/seats/notes, price blocked once booked) still work. UI at 390x844, all passing: the Reschedule section is prefilled (Mon, 7 Dec 2026 / 9:00 AM); the calendar and clock picker change it to Wed 9 Dec 3:15 PM; Save updates the trip page (arrival 17:14 recalculated) and the My Rides list. test.rider sees 'Trip rescheduled to 2026-12-09 at 15:15: Bengaluru → Mysuru' in Notifications, and the new date/time in the Bookings row and on the booking detail page. Choosing a past time shows the 30-minute error.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "PUT /api/trips/{tid}", "issue": "'trip_rescheduled' is missing from SYS_EVENTS, so no system message about the reschedule is posted in the booking chat. 'trip_updated' does post one. Also, sys_message upserts on (booking_id, sys_type), so a second reschedule would not post a new chat message even if the event were added."},
+      {"endpoint": "PUT /api/trips/{tid}", "issue": "No check on paired outbound/return trips (return_of): the outbound can be moved after its return trip, or the return before its outbound. create_trip enforces this order."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Trip edit card error", "issue": "A save error (e.g. 'The new departure must be at least 30 minutes from now') appears in trip-action-error above the Expected earnings card, far above the Save button. On a 390x844 screen the user tapping Save sees nothing happen. Show the error next to Save or scroll to it.", "selector": "[data-testid='trip-action-error']", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Notifications", "issues": ["trip_rescheduled shows a raw ISO date ('2026-12-09 at 15:15'). Elsewhere the app shows 'Wed, 9 Dec · 15:15'. Format params.date with fmtDate."]},
+      {"screen": "Trip edit card / i18n", "issues": ["'Reschedule' and 'Passengers who booked will be notified of the new date and time.' are hardcoded English, not t() keys.", "notif.trip_rescheduled exists only in en.json. The other 22 locales have notif.trip_updated but not this key."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_iter41_trip_reschedule.py", "/app/backend/tests/ui_setup_iter41.py", "/app/test_reports/pytest/iter41.xml"],
+  "action_items": [
+    "Show the trip edit save error next to the Save button (or scroll to it) so the reschedule validation error is visible",
+    "Format the date in the trip_rescheduled notification text",
+    "Move the 'Reschedule' strings to i18n and add notif.trip_rescheduled to the other locales",
+    "Optional: add trip_rescheduled to SYS_EVENTS (with a unique key per reschedule); check the outbound/return order when rescheduling"
+  ],
+  "critical_code_review_comments": [
+    "update_trip: rescheduling sets the new date/time on cancelled/rejected bookings too (update_many has no status filter). Harmless, but it changes their history.",
+    "app/trip/[id].tsx is 275 lines with a long inline onPress for Save. Fine for now."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter41_trip_reschedule.py", "/app/backend/tests/ui_setup_iter41.py", "/app/memory/test_credentials.md"],
+  "success_rate": {"backend": "100%", "frontend": "100% functional (1 medium UX issue)"},
+  "seed_data_creation": "All data was created on the fly and then deleted by id (drivers, passengers, vehicles, trips, bookings, notifications, chat system messages). The test.rider account was not changed, apart from a temporary booking and notifications that were removed.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Use 'python ui_setup_iter41.py create' (in /app/backend/tests) to make an approved carpool driver (test_resdrv41_*@example.com / Passw0rd!x) with a trip and a booking by test.rider; run 'cleanup' afterwards. pytest needs '-n 0' if xdist args clash. A carpool driver's offered rides are at /my-rides (tab-my-rides is hidden in driver mode for drivers without the carpool service; tab-trips lists hire trips only). Calendar day testids: trip-edit-date-day-YYYY-MM-DD, trip-edit-date-prev/next; clock: trip-edit-time, -preset-HHMM, -minute-up, -done."
+}

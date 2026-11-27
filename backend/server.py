@@ -1439,6 +1439,13 @@ async def update_trip(tid: str, body: TripUpdate, user: dict = Depends(get_user)
             raise HTTPException(400, "Choose a valid date and time")
         if dep < now() + timedelta(minutes=30):
             raise HTTPException(400, "The new departure must be at least 30 minutes from now")
+        if trip.get("return_of"):
+            out = await db.trips.find_one({"trip_id": trip["return_of"]}, {"_id": 0, "departure_at": 1})
+            if out and dep <= out["departure_at"]:
+                raise HTTPException(400, "The return ride must leave after its outbound ride")
+        ret = await db.trips.find_one({"return_of": tid, "status": "scheduled"}, {"_id": 0, "departure_at": 1})
+        if ret and dep >= ret["departure_at"]:
+            raise HTTPException(400, "This ride must leave before its return ride")
         arr = dep + timedelta(minutes=trip.get("duration_min") or 0)
         upd.update({"date": new_date, "time": new_time, "departure_at": dep.astimezone(timezone.utc),
                     "arrival_time": arr.strftime("%H:%M"), "arrival_date": arr.strftime("%Y-%m-%d"), "rescheduled_at": now()})
@@ -2665,12 +2672,13 @@ async def log_contact(viewer: str, owner: str, bid: str):
 
 
 SYS_EVENTS = {"booking_confirmed", "booking_rejected", "booking_cancelled", "trip_cancelled", "trip_started", "trip_completed",
-              "booking_request", "new_booking", "hire_request", "hire_confirmed", "hire_rejected", "hire_cancelled", "hire_completed", "trip_updated",
+              "booking_request", "new_booking", "hire_request", "hire_confirmed", "hire_rejected", "hire_cancelled", "hire_completed", "trip_updated", "trip_rescheduled",
               "hire_arriving", "hire_arrived"}
 
 
 async def sys_message(bid: str, ntype: str, params: dict):
-    await db.messages.update_one({"booking_id": bid, "sys_type": ntype},
+    key = {"booking_id": bid, "sys_type": ntype, **({"params": params} if ntype == "trip_rescheduled" else {})}
+    await db.messages.update_one(key,
                                  {"$setOnInsert": {"message_id": nid("msg"), "booking_id": bid, "sender_id": "system", "sender_name": "Travoo",
                                                    "sys_type": ntype, "params": params, "text": "", "read_by": [], "created_at": now()}}, upsert=True)
 
