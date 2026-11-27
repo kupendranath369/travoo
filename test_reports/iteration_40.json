@@ -1,0 +1,32 @@
+{
+  "summary": "Tested the verified-driver 'Change home location' feature end to end. Backend: 7/7 pytest pass. PUT /api/pro/home for an approved driver applies right away and returns the new home with place and geo. In the DB, pro_drivers.home is updated, service_taluk_codes puts the new code first, drops the old home code and keeps the other service taluks. A home_history entry is pushed and an admin_notifications 'driver_home_changed' entry is created. Repeat changes (3 in a row) are allowed. Unknown taluk returns 400, no auth returns 401/403 and a rider with no pro profile returns 404. A pending driver with a home gets 400 with the exact message. A pending driver with no home can still set one. Frontend (390x844): driver login shows dash-taluk, dash-change-home and dash-tile-home, and both open /hire/home-location. That screen shows the current home card. Save is disabled (aria-disabled) until a taluk is chosen. Place search for Thamarassery auto-detects 'Thamarassery Taluk, Kozhikode, Kerala'. Save shows the toast 'Home location updated', goes back, and the dashboard shows 'Thamarassery, Thamarassery, Kozhikode'. Changing the taluk by hand (home-new-taluk-change, then state 32, district 561, subdistrict 5640) also saves. /hire/register for the rider still shows pro-home-place, pro-home-state, pro-home-district and pro-home-subdistrict. Picking Kunnamangalam there shows pro-home-taluk 'Kozhikode Taluk' with the pro-home-taluk-change link. There were no page errors.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "PUT /api/pro/home", "issue": "There is no check that place (loc_id/lat/lng) is inside subdistrict_code. Picking the place Thamarassery and then choosing Kozhikode taluk by hand saved home.place_name='Thamarassery' with taluk Kozhikode, so the dashboard showed 'Thamarassery, Kozhikode, Kozhikode'. The frontend HomePlacePicker keeps the place when the taluk is changed by hand (the registration flow shares the same picker)."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Driver dashboard header", "issues": ["The dash-taluk line wraps into a narrow column of 3 lines ('Thamarassery, / Thamarassery, Change / Kozhikode') because the Driver Mode pill takes the width. The 'Change' link ends up mid-text. Consider a full-width row or truncation.", "When place_name equals the taluk name, the text repeats ('Thamarassery, Thamarassery, Kozhikode'). Remove duplicates."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_iter40_pro_home_change.py", "/app/test_reports/pytest/pytest_iter40.xml"],
+  "action_items": [
+    "Optional: when the driver changes the taluk by hand in HomePlacePicker, clear the place if it doesn't match, or check it on the backend",
+    "Optional: tidy the dash-taluk layout and remove the repeated place/taluk name"
+  ],
+  "critical_code_review_comments": [
+    "HomePlacePicker.pickPlace calls onChange({place, taluk: <old taluk>}) before identify-taluk resolves. On /hire/home-location, after a second place pick, Save stays enabled with the previous place's taluk for about 1-3 s, so a quick tap saves a mismatched taluk. Set taluk to null while detecting.",
+    "home-location.tsx sends place: null when no place is picked. That is fine, but the city then falls back to the taluk name.",
+    "admin_alert runs after the update. Each change creates one notification (no limit, as the user asked), so there is no rate limiting. That is acceptable given the user's choice."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter40_pro_home_change.py"],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "seed_data_creation": "A temporary TEST_ pending user and pro_drivers doc were created and then deleted by user_id. The test driver's home was restored to Kozhikode 5640 and service_taluk_codes to ['5640']. The extra home_history and admin_notifications 'driver_home_changed' entries for test.driver (9 in total, including E1's) were left in place.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Login: language-continue-button, then auth-email-input, auth-password-input, auth-submit-button, then mode-driver or mode-passenger. The driver dashboard is at /. LocationField: click the testid, fill location-search-input, wait 5 s, click location-option-*. TalukPicker rows are <prefix>-state/-district/-subdistrict, then picker-item-<code> (Kerala 32, Kozhikode district 561, Kozhikode taluk 5640, Thamarassery 5938). The test driver is user_333525b9558c."
+}

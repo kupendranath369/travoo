@@ -72,15 +72,15 @@ export function LocalDriverDashboard({ embedded = false }: { embedded?: boolean 
           <View style={{ flex: 1, gap: 3 }}>
             <T testID="dash-name" size={20} weight="800">Hi, {p.name?.split(" ")[0]}</T>
             <Badge testID="dash-verified-badge" icon="shield-checkmark" label="Verified Driver" tone="warning" />
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-              <Ionicons name="location-outline" size={13} color={colors.muted} />
-              <T testID="dash-taluk" size={12} color={colors.muted} style={{ flexShrink: 1 }}>{p.home?.place_name ? `${p.home.place_name}, ` : ""}{p.home?.subdistrict_name}, {p.home?.district_name}</T>
-              <Pressable testID="dash-change-home" hitSlop={8} onPress={() => router.push("/hire/home-location")}><T size={12} weight="800" color={colors.brandSecondary}>Change</T></Pressable>
-            </View>
           </View>
           {embedded ? <View testID="dash-mode-pill" style={{ alignSelf: "flex-start", paddingHorizontal: space.md, paddingVertical: 6, borderRadius: radius.pill, backgroundColor: colors.brandSecondary }}><T size={12} weight="800" color="#fff">Driver Mode</T></View> : null}
           {embedded ? <NotificationBell testID="dash-notifications-button" /> : null}
         </Pressable>
+        <View testID="dash-home-row" style={[float, { flexDirection: "row", alignItems: "center", gap: space.sm, paddingHorizontal: space.md, paddingVertical: space.sm, borderRadius: radius.lg, backgroundColor: colors.surfaceSecondary }]}>
+          <Ionicons name="home-outline" size={16} color={colors.brandSecondary} />
+          <T testID="dash-taluk" size={13} numberOfLines={1} style={{ flex: 1 }}>{[...new Set([p.home?.place_name, p.home?.subdistrict_name, p.home?.district_name].filter(Boolean))].join(", ")}</T>
+          <Pressable testID="dash-change-home" hitSlop={8} onPress={() => router.push("/hire/home-location")}><T size={13} weight="800" color={colors.brandSecondary}>Change</T></Pressable>
+        </View>
 
         <View testID="dash-online-card" style={[float, { flexDirection: "row", alignItems: "center", gap: space.md, padding: space.md, borderRadius: radius.lg, backgroundColor: p.online ? colors.brandSoft : colors.surfaceSecondary }]}>
           <Ionicons name="location" size={26} color={p.online ? colors.brandPrimary : colors.muted} />

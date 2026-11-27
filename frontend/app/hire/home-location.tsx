@@ -53,7 +53,7 @@ export default function ChangeHomeLocation() {
           </View>
           <View style={{ flex: 1, gap: 2 }}>
             <T size={12} color={colors.muted}>Current home location</T>
-            <T testID="home-current-text" weight="800">{[home.place_name, home.subdistrict_name && `${home.subdistrict_name} ${home.sub_label ?? "Taluk"}`, home.district_name, home.state_name].filter(Boolean).join(", ")}</T>
+            <T testID="home-current-text" weight="800">{[...new Set([home.place_name !== home.subdistrict_name && home.place_name, home.subdistrict_name && `${home.subdistrict_name} ${home.sub_label ?? "Taluk"}`, home.district_name, home.state_name].filter(Boolean))].join(", ")}</T>
           </View>
         </Card>
         <View style={{ gap: space.sm }}>
