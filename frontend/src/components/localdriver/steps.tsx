@@ -18,22 +18,43 @@ export type Draft = { place: Loc | null; taluk: Taluk | null; languages: string[
 
 const Flag = ({ k, items }: { k: string; items: string[] }) => items.includes(k) ? <Badge testID={`pro-flag-${k}`} icon="alert-circle" label={`Fix: ${ITEM_LABEL[k]}`} tone="error" /> : null;
 
-export function StepBasic({ me, d, set, items }: { me: any; d: Draft; set: (p: Partial<Draft>) => void; items: string[] }) {
+export function HomePlacePicker({ place, taluk, onChange, flag, testPrefix = "pro-home" }: { place: Loc | null; taluk: Taluk | null; onChange: (p: { place: Loc | null; taluk: Taluk | null }) => void; flag?: React.ReactNode; testPrefix?: string }) {
   const { colors } = useTheme();
-  const router = useRouter();
   const [finding, setFinding] = useState(false);
   const [manual, setManual] = useState(false);
-  const otpOn = useOtpEnabled();
-  const p = me.personal;
   const pickPlace = async (l: Loc) => {
-    set({ place: l });
+    onChange({ place: l, taluk });
     setFinding(true);
     try {
       const r = await api(`/hire/identify-taluk?loc_id=${encodeURIComponent(l.loc_id)}&pickup=${encodeURIComponent(l.name)}`);
-      if (r.subdistrict) { set({ place: l, taluk: r.subdistrict }); setManual(false); } else { set({ place: l, taluk: null }); setManual(true); }
+      if (r.subdistrict) { onChange({ place: l, taluk: r.subdistrict }); setManual(false); } else { onChange({ place: l, taluk: null }); setManual(true); }
     } catch { setManual(true); }
     setFinding(false);
   };
+  return (
+    <View style={{ gap: space.sm }}>
+      {flag}
+      <LocationField testID={`${testPrefix}-place`} label="Village, town or city" value={place} onChange={pickPlace} />
+      {finding ? <T size={12} color={colors.muted}>Finding your taluk…</T> : null}
+      {taluk && !manual ? (
+        <View testID={`${testPrefix}-taluk`} style={{ flexDirection: "row", alignItems: "center", gap: space.sm, padding: space.md, borderRadius: radius.md, backgroundColor: colors.accentSoft }}>
+          <Ionicons name="location" size={18} color={colors.brandTertiary} />
+          <T size={13} weight="700" style={{ flex: 1 }}>{taluk.name} {taluk.sub_label ?? "Taluk"}, {taluk.district_name}, {taluk.state_name}</T>
+          <Pressable testID={`${testPrefix}-taluk-change`} onPress={() => setManual(true)}><T size={12} weight="700" color={colors.brandPrimary}>Change</T></Pressable>
+        </View>
+      ) : null}
+      {manual || (!taluk && !place) ? (
+        <TalukPicker testPrefix={testPrefix} value={{ taluk, city: "", city_code: null, village_code: null, village_name: null }} onChange={(v) => onChange({ place, taluk: v.taluk })} />
+      ) : null}
+    </View>
+  );
+}
+
+export function StepBasic({ me, d, set, items }: { me: any; d: Draft; set: (p: Partial<Draft>) => void; items: string[] }) {
+  const { colors } = useTheme();
+  const router = useRouter();
+  const otpOn = useOtpEnabled();
+  const p = me.personal;
   return (
     <View style={{ gap: space.lg }}>
       <Card testID="pro-personal-card" style={[float, { flexDirection: "row", gap: space.md, alignItems: "center", borderWidth: 0 }]}>
@@ -48,19 +69,7 @@ export function StepBasic({ me, d, set, items }: { me: any; d: Draft; set: (p: P
       {otpOn && !p.phone_ok ? <T testID="pro-phone-warning" size={13} color={colors.error}>Add your mobile number in Profile before submitting.</T> : null}
       <View style={{ gap: space.sm }}>
         <T weight="800">Home location</T>
-        <Flag k="home" items={items} />
-        <LocationField testID="pro-home-place" label="Village, town or city" value={d.place} onChange={pickPlace} />
-        {finding ? <T size={12} color={colors.muted}>Finding your taluk…</T> : null}
-        {d.taluk && !manual ? (
-          <View testID="pro-home-taluk" style={{ flexDirection: "row", alignItems: "center", gap: space.sm, padding: space.md, borderRadius: radius.md, backgroundColor: colors.accentSoft }}>
-            <Ionicons name="location" size={18} color={colors.brandTertiary} />
-            <T size={13} weight="700" style={{ flex: 1 }}>{d.taluk.name} {d.taluk.sub_label ?? "Taluk"}, {d.taluk.district_name}, {d.taluk.state_name}</T>
-            <Pressable testID="pro-home-taluk-change" onPress={() => setManual(true)}><T size={12} weight="700" color={colors.brandPrimary}>Change</T></Pressable>
-          </View>
-        ) : null}
-        {manual || (!d.taluk && !d.place) ? (
-          <TalukPicker testPrefix="pro-home" value={{ taluk: d.taluk, city: "", city_code: null, village_code: null, village_name: null }} onChange={(v) => set({ taluk: v.taluk })} />
-        ) : null}
+        <HomePlacePicker place={d.place} taluk={d.taluk} onChange={set} flag={<Flag k="home" items={items} />} />
       </View>
       <View style={{ gap: space.sm }}>
         <T weight="800">Languages you speak</T>

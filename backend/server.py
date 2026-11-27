@@ -3381,15 +3381,27 @@ class AvailabilityIn(BaseModel):
 
 @api.put("/pro/home")
 async def pro_set_home(body: HomeLocIn, user: dict = Depends(get_user)):
-    """One-time home taluk for hire drivers registered before taluk matching existed. Cannot overwrite an existing home."""
-    p = await db.pro_drivers.find_one({"user_id": user["user_id"]}, {"_id": 0, "home": 1})
+    """Set the home location; verified drivers can change it anytime and it applies immediately."""
+    uid = user["user_id"]
+    p = await db.pro_drivers.find_one({"user_id": uid}, {"_id": 0, "home": 1, "status": 1, "service_taluk_codes": 1, "name": 1})
     if not p:
         raise HTTPException(404, "Register as a hire driver first")
-    if p.get("home"):
-        raise HTTPException(400, "Your registered home taluk is already set. Contact support to change it.")
+    old = p.get("home")
+    if old and p.get("status") != "approved":
+        raise HTTPException(400, "You can change your home location after Travoo verifies your profile")
     home = await home_snapshot(body)
-    await db.pro_drivers.update_one({"user_id": user["user_id"], "home": {"$exists": False}}, {"$set": {"home": home, "available": True}})
-    await audit(user["user_id"], "pro.home_set", user["user_id"], {"subdistrict": home["subdistrict_code"]})
+    if not old:
+        await db.pro_drivers.update_one({"user_id": uid, "home": {"$exists": False}}, {"$set": {"home": home, "available": True}})
+        await audit(uid, "pro.home_set", uid, {"subdistrict": home["subdistrict_code"]})
+        return home
+    codes = [home["subdistrict_code"]] + [c for c in (p.get("service_taluk_codes") or []) if c not in (old.get("subdistrict_code"), home["subdistrict_code"])]
+    change = {"from": {k: old.get(k) for k in ("place_name", "subdistrict_name", "district_name", "state_name")},
+              "to": {k: home.get(k) for k in ("place_name", "subdistrict_name", "district_name", "state_name")}, "at": now()}
+    await db.pro_drivers.update_one({"user_id": uid}, {"$set": {"home": home, "service_taluk_codes": codes, "home_changed_at": now()},
+                                                       "$push": {"home_history": {"$each": [change], "$slice": -20}}})
+    await audit(uid, "pro.home_changed", uid, {"from": old.get("subdistrict_code"), "to": home["subdistrict_code"]})
+    label = lambda h: ", ".join(x for x in (h.get("place_name"), h.get("subdistrict_name"), h.get("district_name")) if x)
+    await admin_alert("driver_home_changed", f"{p.get('name') or 'A driver'} changed home location: {label(old)} → {label(home)}", uid)
     return home
 
 

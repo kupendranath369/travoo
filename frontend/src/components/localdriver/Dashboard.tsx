@@ -74,7 +74,8 @@ export function LocalDriverDashboard({ embedded = false }: { embedded?: boolean 
             <Badge testID="dash-verified-badge" icon="shield-checkmark" label="Verified Driver" tone="warning" />
             <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
               <Ionicons name="location-outline" size={13} color={colors.muted} />
-              <T testID="dash-taluk" size={12} color={colors.muted}>{p.home?.subdistrict_name}, {p.home?.district_name}</T>
+              <T testID="dash-taluk" size={12} color={colors.muted} style={{ flexShrink: 1 }}>{p.home?.place_name ? `${p.home.place_name}, ` : ""}{p.home?.subdistrict_name}, {p.home?.district_name}</T>
+              <Pressable testID="dash-change-home" hitSlop={8} onPress={() => router.push("/hire/home-location")}><T size={12} weight="800" color={colors.brandSecondary}>Change</T></Pressable>
             </View>
           </View>
           {embedded ? <View testID="dash-mode-pill" style={{ alignSelf: "flex-start", paddingHorizontal: space.md, paddingVertical: 6, borderRadius: radius.pill, backgroundColor: colors.brandSecondary }}><T size={12} weight="800" color="#fff">Driver Mode</T></View> : null}
@@ -107,6 +108,7 @@ export function LocalDriverDashboard({ embedded = false }: { embedded?: boolean 
           <GridTile testID="dash-tile-availability" icon="calendar" tint={colors.brandTertiary} label="Availability" badge={upcomingPeriods || undefined} onPress={() => router.push("/hire/availability")} />
           <GridTile testID="dash-tile-vehicles" icon="car" tint={colors.brandPrimary} label="My Vehicles" onPress={() => router.push("/hire/vehicles")} />
           <GridTile testID="dash-tile-services" icon="apps" tint={colors.brandSecondary} label="My Services" onPress={() => setShowServices(!showServices)} />
+          <GridTile testID="dash-tile-home" icon="home" tint={colors.brandPrimary} label="Home Location" onPress={() => router.push("/hire/home-location")} />
         </View>
 
         {showServices ? (
