@@ -28,7 +28,7 @@ function useUnreadMessages() {
 }
 
 const DRIVER_TABS = ["index", "driver-trips", "driver-earnings", "messages"];
-const PASSENGER_TABS = ["index", "bookings", "offer", "messages"];
+const PASSENGER_TABS = ["index", "bookings", "offer", "my-rides", "messages"];
 
 export default function TabsLayout() {
   const { t } = useI18n();
@@ -88,6 +88,10 @@ export default function TabsLayout() {
           <NativeTabs.Trigger.Icon sf="plus.circle.fill" />
           <NativeTabs.Trigger.Label>Offer Ride</NativeTabs.Trigger.Label>
         </NativeTabs.Trigger>
+        <NativeTabs.Trigger name="my-rides" hidden={driver}>
+          <NativeTabs.Trigger.Icon sf="car.fill" />
+          <NativeTabs.Trigger.Label>My Rides</NativeTabs.Trigger.Label>
+        </NativeTabs.Trigger>
         <NativeTabs.Trigger name="messages">
           <NativeTabs.Trigger.Icon sf="bubble.left.and.bubble.right.fill" />
           <NativeTabs.Trigger.Label>{t("v2.messages")}</NativeTabs.Trigger.Label>
@@ -130,6 +134,7 @@ export default function TabsLayout() {
       <Tabs.Screen name="driver-earnings" options={{ ...hide("driver-earnings"), title: "Earnings", tabBarButtonTestID: "tab-earnings", tabBarIcon: icon("wallet", "wallet-outline") }} />
       <Tabs.Screen name="bookings" options={{ ...hide("bookings"), title: t("tab.bookings"), tabBarButtonTestID: "tab-bookings", tabBarIcon: icon("ticket", "ticket-outline") }} />
       <Tabs.Screen name="offer" options={{ ...hide("offer"), title: "Offer Ride", tabBarButtonTestID: "tab-offer", tabBarIcon: icon("add-circle", "add-circle-outline") }} />
+      <Tabs.Screen name="my-rides" options={{ ...hide("my-rides"), title: "My Rides", tabBarButtonTestID: "tab-my-rides", tabBarIcon: icon("car-sport", "car-sport-outline") }} />
       <Tabs.Screen name="messages" options={{ ...hide("messages"), title: t("v2.messages"), tabBarButtonTestID: "tab-messages", tabBarIcon: icon("chatbubbles", "chatbubbles-outline"), tabBarBadge: unread ? unread : undefined, tabBarBadgeStyle: { backgroundColor: colors.brandTertiary, color: colors.onBrandTertiary, fontSize: 11 } }} />
       <Tabs.Screen name="notifications" options={{ ...hide("notifications"), title: t("profile.notifications"), tabBarButtonTestID: "tab-notifications", tabBarIcon: icon("notifications", "notifications-outline"), tabBarBadge: unreadNotifications ? unreadNotifications : undefined, tabBarBadgeStyle: { backgroundColor: colors.brandTertiary, color: colors.onBrandTertiary, fontSize: 11 } }} />
       <Tabs.Screen name="account" options={{ ...hide("account"), title: "Account", tabBarButtonTestID: "tab-account", tabBarIcon: icon("person-circle", "person-circle-outline") }} />
