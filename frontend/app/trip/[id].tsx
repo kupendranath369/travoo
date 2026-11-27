@@ -6,12 +6,14 @@ import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { api, publicPhoto } from "@/src/api";
+import { DateField } from "@/src/components/Calendar";
+import { TimeChips } from "@/src/components/DateChips";
 import { DriverReviews } from "@/src/components/DriverReviews";
 import { FeatureCard } from "@/src/components/FeatureCard";
 import { OsmMap } from "@/src/components/OsmMap";
 import { fmtDur } from "@/src/components/RideCard";
 import { useToast } from "@/src/components/toast";
-import { Avatar, Badge, Btn, Card, Chip, ErrorBox, Field, Header, Loading, Rating, Stepper, T, space, statusTone } from "@/src/components/ui";
+import { Avatar, Badge, Btn, Card, Chip, ErrorBox, Field, Header, Loading, Rating, Stepper, T, radius, space, statusTone } from "@/src/components/ui";
 import { inr, useI18n } from "@/src/i18n";
 import { openRouteInMaps } from "@/src/maps";
 import { useTheme } from "@/src/theme";
@@ -199,6 +201,12 @@ export default function TripScreen() {
             ))}
             {trip.status === "scheduled" && edit ? (
               <Card style={{ gap: space.md }}>
+                <View testID="trip-edit-reschedule" style={{ gap: space.sm, padding: space.md, borderRadius: radius.md, backgroundColor: colors.surfaceTertiary }}>
+                  <T weight="800">Reschedule</T>
+                  <DateField testID="trip-edit-date" label={t("offer.date")} value={edit.date} onChange={(x) => setEdit({ ...edit, date: x })} />
+                  <TimeChips testID="trip-edit-time" value={edit.time} onChange={(x) => setEdit({ ...edit, time: x })} />
+                  {booked ? <T size={12} color={colors.muted}>Passengers who booked will be notified of the new date and time.</T> : null}
+                </View>
                 <Field testID="trip-edit-pickup" label={t("offer.pickup")} value={edit.pickup_point} onChangeText={(x) => setEdit({ ...edit, pickup_point: x })} />
                 <Field testID="trip-edit-drop" label={t("offer.drop")} value={edit.drop_point} onChangeText={(x) => setEdit({ ...edit, drop_point: x })} />
                 <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
@@ -211,7 +219,7 @@ export default function TripScreen() {
             ) : null}
             {trip.status === "scheduled" ? (
               <View style={{ gap: space.sm }}>
-                {!edit ? <Btn testID="trip-edit-button" variant="outline" icon="create-outline" label={t("trip.edit")} onPress={() => setEdit({ pickup_point: trip.pickup_point, drop_point: trip.drop_point, seats: trip.seats_total, notes: trip.notes })} /> : null}
+                {!edit ? <Btn testID="trip-edit-button" variant="outline" icon="create-outline" label={t("trip.edit")} onPress={() => setEdit({ date: trip.date, time: trip.time, pickup_point: trip.pickup_point, drop_point: trip.drop_point, seats: trip.seats_total, notes: trip.notes })} /> : null}
                 <Btn testID="trip-start-button" icon="play" label={t("trip.start")} loading={busy === "start"} onPress={() => act("start", `/trips/${id}/start`)} />
               </View>
             ) : null}

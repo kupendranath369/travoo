@@ -1339,6 +1339,8 @@ class TripUpdate(BaseModel):
     seats: Optional[int] = Field(default=None, ge=1, le=8)
     instant_booking: Optional[bool] = None
     notes: Optional[str] = Field(default=None, max_length=500)
+    date: Optional[str] = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
+    time: Optional[str] = Field(default=None, pattern=r"^\d{2}:\d{2}$")
 
 
 def trip_metrics(origin: dict, dest: dict, stops: list, date: str, time: str):
@@ -1427,7 +1429,19 @@ async def update_trip(tid: str, body: TripUpdate, user: dict = Depends(get_user)
     trip = await db.trips.find_one({"trip_id": tid, "driver_id": user["user_id"]}, {"_id": 0})
     if not trip or trip["status"] != "scheduled":
         raise HTTPException(404, "Editable trip not found")
-    upd = {k: v for k, v in body.model_dump().items() if v is not None and k != "seats"}
+    upd = {k: v for k, v in body.model_dump().items() if v is not None and k not in ("seats", "date", "time")}
+    new_date, new_time = body.date or trip["date"], body.time or trip["time"]
+    rescheduled = (new_date, new_time) != (trip["date"], trip["time"])
+    if rescheduled:
+        try:
+            dep = datetime.strptime(f"{new_date} {new_time}", "%Y-%m-%d %H:%M").replace(tzinfo=IST)
+        except ValueError:
+            raise HTTPException(400, "Choose a valid date and time")
+        if dep < now() + timedelta(minutes=30):
+            raise HTTPException(400, "The new departure must be at least 30 minutes from now")
+        arr = dep + timedelta(minutes=trip.get("duration_min") or 0)
+        upd.update({"date": new_date, "time": new_time, "departure_at": dep.astimezone(timezone.utc),
+                    "arrival_time": arr.strftime("%H:%M"), "arrival_date": arr.strftime("%Y-%m-%d"), "rescheduled_at": now()})
     if body.seats is not None:
         booked = trip["seats_total"] - trip["seats_available"]
         if body.seats < booked:
@@ -1449,8 +1463,14 @@ async def update_trip(tid: str, body: TripUpdate, user: dict = Depends(get_user)
             raise HTTPException(400, f"Price is above the allowed maximum of ₹{sug['max']} per person for {seats} seat(s).")
         upd["price_suggestion"] = sug
     await db.trips.update_one({"trip_id": tid}, {"$set": upd})
+    if rescheduled:
+        await db.bookings.update_many({"trip_id": tid}, {"$set": {"date": new_date, "time": new_time}})
+        await audit(user["user_id"], "trip.rescheduled", tid, {"from": f"{trip['date']} {trip['time']}", "to": f"{new_date} {new_time}"})
     async for b in db.bookings.find({"trip_id": tid, "status": {"$in": ["pending", "confirmed"]}}, {"_id": 0}):
-        await notify(b["passenger_id"], "trip_updated", {"route": b["route"]}, b["booking_id"])
+        if rescheduled:
+            await notify(b["passenger_id"], "trip_rescheduled", {"route": b["route"], "date": new_date, "time": new_time}, b["booking_id"])
+        else:
+            await notify(b["passenger_id"], "trip_updated", {"route": b["route"]}, b["booking_id"])
     return await db.trips.find_one({"trip_id": tid}, TRIP_OUT)
 
 

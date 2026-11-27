@@ -421,6 +421,7 @@
   "notif.hire_cancelled": "Driver booking cancelled: {route}",
   "notif.hire_completed": "Driver service completed: {route}. Please rate.",
   "notif.trip_updated": "Trip details updated: {route}",
+  "notif.trip_rescheduled": "Trip rescheduled to {date} at {time}: {route}",
   "admin.title": "Admin dashboard",
   "admin.overview": "Overview",
   "admin.drivers": "Drivers",
