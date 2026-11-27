@@ -1,11 +1,12 @@
 import Ionicons from "@react-native-vector-icons/ionicons";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useState } from "react";
-import { View } from "react-native";
+import { Pressable, View } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { api } from "@/src/api";
+import { formatHomeLabel, HomeLocationModal, homePayload, homeToTaluk } from "@/src/components/localdriver/HomeLocationModal";
 import { float, ITEM_LABEL, Progress, PRO_STATUS } from "@/src/components/localdriver/parts";
 import { Draft, StepBasic, StepDocs, StepServices } from "@/src/components/localdriver/steps";
 import { useToast } from "@/src/components/toast";
@@ -14,12 +15,14 @@ import { useTheme } from "@/src/theme";
 
 const LABELS = ["Basic Info", "Documents", "Service & Vehicle"];
 
-function StatusView({ me, onFix }: { me: any; onFix: () => void }) {
+function StatusView({ me, onFix, onHomeUpdated }: { me: any; onFix: () => void; onHomeUpdated: (r: any) => void }) {
   const { colors } = useTheme();
   const router = useRouter();
+  const [editHome, setEditHome] = useState(false);
   const p = me.profile;
   const st = PRO_STATUS[p.status] ?? PRO_STATUS.under_review;
   const fix = p.status === "rejected" || p.status === "resubmit";
+  const approved = p.status === "approved";
   return (
     <View style={{ gap: space.lg }}>
       <Card testID="pro-status-card" style={[float, { alignItems: "center", gap: space.md, paddingVertical: space.xl, borderWidth: 0 }]}>
@@ -38,13 +41,21 @@ function StatusView({ me, onFix }: { me: any; onFix: () => void }) {
       ) : null}
       <Card testID="pro-details-card" style={{ gap: 4 }}>
         <T weight="800">Verification details</T>
-        <T size={13}>Home: {p.home?.subdistrict_name} {p.home?.sub_label}, {p.home?.district_name}</T>
+        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space.sm }}>
+          <T testID="pro-details-home" size={13} style={{ flex: 1 }}>Home: {formatHomeLabel(p.home)}</T>
+          {approved ? (
+            <Pressable testID="pro-home-change" onPress={() => setEditHome(true)} hitSlop={8}>
+              <T size={13} weight="700" color={colors.brandPrimary}>Change</T>
+            </Pressable>
+          ) : null}
+        </View>
         <T size={13}>Languages: {(p.languages ?? []).join(", ")}</T>
         <T size={13}>Licence: {p.licence_no} · valid until {p.licence_expiry}</T>
         <T size={13}>Services: {(p.services ?? []).map((s: string) => (s === "book" ? "Book a Car" : "Rent a Driver")).join(" + ")}</T>
       </Card>
       {fix ? <Btn testID="pro-fix-button" icon="create-outline" label="Fix and resubmit" onPress={onFix} /> : null}
-      {p.status === "approved" ? <Btn testID="pro-open-dashboard" label="Open Local Driver Dashboard" onPress={() => router.replace("/hire/driver")} /> : null}
+      {approved ? <Btn testID="pro-open-dashboard" label="Open Local Driver Dashboard" onPress={() => router.replace("/hire/driver")} /> : null}
+      {approved ? <HomeLocationModal visible={editHome} currentHome={p.home} onClose={() => setEditHome(false)} onSaved={onHomeUpdated} /> : null}
     </View>
   );
 }
@@ -73,8 +84,7 @@ export default function LocalDriverRegister() {
       if (p) {
         setD((x) => ({ ...x, languages: x.languages.length ? x.languages : p.languages ?? [], services: p.services ?? ["rent"], vehicle_ids: x.vehicle_ids.length ? x.vehicle_ids : p.vehicle_ids ?? [],
           licence_expiry: x.licence_expiry || p.licence_expiry || "",
-          taluk: x.taluk ?? (p.home ? { code: p.home.subdistrict_code, name: p.home.subdistrict_name, district_code: p.home.district_code, district_name: p.home.district_name,
-            state_code: p.home.state_code, state_name: p.home.state_name, sub_label: p.home.sub_label } : null) }));
+          taluk: x.taluk ?? homeToTaluk(p.home) }));
       }
     } catch (e: any) { setErr(e.message); }
   }, [router, view]);
@@ -113,7 +123,7 @@ export default function LocalDriverRegister() {
     if (step < 2) return setStep(step + 1);
     setBusy(true);
     try {
-      const r = await api("/pro/register", { body: { home: { subdistrict_code: d.taluk!.code, city: d.place?.name ?? "", place: d.place ? { loc_id: d.place.loc_id, name: d.place.name, lat: d.place.lat, lng: d.place.lng, district: d.place.district ?? "", state: d.place.state ?? "", type: "place" } : null },
+      const r = await api("/pro/register", { body: { home: homePayload(d.taluk!, d.place),
         languages: d.languages, licence_no: d.licence_no.trim() || null, licence_expiry: d.licence_expiry || null, services: d.services, vehicle_ids: d.services.includes("book") ? d.vehicle_ids : [] } });
       toast(r.status === "approved" ? "Approved — welcome!" : "Submitted for verification");
       setEditing(false);
@@ -127,7 +137,7 @@ export default function LocalDriverRegister() {
     <View style={{ flex: 1, backgroundColor: colors.surface }}>
       <Header title="Driver Registration" />
       <KeyboardAwareScrollView bottomOffset={24} contentContainerStyle={{ padding: space.lg, gap: space.lg, paddingBottom: insets.bottom + space.xxl }}>
-        {showStatus ? <StatusView me={me} onFix={() => { setEditing(true); setStep(0); }} /> : (
+        {showStatus ? <StatusView me={me} onFix={() => { setEditing(true); setStep(0); }} onHomeUpdated={(r) => setMe(r)} /> : (
           <>
             <Progress step={step} labels={LABELS} />
             <T testID="pro-step-title" size={22} weight="800">{["Basic Information", "Document Verification", "Select Services"][step]}</T>

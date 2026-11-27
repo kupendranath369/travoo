@@ -6,10 +6,11 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { api, pictureUrl } from "@/src/api";
 import { useBookingAlertSound } from "@/src/alerts";
+import { formatHomeLabel, HomeLocationModal } from "@/src/components/localdriver/HomeLocationModal";
 import { float, ServiceCard, Switch } from "@/src/components/localdriver/parts";
 import { useToast } from "@/src/components/toast";
 import { NotificationBell } from "@/src/components/NotificationBell";
-import { Avatar, Badge, ErrorBox, Header, IconName, Loading, T, radius, space } from "@/src/components/ui";
+import { Avatar, Badge, Btn, ErrorBox, Header, IconName, Loading, T, radius, space } from "@/src/components/ui";
 import { inr, useI18n } from "@/src/i18n";
 import { useTheme } from "@/src/theme";
 
@@ -38,6 +39,7 @@ export function LocalDriverDashboard({ embedded = false }: { embedded?: boolean 
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState("");
   const [showServices, setShowServices] = useState(false);
+  const [editHome, setEditHome] = useState(false);
   const load = useCallback(() => {
     api("/driver/earnings-summary").then((r) => setEarn(r.totals.all)).catch(() => {});
     return api("/pro/dashboard").then((r) => {
@@ -123,6 +125,15 @@ export function LocalDriverDashboard({ embedded = false }: { embedded?: boolean 
           </View>
         ) : null}
 
+        <View testID="dash-home-card" style={[float, { flexDirection: "row", alignItems: "center", gap: space.md, padding: space.md, borderRadius: radius.lg, backgroundColor: colors.surfaceSecondary }]}>
+          <Ionicons name="home-outline" size={22} color={colors.brandTertiary} />
+          <View style={{ flex: 1, gap: 2 }}>
+            <T size={12} color={colors.muted}>Home location</T>
+            <T testID="dash-home-value" size={14} weight="700" numberOfLines={2}>{formatHomeLabel(p.home) || "Not set"}</T>
+          </View>
+          <Btn small variant="outline" testID="dash-home-change" label="Change" onPress={() => setEditHome(true)} />
+        </View>
+
         <View style={{ flexDirection: "row", justifyContent: "center", gap: space.lg }}>
           {embedded ? <Pressable testID="dash-offer-ride" onPress={() => router.push("/offer")}><T size={13} weight="700" color={colors.brandSecondary}>Offer a ride</T></Pressable> : null}
           <Pressable testID="dash-verification-details" onPress={() => router.push("/hire/register?view=details")}><T size={13} weight="700" color={colors.brandSecondary}>Verification details</T></Pressable>
@@ -141,6 +152,7 @@ export function LocalDriverDashboard({ embedded = false }: { embedded?: boolean 
           </View>
         ) : null}
       </ScrollView>
+      <HomeLocationModal visible={editHome} currentHome={p.home} onClose={() => setEditHome(false)} onSaved={(r) => setD((x: any) => ({ ...x, ...r }))} />
     </View>
   );
 }

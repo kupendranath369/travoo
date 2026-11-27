@@ -2938,10 +2938,7 @@ async def pro_register(body: ProDriverIn, user: dict = Depends(get_user)):
         if stale:
             raise HTTPException(400, "Please upload a new photo for: " + ", ".join(DOC_META[k][0] for k in stale))
     status = "approved" if (await get_settings()).get("instant_driver_approval") else "under_review"
-    home = await home_snapshot(body.home)
-    old_home = existing.get("home") or {}
-    if not body.home.place and old_home.get("subdistrict_code") == home["subdistrict_code"] and old_home.get("geo"):
-        home.update(geo=old_home["geo"], loc_id=old_home.get("loc_id"), place_name=old_home.get("place_name"), city=old_home.get("city") or home["city"])
+    home = await home_snapshot(body.home, existing.get("home"))
     rates = {**DEFAULT_RATES, **((await get_settings()).get("local_rates") or {})}
     rec = {"home": home, "languages": [x.strip() for x in body.languages if x.strip()], "licence_no": lic, "licence_expiry": exp,
            "services": sorted(set(body.services)), "experience_years": existing.get("experience_years", body.experience_years),
@@ -3240,6 +3237,7 @@ class ProSettingsIn(BaseModel):
     end_time: Optional[str] = Field(default=None, pattern=r"^\d{2}:\d{2}$")
     blocked_dates: Optional[List[str]] = Field(default=None, max_length=60)
     availability: Optional[List[dict]] = Field(default=None, max_length=30)
+    home: Optional[HomeLocIn] = None
 
 
 def availability_snapshot(items: List[dict]) -> list:
@@ -3266,11 +3264,19 @@ def availability_snapshot(items: List[dict]) -> list:
 
 @api.put("/pro/settings")
 async def pro_settings(body: ProSettingsIn, user: dict = Depends(get_user)):
-    """Services, preferences and availability for the single local-driver profile (no re-verification)."""
+    """Services, preferences, home location (verified drivers) and availability for the single local-driver profile."""
     p = await db.pro_drivers.find_one({"user_id": user["user_id"]}, {"_id": 0})
     if not p:
         raise HTTPException(404, "Register as a local driver first")
     upd = {k: v for k, v in body.model_dump().items() if v is not None}
+    if body.home is not None:
+        if p.get("status") != "approved":
+            raise HTTPException(400, "You can change your home location after your local driver verification is approved")
+        if p.get("suspended"):
+            raise HTTPException(400, "Your local driver account is suspended. Please contact Travoo support.")
+        home = await home_snapshot(body.home, p.get("home"))
+        upd["home"] = home
+        upd["service_taluk_codes"] = [home["subdistrict_code"]]
     if body.services is not None:
         if "book" in body.services and not await approved_vehicles(user["user_id"]):
             raise HTTPException(400, "Book a Driver unlocks after one of your vehicles is approved by Travoo")
@@ -3353,13 +3359,16 @@ async def hire_favourite_toggle(driver_id: str, user: dict = Depends(get_user)):
     return {"favourite": True}
 
 
-async def home_snapshot(h: HomeLocIn) -> dict:
+async def home_snapshot(h: HomeLocIn, old_home: Optional[dict] = None) -> dict:
     sd = await subdistrict_doc(h.subdistrict_code)
     out = {"state_code": sd["state_code"], "state_name": sd["state_name"], "district_code": sd["district_code"], "district_name": sd["district_name"],
            "subdistrict_code": sd["code"], "subdistrict_name": sd["name"], "sub_label": sd["sub_label"],
            "city": (h.city or (h.place.name if h.place else "") or sd["name"]).strip(), "city_code": None, "village_code": None, "village_name": None}
     if h.place:
         out.update(loc_id=h.place.loc_id, place_name=h.place.name, geo={"lat": h.place.lat, "lng": h.place.lng})
+    elif old_home and old_home.get("subdistrict_code") == out["subdistrict_code"] and old_home.get("geo"):
+        out.update(geo=old_home["geo"], loc_id=old_home.get("loc_id"), place_name=old_home.get("place_name"),
+                   city=(h.city or old_home.get("city") or out["city"]).strip())
     for key in ("city_code", "village_code"):
         code = getattr(h, key)
         if code:

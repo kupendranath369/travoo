@@ -3,13 +3,13 @@ import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import { Pressable, View } from "react-native";
 
-import { api, Loc, pictureUrl } from "@/src/api";
+import { Loc, pictureUrl } from "@/src/api";
 import { DocPhotos } from "@/src/components/DocPhotos";
-import { LocationField } from "@/src/components/LocationField";
+import { HomeLocationField } from "@/src/components/localdriver/HomeLocationModal";
 import { float, ITEM_LABEL, LanguageSelect, ServiceCard } from "@/src/components/localdriver/parts";
 import { VehicleForm } from "@/src/components/localdriver/VehicleForm";
 import { VehicleRow } from "@/src/components/localdriver/VehicleRow";
-import { Taluk, TalukPicker } from "@/src/components/TalukPicker";
+import { Taluk } from "@/src/components/TalukPicker";
 import { Avatar, Badge, Btn, Card, Field, T, radius, space } from "@/src/components/ui";
 import { useTheme } from "@/src/theme";
 import { useOtpEnabled } from "@/src/useOtp";
@@ -21,19 +21,8 @@ const Flag = ({ k, items }: { k: string; items: string[] }) => items.includes(k)
 export function StepBasic({ me, d, set, items }: { me: any; d: Draft; set: (p: Partial<Draft>) => void; items: string[] }) {
   const { colors } = useTheme();
   const router = useRouter();
-  const [finding, setFinding] = useState(false);
-  const [manual, setManual] = useState(false);
   const otpOn = useOtpEnabled();
   const p = me.personal;
-  const pickPlace = async (l: Loc) => {
-    set({ place: l });
-    setFinding(true);
-    try {
-      const r = await api(`/hire/identify-taluk?loc_id=${encodeURIComponent(l.loc_id)}&pickup=${encodeURIComponent(l.name)}`);
-      if (r.subdistrict) { set({ place: l, taluk: r.subdistrict }); setManual(false); } else { set({ place: l, taluk: null }); setManual(true); }
-    } catch { setManual(true); }
-    setFinding(false);
-  };
   return (
     <View style={{ gap: space.lg }}>
       <Card testID="pro-personal-card" style={[float, { flexDirection: "row", gap: space.md, alignItems: "center", borderWidth: 0 }]}>
@@ -49,18 +38,7 @@ export function StepBasic({ me, d, set, items }: { me: any; d: Draft; set: (p: P
       <View style={{ gap: space.sm }}>
         <T weight="800">Home location</T>
         <Flag k="home" items={items} />
-        <LocationField testID="pro-home-place" label="Village, town or city" value={d.place} onChange={pickPlace} />
-        {finding ? <T size={12} color={colors.muted}>Finding your taluk…</T> : null}
-        {d.taluk && !manual ? (
-          <View testID="pro-home-taluk" style={{ flexDirection: "row", alignItems: "center", gap: space.sm, padding: space.md, borderRadius: radius.md, backgroundColor: colors.accentSoft }}>
-            <Ionicons name="location" size={18} color={colors.brandTertiary} />
-            <T size={13} weight="700" style={{ flex: 1 }}>{d.taluk.name} {d.taluk.sub_label ?? "Taluk"}, {d.taluk.district_name}, {d.taluk.state_name}</T>
-            <Pressable testID="pro-home-taluk-change" onPress={() => setManual(true)}><T size={12} weight="700" color={colors.brandPrimary}>Change</T></Pressable>
-          </View>
-        ) : null}
-        {manual || (!d.taluk && !d.place) ? (
-          <TalukPicker testPrefix="pro-home" value={{ taluk: d.taluk, city: "", city_code: null, village_code: null, village_name: null }} onChange={(v) => set({ taluk: v.taluk })} />
-        ) : null}
+        <HomeLocationField place={d.place} taluk={d.taluk} onChange={set} testPrefix="pro-home" />
       </View>
       <View style={{ gap: space.sm }}>
         <T weight="800">Languages you speak</T>

@@ -266,6 +266,22 @@ class TestSettings:
         r = requests.put(f"{API}/pro/settings", headers=h(tok), json={"availability": [{"id": aid, "from": iso(D, "07:00"), "to": iso(D, "14:00")}]})
         assert r.json()["profile"]["availability"][0]["id"] == aid
 
+    def test_change_home_location_requires_approval(self):
+        tok = S["rent"][0]  # still under_review
+        r = requests.put(f"{API}/pro/settings", headers=h(tok), json={"home": {"subdistrict_code": HOLALKERE, "city": "Holalkere"}})
+        assert r.status_code == 400, r.text
+
+    def test_change_home_location_verified(self):
+        tok, uid = S["cp"]
+        r = requests.put(f"{API}/pro/settings", headers=h(tok), json={"home": {"subdistrict_code": HOLALKERE, "city": "Holalkere"}})
+        assert r.status_code == 200, r.text
+        p = r.json()["profile"]
+        assert p["home"]["subdistrict_code"] == HOLALKERE and p["home"]["subdistrict_name"] == "Holalkere"
+        assert db.pro_drivers.find_one({"user_id": uid})["service_taluk_codes"] == [HOLALKERE]
+        # restore original taluk
+        r = requests.put(f"{API}/pro/settings", headers=h(tok), json={"home": {"subdistrict_code": HIRIYUR, "city": "TEST Town", "place": place()}})
+        assert r.status_code == 200 and r.json()["profile"]["home"]["subdistrict_code"] == HIRIYUR
+
 
 class TestMatching:
     def test_setup_drivers(self):
