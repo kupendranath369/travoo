@@ -63,19 +63,71 @@ export function TravelScene({ height }: { height: number }) {
   );
 }
 
-/** Home service tile: illustration on top, navy band with gold accents. */
-export function ServiceTile({ art, title, sub }: { art: number; title: string; sub: string }) {
+/** Gold steering wheel drawn in SVG. */
+export function SteeringWheel({ size, color = GOLD }: { size: number; color?: string }) {
   return (
-    <View style={{ flex: 1, borderRadius: 22, backgroundColor: NAVY, borderWidth: 2, borderColor: GOLD, overflow: "hidden",
-      shadowColor: NAVY, shadowOpacity: 0.25, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 5 }}>
-      <Image source={art} style={{ width: "100%", aspectRatio: 392 / 218 }} contentFit="cover" />
-      <Svg width="100%" height={22} viewBox="0 0 100 22" preserveAspectRatio="none" style={{ marginTop: -21 }}>
-        <Path d="M0 12 Q 25 0 50 10 T 100 6 L 100 22 L 0 22 Z" fill={NAVY} />
-        <Path d="M0 12 Q 25 0 50 10 T 100 6" stroke={GOLD} strokeWidth={1.2} fill="none" />
-      </Svg>
-      <View style={{ paddingHorizontal: 10, paddingBottom: 12, paddingTop: 2, alignItems: "center", gap: 2 }}>
-        <Animated.Text numberOfLines={1} adjustsFontSizeToFit style={{ fontFamily: "PJS-ExtraBold", fontSize: 19, color: "#FFFFFF" }}>{title}</Animated.Text>
-        <Animated.Text numberOfLines={1} adjustsFontSizeToFit style={{ fontFamily: "PJS-Bold", fontSize: 14, color: GOLD }}>{sub}</Animated.Text>
+    <Svg width={size} height={size} viewBox="0 0 100 100">
+      <Path d="M50 6a44 44 0 1 0 0.01 0Z M50 18a32 32 0 1 1 -0.01 0Z" fill={color} fillRule="evenodd" />
+      <Path d="M50 40a10 10 0 1 0 0.01 0Z" fill={color} />
+      <Path d="M20 46 Q50 36 80 46 L80 54 Q62 50 56 56 L44 56 Q38 50 20 54 Z M45 58 L55 58 L58 84 L42 84 Z" fill={color} />
+    </Svg>
+  );
+}
+
+function FloatIcon({ children }: { children: React.ReactNode }) {
+  const y = useSharedValue(0);
+  useEffect(() => {
+    y.value = withRepeat(withSequence(withTiming(-6, { duration: 1100, easing: Easing.inOut(Easing.quad) }), withTiming(0, { duration: 1100, easing: Easing.inOut(Easing.quad) })), -1);
+  }, [y]);
+  const st = useAnimatedStyle(() => ({ transform: [{ translateY: y.value }] }));
+  return <Animated.View style={st}>{children}</Animated.View>;
+}
+
+/** Home service tile: floating gold icon on navy with the service name. */
+export function ServiceTile({ kind, title, sub }: { kind: "rent" | "book"; title: string; sub: string }) {
+  return (
+    <View style={{ flex: 1, borderRadius: 22, backgroundColor: NAVY, borderWidth: 2, borderColor: GOLD, overflow: "hidden", alignItems: "center",
+      paddingTop: 18, paddingBottom: 16, paddingHorizontal: 8, gap: 12, shadowColor: NAVY, shadowOpacity: 0.25, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 5 }}>
+      <FloatIcon>
+        <View testID={`home-tile-icon-${kind}`} style={{ width: 74, height: 74, borderRadius: 37, backgroundColor: "rgba(197,160,89,0.16)", borderWidth: 1.5, borderColor: GOLD, alignItems: "center", justifyContent: "center" }}>
+          {kind === "rent" ? <SteeringWheel size={42} /> : <Ionicons name="car-sport" size={42} color={GOLD} />}
+        </View>
+      </FloatIcon>
+      <View style={{ alignItems: "center", gap: 4 }}>
+        <Animated.Text numberOfLines={1} style={{ fontFamily: "PJS-Bold", fontSize: 20, letterSpacing: 0.4, color: "#FFFFFF" }}>{title}</Animated.Text>
+        <View style={{ width: 28, height: 2, borderRadius: 1, backgroundColor: GOLD }} />
+        <Animated.Text numberOfLines={1} style={{ fontFamily: "PJS-Regular", fontSize: 14, letterSpacing: 0.3, color: "#E9D6AE" }}>{sub}</Animated.Text>
+      </View>
+    </View>
+  );
+}
+
+/** Animated Rent a Driver scene: swaying steering wheel over a moving road. */
+export function RentDriverScene() {
+  const road = useLoop(70, 500);
+  const sway = useSharedValue(0);
+  const glow = useSharedValue(0.25);
+  useEffect(() => {
+    sway.value = withRepeat(withSequence(withTiming(-22, { duration: 1300, easing: Easing.inOut(Easing.quad) }), withTiming(18, { duration: 1500, easing: Easing.inOut(Easing.quad) })), -1, true);
+    glow.value = withRepeat(withTiming(0.5, { duration: 1400 }), -1, true);
+  }, [sway, glow]);
+  const wheel = useAnimatedStyle(() => ({ transform: [{ rotate: `${sway.value}deg` }] }));
+  const glowSt = useAnimatedStyle(() => ({ opacity: glow.value }));
+  const dashes = useAnimatedStyle(() => ({ transform: [{ translateY: road.value - 70 }] }));
+  return (
+    <View testID="rent-driver-scene" pointerEvents="none" style={{ position: "absolute", width: "100%", height: "100%", backgroundColor: NAVY, overflow: "hidden" }}>
+      <LinearGradient colors={["#1E3554", NAVY, "#0D1828"]} style={{ position: "absolute", width: "100%", height: "100%" }} />
+      <View style={{ position: "absolute", left: "50%", marginLeft: -60, top: 0, bottom: 0, width: 120, overflow: "hidden" }}>
+        <Svg width={120} height="100%" viewBox="0 0 120 100" preserveAspectRatio="none" style={{ position: "absolute" }}>
+          <Path d="M50 0 L70 0 L120 100 L0 100 Z" fill="#0A1322" opacity={0.7} />
+        </Svg>
+        <Animated.View style={[{ position: "absolute", left: 57, gap: 30 }, dashes]}>
+          {Array.from({ length: 12 }).map((_, i) => <View key={i} style={{ width: 6, height: 40, borderRadius: 3, backgroundColor: GOLD, opacity: 0.7 }} />)}
+        </Animated.View>
+      </View>
+      <View style={{ position: "absolute", right: 18, top: 16, width: 150, height: 150, alignItems: "center", justifyContent: "center" }}>
+        <Animated.View style={[{ position: "absolute", width: 150, height: 150, borderRadius: 75, backgroundColor: "rgba(197,160,89,0.22)" }, glowSt]} />
+        <Animated.View style={wheel}><SteeringWheel size={118} /></Animated.View>
       </View>
     </View>
   );

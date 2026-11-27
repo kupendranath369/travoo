@@ -64,9 +64,9 @@ function PassengerHome() {
     setFormErr("");
     router.push({ pathname: "/search", params: { from: JSON.stringify(from), to: JSON.stringify(to), date: date ?? "", seats: "1" } });
   };
-  const art = (testID: string, img: number, title: string, sub: string, onPress: () => void, delay: number) => (
+  const art = (testID: string, img: "rent" | "book", title: string, sub: string, onPress: () => void, delay: number) => (
     <Pressable testID={testID} onPress={onPress} accessibilityLabel={`${title}. ${sub}`} style={({ pressed }) => ({ flex: 1, transform: [{ scale: pressed ? 0.97 : 1 }] })}>
-      <FloatingView delay={delay} testID={`${testID}-image`}><ServiceTile art={img} title={title} sub={sub} /></FloatingView>
+      <FloatingView delay={delay} testID={`${testID}-image`}><ServiceTile kind={img} title={title} sub={sub} /></FloatingView>
     </Pressable>
   );
 
@@ -105,8 +105,8 @@ function PassengerHome() {
           </Card>
         </Animated.View>
         <Animated.View entering={FadeInDown.delay(80).duration(400)} style={{ flexDirection: "row", gap: space.md, paddingHorizontal: space.lg }}>
-          {art("home-rent-driver-card", require("@/assets/images/tile-rent-driver-art.jpg"), "Rent a Driver", "Driver for your car", () => router.push("/hire?service=rent"), 0)}
-          {art("home-book-car-card", require("@/assets/images/tile-book-car-art.jpg"), "Book a Car", "Car with driver", () => router.push("/hire?service=book"), 400)}
+          {art("home-rent-driver-card", "rent", "Rent a Driver", "Driver for your car", () => router.push("/hire?service=rent"), 0)}
+          {art("home-book-car-card", "book", "Book a Car", "Car with driver", () => router.push("/hire?service=book"), 400)}
         </Animated.View>
 
         <Animated.View entering={FadeInDown.delay(120).duration(400)} style={{ gap: space.sm, paddingHorizontal: space.lg }}>

@@ -5,13 +5,14 @@ import React from "react";
 import { Pressable, View } from "react-native";
 import Animated, { FadeInDown } from "react-native-reanimated";
 
+import { RentDriverScene } from "@/src/components/HomeScene";
 import { IconName, T, radius, space } from "@/src/components/ui";
 import { useTheme } from "@/src/theme";
 
 export type Svc = "rent" | "book";
 
 export const SVC: Record<Svc, { img: any; icon: IconName; title: string; line: string; points: string[] }> = {
-  rent: { img: require("@/assets/images/hero-rent-driver.jpg"), icon: "speedometer-outline", title: "Rent a Driver", line: "Have a car? Hire a verified driver for your trip.",
+  rent: { img: null, icon: "speedometer-outline", title: "Rent a Driver", line: "Have a car? Hire a verified driver for your trip.",
     points: ["Verified & trusted drivers", "Flexible bookings", "Local & outstation trips"] },
   book: { img: require("@/assets/images/hero-book-car.jpg"), icon: "car-sport", title: "Book a Car", line: "Don't have a car? Book a car with a driver for your journey.",
     points: ["Car + Driver in one booking", "Multiple vehicle options", "For local & outstation travel"] },
@@ -49,7 +50,7 @@ export function ServiceHero({ service }: { service: Svc }) {
   return (
     <Animated.View key={service} entering={FadeInDown.duration(450)} testID={`hire-hero-${service}`}
       style={{ height: 270, borderRadius: 28, overflow: "hidden", shadowColor: "#0E2A4F", shadowOpacity: 0.25, shadowRadius: 20, shadowOffset: { width: 0, height: 10 }, elevation: 8 }}>
-      <Image source={s.img} style={{ position: "absolute", width: "100%", height: "100%" }} contentFit="cover" transition={250} />
+      {s.img ? <Image source={s.img} style={{ position: "absolute", width: "100%", height: "100%" }} contentFit="cover" transition={250} /> : <RentDriverScene />}
       <LinearGradient colors={navyFade} locations={[0.3, 0.62, 1]} style={{ position: "absolute", width: "100%", height: "100%" }} />
       <View style={{ flex: 1, justifyContent: "flex-end", padding: space.lg, gap: space.sm }}>
         <GoldBadge icon={s.icon} size={52} />
@@ -71,7 +72,7 @@ export function ServiceChoiceCard({ service, onPress, delay = 0 }: { service: Sv
         style={({ pressed }) => ({ borderRadius: 28, backgroundColor: colors.surfaceSecondary, overflow: "hidden", transform: [{ scale: pressed ? 0.98 : 1 }],
           shadowColor: "#0E2A4F", shadowOpacity: 0.12, shadowRadius: 18, shadowOffset: { width: 0, height: 8 }, elevation: 5 })}>
         <View style={{ height: 170 }}>
-          <Image source={s.img} style={{ width: "100%", height: "100%" }} contentFit="cover" />
+          {s.img ? <Image source={s.img} style={{ width: "100%", height: "100%" }} contentFit="cover" /> : <RentDriverScene />}
           <LinearGradient colors={["rgba(250,246,238,0)", colors.surfaceSecondary]} locations={[0.55, 1]} style={{ position: "absolute", width: "100%", height: "100%" }} />
         </View>
         <View style={{ alignItems: "center", marginTop: -34 }}><GoldBadge icon={s.icon} size={64} /></View>
