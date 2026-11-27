@@ -1,7 +1,7 @@
 import asyncio, os, sys
-sys.path.insert(0, "/app/backend")
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from dotenv import load_dotenv
-load_dotenv("/app/backend/.env")
+load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env"))
 from motor.motor_asyncio import AsyncIOMotorClient
 from lgd import import_lgd
 async def main():

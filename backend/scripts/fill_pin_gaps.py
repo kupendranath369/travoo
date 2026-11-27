@@ -1,8 +1,8 @@
 """Fill PINs that have no coordinates or state with values from neighbouring PINs (same 4- then 3-digit prefix)."""
 import asyncio, os, sys
-sys.path.insert(0, "/app/backend")
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from dotenv import load_dotenv
-load_dotenv("/app/backend/.env")
+load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env"))
 from motor.motor_asyncio import AsyncIOMotorClient
 from geo import loc_doc, slug
 
