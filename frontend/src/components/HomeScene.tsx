@@ -74,26 +74,12 @@ export function SteeringWheel({ size, color = GOLD }: { size: number; color?: st
   );
 }
 
-function FloatIcon({ children }: { children: React.ReactNode }) {
-  const y = useSharedValue(0);
-  useEffect(() => {
-    y.value = withRepeat(withSequence(withTiming(-6, { duration: 1100, easing: Easing.inOut(Easing.quad) }), withTiming(0, { duration: 1100, easing: Easing.inOut(Easing.quad) })), -1);
-  }, [y]);
-  const st = useAnimatedStyle(() => ({ transform: [{ translateY: y.value }] }));
-  return <Animated.View style={st}>{children}</Animated.View>;
-}
-
-/** Home service tile: floating gold icon on navy with the service name. */
+/** Home service tile: simple navy card with the service name. */
 export function ServiceTile({ kind, title, sub }: { kind: "rent" | "book"; title: string; sub: string }) {
   return (
-    <View style={{ flex: 1, borderRadius: 22, backgroundColor: NAVY, borderWidth: 2, borderColor: GOLD, overflow: "hidden", alignItems: "center",
-      paddingTop: 18, paddingBottom: 16, paddingHorizontal: 8, gap: 12, shadowColor: NAVY, shadowOpacity: 0.25, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 5 }}>
-      <FloatIcon>
-        <View testID={`home-tile-icon-${kind}`} style={{ width: 74, height: 74, borderRadius: 37, backgroundColor: "rgba(197,160,89,0.16)", borderWidth: 1.5, borderColor: GOLD, alignItems: "center", justifyContent: "center" }}>
-          {kind === "rent" ? <SteeringWheel size={42} /> : <Ionicons name="car-sport" size={42} color={GOLD} />}
-        </View>
-      </FloatIcon>
-      <View style={{ alignItems: "center", gap: 4 }}>
+    <View style={{ flex: 1, borderRadius: 22, backgroundColor: NAVY, borderWidth: 2, borderColor: GOLD, overflow: "hidden", alignItems: "center", justifyContent: "center",
+      minHeight: 104, paddingVertical: 20, paddingHorizontal: 8, shadowColor: NAVY, shadowOpacity: 0.25, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 5 }}>
+      <View testID={`home-tile-${kind}`} style={{ alignItems: "center", gap: 6 }}>
         <Animated.Text numberOfLines={1} style={{ fontFamily: "PJS-Bold", fontSize: 20, letterSpacing: 0.4, color: "#FFFFFF" }}>{title}</Animated.Text>
         <View style={{ width: 28, height: 2, borderRadius: 1, backgroundColor: GOLD }} />
         <Animated.Text numberOfLines={1} style={{ fontFamily: "PJS-Regular", fontSize: 14, letterSpacing: 0.3, color: "#E9D6AE" }}>{sub}</Animated.Text>
