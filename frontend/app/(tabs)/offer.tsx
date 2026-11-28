@@ -39,6 +39,7 @@ export default function OfferScreen() {
   const [d, setD] = useState<Loc | null>(null);
   const [stops, setStops] = useState<Loc[]>([]);
   const [stopOpen, setStopOpen] = useState(false);
+  const [routeTowns, setRouteTowns] = useState<Loc[]>([]);
   const [pickup, setPickup] = useState("");
   const [drop, setDrop] = useState("");
   const [date, setDate] = useState<string | null>(isoDate(new Date(Date.now() + 86400000)));
@@ -91,6 +92,13 @@ export default function OfferScreen() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const pinInitial = useMemo(() => (pin?.kind === "drop" ? dropPin ?? (d ? { lat: d.lat, lng: d.lng } : null) : pickupPin ?? (o ? { lat: o.lat, lng: o.lng } : null)), [pin]);
   const maxSeats = veh0 ? Math.min(veh0.seats, caps[veh0.vtype] ?? 3) : 3;
+  useEffect(() => {
+    setRouteTowns([]);
+    if (!o || !d) return;
+    let alive = true;
+    api(`/trips/suggest-stops?origin=${encodeURIComponent(o.loc_id)}&destination=${encodeURIComponent(d.loc_id)}`).then((r) => alive && setRouteTowns(r)).catch(() => {});
+    return () => { alive = false; };
+  }, [o, d]);
   useEffect(() => {
     setSeats((s) => Math.min(Math.max(1, s), maxSeats));
   }, [maxSeats]);
@@ -250,6 +258,16 @@ export default function OfferScreen() {
                 ))}
                 {stops.length < 6 ? <Chip testID="offer-add-stop-button" icon="add" label={t("offer.add_stop")} onPress={() => setStopOpen(true)} /> : null}
               </View>
+              {routeTowns.some((x) => !stops.some((s) => s.loc_id === x.loc_id)) && stops.length < 6 ? (
+                <View testID="offer-route-towns" style={{ gap: space.xs }}>
+                  <T size={12} color={colors.muted}>Main towns on your route</T>
+                  <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.sm }}>
+                    {routeTowns.filter((x) => !stops.some((s) => s.loc_id === x.loc_id)).map((x) => (
+                      <Chip key={x.loc_id} testID={`offer-route-town-${x.loc_id}`} icon="add-circle-outline" label={x.name} onPress={() => stops.length < 6 && setStops([...stops, x].sort((a, b) => routeTowns.findIndex((r) => r.loc_id === a.loc_id) - routeTowns.findIndex((r) => r.loc_id === b.loc_id)))} />
+                    ))}
+                  </View>
+                </View>
+              ) : null}
             </View>
             <View style={{ gap: space.xs }}>
               <DateField testID="offer-date" label={t("offer.date")} value={date} onChange={setDate} />

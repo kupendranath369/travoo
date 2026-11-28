@@ -1555,6 +1555,36 @@ async def search_trips(from_lat: float, from_lng: float, to_lat: float, to_lng: 
     return {"trips": rows, "alternative_dates": alt, "available_dates": available}
 
 
+@api.get("/trips/suggest-stops")
+async def suggest_stops(origin: str, destination: str, user: dict = Depends(get_user)):
+    """Main towns (taluk/district HQs) along the road between two places, in route order."""
+    o = await db.locations.find_one({"loc_id": origin}, {"_id": 0, "lat": 1, "lng": 1, "name": 1})
+    d = await db.locations.find_one({"loc_id": destination}, {"_id": 0, "lat": 1, "lng": 1, "name": 1})
+    if not o or not d or o.get("lat") is None or d.get("lat") is None:
+        return []
+    road = await road_route([o, d])
+    pts = [{"lat": p[0], "lng": p[1]} for p in road["geometry"]] if road and road.get("geometry") else [o, d]
+    samples, acc = [pts[0]], 0.0
+    for i in range(1, len(pts)):
+        acc += haversine(pts[i - 1], pts[i])
+        if acc >= 8:
+            samples.append(pts[i]); acc = 0.0
+    if len(pts) == 2:
+        n = max(2, int(haversine(o, d) / 8))
+        samples = [{"lat": o["lat"] + (d["lat"] - o["lat"]) * k / n, "lng": o["lng"] + (d["lng"] - o["lng"]) * k / n} for k in range(n + 1)]
+    seen, out = set(), []
+    for idx, sp in enumerate(samples):
+        async for t in db.main_towns.find({"geo": {"$nearSphere": {"$geometry": {"type": "Point", "coordinates": [sp["lng"], sp["lat"]]}, "$maxDistance": 6000}}},
+                                          {"_id": 0, "geo": 0}).limit(2):
+            same = any(t["name"].lower().startswith((x.get("name") or "~").lower()) for x in (o, d))
+            if t["loc_id"] in seen or same or haversine(t, o) < 12 or haversine(t, d) < 12:
+                continue
+            seen.add(t["loc_id"])
+            out.append({**t, "type": "town", "km_from_start": round(haversine(o, t))})
+    out.sort(key=lambda t: t["km_from_start"])
+    return out[:10]
+
+
 @api.get("/trips/mine")
 async def my_trips(user: dict = Depends(get_user)):
     trips = await db.trips.find({"driver_id": user["user_id"]}, TRIP_OUT).sort("departure_at", -1).to_list(200)
