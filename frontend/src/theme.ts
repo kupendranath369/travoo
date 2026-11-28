@@ -40,28 +40,28 @@ const light = {
   // Surfaces: backgrounds, from the screen down to small fills.
   // Each `on` key is the text and icon color for that background.
   // ---------------------------------------------------------------------------
-  surface: "#FAF6EE", // primary canvas, most of every screen
-  onSurface: "#0E2341", // text and icons on the canvas
+  surface: "#EEF1F4", // primary canvas, most of every screen
+  onSurface: "#0B2240", // text and icons on the canvas
   surfaceSecondary: "#FFFFFF", // cards, sheets, list rows
-  onSurfaceSecondary: "#13284A", // text and icons on cards, sheets, rows
-  surfaceTertiary: "#F3EDE0", // input backgrounds, chips, deepest nesting
-  onSurfaceTertiary: "#13284A", // text on inputs and chips; also muted text
-  surfaceInverse: "#0E2A4F", // tooltips, snackbars, anything popping against the theme
+  onSurfaceSecondary: "#0B2240", // text and icons on cards, sheets, rows
+  surfaceTertiary: "#E6EBF0", // input backgrounds, chips, deepest nesting
+  onSurfaceTertiary: "#0B2240", // text on inputs and chips; also muted text
+  surfaceInverse: "#0B2240", // tooltips, snackbars, anything popping against the theme
   onSurfaceInverse: "#FFFFFF", // text and icons on the inverse surface
-  muted: "#545048", // subdued text on surface: captions, timestamps, placeholders
+  muted: "#4D5866", // subdued text on surface: captions, timestamps, placeholders
 
   // ---------------------------------------------------------------------------
   // Brand: the identity color and the fills built from it.
   // Neutral by default; replace with the design guidelines values.
   // ---------------------------------------------------------------------------
-  brand: "#0E2A4F", // base hue, anchor only; Primary, Secondary, Tertiary are weights of it
+  brand: "#0B2240", // base hue, anchor only; Primary, Secondary, Tertiary are weights of it
   onBrand: "#FFFFFF", // text and icons placed directly on brand
-  brandPrimary: "#0F2D55", // primary CTA, active tab indicator, selected states
+  brandPrimary: "#138A5E", // primary CTA, active tab indicator, selected states
   onBrandPrimary: "#FFFFFF", // text and icons on brandPrimary
-  brandSecondary: "#B5852A", // secondary CTA, less prominent accents
-  onBrandSecondary: "#FFFFFF", // text and icons on brandSecondary
-  brandTertiary: "#D4A437", // chips, tags, badges, subtle brand moments
-  onBrandTertiary: "#14233A", // text and icons on brandTertiary
+  brandSecondary: "#E9A81F", // secondary CTA, less prominent accents
+  onBrandSecondary: "#0B2240", // text and icons on brandSecondary
+  brandTertiary: "#E9A81F", // chips, tags, badges, subtle brand moments
+  onBrandTertiary: "#0B2240", // text and icons on brandTertiary
 
   // ---------------------------------------------------------------------------
   // Status: semantic only, never decorative. Fill for badges, banners and
@@ -74,17 +74,17 @@ const light = {
   onWarning: "#14233A",
   error: "#C8372D",
   onError: "#FFFFFF",
-  info: "#0F2D55",
+  info: "#0B2240",
   onInfo: "#FFFFFF",
 
   // ---------------------------------------------------------------------------
   // Lines
   // ---------------------------------------------------------------------------
-  border: "#E8E0CF", // hairline outline, 0.5pt or 1pt max: inputs, cards
-  borderStrong: "#C9BC9F", // focus rings, selected outlines, 1.5pt max
-  divider: "#EDE6D6", // subtle list separators
-  brandSoft: "#E7ECF3", // pale blue fills
-  accentSoft: "#FBF1DA", // pale orange fills
+  border: "#DCE2E8", // hairline outline, 0.5pt or 1pt max: inputs, cards
+  borderStrong: "#B7C1CC", // focus rings, selected outlines, 1.5pt max
+  divider: "#E3E8ED", // subtle list separators
+  brandSoft: "#E2F2EB", // pale blue fills
+  accentSoft: "#FDF1D6", // pale orange fills
   successSoft: "#E3F1E8",
   scrim: "rgba(14,42,79,0.55)",
 };

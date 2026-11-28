@@ -6,8 +6,8 @@ import { useWindowDimensions, View } from "react-native";
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming } from "react-native-reanimated";
 import Svg, { Path } from "react-native-svg";
 
-const NAVY = "#14243A";
-const GOLD = "#C5A059";
+const NAVY = "#0B2240";
+const GOLD = "#E9A81F";
 const ROAD = 34;
 
 function useLoop(to: number, duration: number) {
@@ -36,7 +36,7 @@ export function TravelScene({ height }: { height: number }) {
   const hill = `M0 60 Q ${width * 0.15} 10 ${width * 0.3} 45 T ${width * 0.6} 35 T ${width} 50 L ${width} 90 L 0 90 Z`;
   return (
     <View testID="home-travel-scene" pointerEvents="none" style={{ position: "absolute", left: 0, right: 0, top: 0, height, overflow: "hidden" }}>
-      <LinearGradient colors={["#FAF6EE", "#F6EAD0", "#EFD9AE"]} style={{ position: "absolute", width: "100%", height: "100%" }} />
+      <LinearGradient colors={["#EEF1F4", "#E3EBF0", "#D5E6DD"]} style={{ position: "absolute", width: "100%", height: "100%" }} />
       <View style={{ position: "absolute", right: 36, top: height * 0.32, width: 46, height: 46, borderRadius: 23, backgroundColor: "#F2C46D", opacity: 0.85 }} />
       <Animated.View style={[{ position: "absolute", top: height * 0.26, flexDirection: "row", gap: 120 }, cloudSt]}>
         <Ionicons name="cloud" size={34} color="#FFFFFF" />

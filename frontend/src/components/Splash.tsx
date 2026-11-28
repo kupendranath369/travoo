@@ -30,7 +30,7 @@ export function Splash({ onStart }: { onStart?: () => void }) {
       <Animated.View entering={FadeInDown.delay(600).duration(600)} style={{ position: "absolute", bottom: 56, left: 24, right: 24 }}>
         <Pressable testID="splash-get-started" onPress={onStart} accessibilityRole="button"
           style={({ pressed }) => ({ transform: [{ scale: pressed ? 0.97 : 1 }], opacity: onStart ? 1 : 0.85 })}>
-          <LinearGradient colors={["#E2B651", "#C5A059", "#A9823A"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+          <LinearGradient colors={["#F2BE45", "#E9A81F", "#C98A10"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
             style={{ height: 58, borderRadius: 29, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10 }}>
             <Text style={{ fontFamily: "PJS-ExtraBold", fontSize: 20, color: "#FFFFFF" }}>Get Started</Text>
             <Animated.View style={arrow}><Ionicons name="arrow-forward" size={22} color="#FFFFFF" /></Animated.View>
