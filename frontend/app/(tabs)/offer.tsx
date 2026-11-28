@@ -258,16 +258,6 @@ export default function OfferScreen() {
                 ))}
                 {stops.length < 6 ? <Chip testID="offer-add-stop-button" icon="add" label={t("offer.add_stop")} onPress={() => setStopOpen(true)} /> : null}
               </View>
-              {routeTowns.some((x) => !stops.some((s) => s.loc_id === x.loc_id)) && stops.length < 6 ? (
-                <View testID="offer-route-towns" style={{ gap: space.xs }}>
-                  <T size={12} color={colors.muted}>Main towns on your route</T>
-                  <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.sm }}>
-                    {routeTowns.filter((x) => !stops.some((s) => s.loc_id === x.loc_id)).map((x) => (
-                      <Chip key={x.loc_id} testID={`offer-route-town-${x.loc_id}`} icon="add-circle-outline" label={x.name} onPress={() => stops.length < 6 && setStops([...stops, x].sort((a, b) => routeTowns.findIndex((r) => r.loc_id === a.loc_id) - routeTowns.findIndex((r) => r.loc_id === b.loc_id)))} />
-                    ))}
-                  </View>
-                </View>
-              ) : null}
             </View>
             <View style={{ gap: space.xs }}>
               <DateField testID="offer-date" label={t("offer.date")} value={date} onChange={setDate} />
@@ -331,7 +321,7 @@ export default function OfferScreen() {
           </>
         )}
       </KeyboardAwareScrollView>
-      <LocationSearchModal visible={stopOpen} title={t("offer.add_stop")} onClose={() => setStopOpen(false)} onSelect={(l) => { setStops([...stops, l]); setStopOpen(false); }} />
+      <LocationSearchModal visible={stopOpen} title={t("offer.add_stop")} suggestions={routeTowns.filter((x) => !stops.some((s) => s.loc_id === x.loc_id))} suggestionsTitle="Main towns on your route" onClose={() => setStopOpen(false)} onSelect={(l) => { setStops([...stops, l].sort((a, b) => routeTowns.findIndex((r) => r.loc_id === a.loc_id) - routeTowns.findIndex((r) => r.loc_id === b.loc_id))); setStopOpen(false); }} />
       <MapPicker visible={!!pin} title={pin?.kind === "drop" ? t("offer.drop") : t("offer.pickup")}
         initial={pinInitial}
         onClose={() => setPin(null)}

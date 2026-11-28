@@ -42,7 +42,7 @@ export function LocationField({ label, value, onChange, icon = "location-outline
   );
 }
 
-export function LocationSearchModal({ visible, title, onClose, onSelect }: { visible: boolean; title: string; onClose: () => void; onSelect: (l: Loc) => void }) {
+export function LocationSearchModal({ visible, title, onClose, onSelect, suggestions, suggestionsTitle }: { visible: boolean; title: string; onClose: () => void; onSelect: (l: Loc) => void; suggestions?: Loc[]; suggestionsTitle?: string }) {
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
   const { t, fmtDate } = useI18n();
@@ -162,6 +162,20 @@ export function LocationSearchModal({ visible, title, onClose, onSelect }: { vis
             ) : null}
           </View>
           {row("location-current-button", "navigate-circle", t("loc.current"), current)}
+          {!q.trim() && suggestions?.length ? (
+            <View testID="location-suggestions" style={{ paddingHorizontal: space.lg, paddingTop: space.sm, gap: space.sm }}>
+              <T size={13} weight="700" color={colors.muted}>{suggestionsTitle}</T>
+              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.sm }}>
+                {suggestions.map((x) => (
+                  <Pressable key={x.loc_id} testID={`location-suggestion-${x.loc_id}`} onPress={() => onSelect(x)}
+                    style={{ flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: space.md, paddingVertical: space.sm, borderRadius: 999, borderWidth: 1, borderColor: colors.brandPrimary, backgroundColor: colors.brandSoft }}>
+                    <Ionicons name="add-circle" size={16} color={colors.brandPrimary} />
+                    <T size={13} weight="700" color={colors.brandPrimary}>{x.name}</T>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+          ) : null}
           {busy ? <ActivityIndicator color={colors.brandPrimary} /> : null}
           {msg ? (
             <View style={{ paddingHorizontal: space.lg, gap: space.sm }}>
