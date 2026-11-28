@@ -77,12 +77,12 @@ export function SteeringWheel({ size, color = GOLD }: { size: number; color?: st
 /** Home service tile: simple navy card with the service name. */
 export function ServiceTile({ kind, title, sub }: { kind: "rent" | "book"; title: string; sub: string }) {
   return (
-    <View style={{ flex: 1, borderRadius: 16, backgroundColor: NAVY, borderWidth: 1.5, borderColor: GOLD, overflow: "hidden", alignItems: "center", justifyContent: "center",
+    <View style={{ flex: 1, borderRadius: 16, backgroundColor: kind === "rent" ? "#138A5E" : NAVY, borderWidth: 1.5, borderColor: GOLD, overflow: "hidden", alignItems: "center", justifyContent: "center",
       paddingVertical: 14, paddingHorizontal: 8, shadowColor: NAVY, shadowOpacity: 0.18, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 3 }}>
       <View testID={`home-tile-${kind}`} style={{ alignItems: "center", gap: 4 }}>
         <Animated.Text numberOfLines={1} style={{ fontFamily: "PJS-Bold", fontSize: 17, letterSpacing: 0.3, color: "#FFFFFF" }}>{title}</Animated.Text>
         <View style={{ width: 22, height: 2, borderRadius: 1, backgroundColor: GOLD }} />
-        <Animated.Text numberOfLines={1} style={{ fontFamily: "PJS-Regular", fontSize: 13, color: "#E9D6AE" }}>{sub}</Animated.Text>
+        <Animated.Text numberOfLines={1} style={{ fontFamily: "PJS-Regular", fontSize: 13, color: kind === "rent" ? "rgba(255,255,255,0.9)" : "#E9D6AE" }}>{sub}</Animated.Text>
       </View>
     </View>
   );
