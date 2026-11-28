@@ -24,7 +24,7 @@ export function Splash({ onStart }: { onStart?: () => void }) {
       </Animated.View>
       <LinearGradient colors={[BG, "rgba(0,26,51,0.6)", "rgba(0,26,51,0)"]} locations={[0, 0.3, 0.55]} style={{ position: "absolute", width: "100%", height: "100%" }} />
       <Animated.View entering={FadeInDown.delay(250).duration(700)} style={{ alignItems: "center", paddingTop: "28%", paddingHorizontal: 32, gap: 18 }}>
-        <Image testID="splash-logo" source={require("@/assets/images/travoo-logo-white.png")} style={{ width: "86%", maxWidth: 360, aspectRatio: 1867 / 295 }} contentFit="contain" accessibilityLabel="Travoo" />
+        <Image testID="splash-logo" source={require("@/assets/images/travoo-wordmark-white.png")} style={{ width: "78%", maxWidth: 340, aspectRatio: 1598 / 417 }} contentFit="contain" accessibilityLabel="Travoo" />
         <Text testID="splash-tagline" style={{ fontFamily: "PJS-SemiBold", fontSize: 22, color: "#FFFFFF", letterSpacing: 1 }}>Enjoy Your Ride</Text>
       </Animated.View>
       <Animated.View entering={FadeInDown.delay(600).duration(600)} style={{ position: "absolute", bottom: 56, left: 24, right: 24 }}>
